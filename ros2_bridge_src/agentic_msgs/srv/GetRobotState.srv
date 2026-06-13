@@ -1,0 +1,5 @@
+---
+bool success
+string error_code
+string reason
+agentic_msgs/RobotState state

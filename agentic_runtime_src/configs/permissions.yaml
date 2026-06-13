@@ -1,0 +1,19 @@
+permissions:
+  robot.state.read:
+    description: Read robot state.
+  robot.move:
+    description: Navigate robot base through approved capability.
+  robot.stop:
+    description: Stop or cancel active robot task.
+  world.read:
+    description: Read known places and world model.
+  perception.inspect:
+    description: Inspect a known area.
+  memory.read:
+    description: Read app memory.
+  memory.write:
+    description: Write app memory.
+  human.ask:
+    description: Ask human for confirmation or input.
+  report.say:
+    description: Report message to user.

@@ -1,0 +1,9 @@
+string task_id
+string app_id
+string session_id
+string skill_name
+string status
+string args_json
+string result_json
+string error_code
+string reason

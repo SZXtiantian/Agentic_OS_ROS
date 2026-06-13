@@ -1,0 +1,320 @@
+from __future__ import annotations
+
+import asyncio
+import ast
+import json
+import math
+import re
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from agentic_runtime.types import new_id
+
+CommandRunner = Callable[[list[str], int], Awaitable[str]]
+
+
+class Ros2CliBridgeClient:
+    """Non-rclpy runtime client for Agentic-owned ROS2 bridge interfaces.
+
+    This client intentionally shells out to the ROS2 CLI so runtime code keeps
+    the same architectural boundary as an OS userland service: no ROS2 Python
+    imports, no direct topic/action objects, and no vendor driver imports.
+    """
+
+    def __init__(self, timeout_s: int = 10, runner: CommandRunner | None = None) -> None:
+        self.timeout_s = timeout_s
+        self.runner = runner or self._run_command
+
+    async def resolve_place(self, name: str) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/world/resolve_place",
+            "agentic_msgs/srv/ResolvePlace",
+            {"name": name},
+        )
+        data = _parse_response(output)
+        place = _normalize_place(data.get("place") or {}, fallback_name=name)
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "place": place,
+        }
+
+    async def get_robot_state(self) -> dict[str, Any]:
+        output = await self._service_call("/agentic/robot/get_state", "agentic_msgs/srv/GetRobotState", {})
+        data = _parse_response(output)
+        state = _normalize_state(data.get("state") or {})
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "state": state,
+        }
+
+    async def check_safety(self, skill_name: str, args: dict[str, Any], app_id: str) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/safety/check",
+            "agentic_msgs/srv/CheckSafety",
+            {"skill_name": skill_name, "args_json": json.dumps(args, ensure_ascii=False), "app_id": app_id},
+        )
+        data = _parse_response(output)
+        return {
+            "allowed": bool(data.get("allowed", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+        }
+
+    async def navigate_to(self, place: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
+        if cancel_event is not None and cancel_event.is_set():
+            return {"success": False, "error_code": "SKILL_CANCELLED", "reason": "navigation cancelled before dispatch"}
+        output = await self._action_send_goal(
+            "/agentic/robot/navigate_to_place",
+            "agentic_msgs/action/NavigateToPlace",
+            {"place": place, "request_id": new_id("nav"), "timeout_s": int(timeout_s)},
+            timeout_s,
+        )
+        data = _parse_response(output)
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "result": result_json,
+        }
+
+    async def inspect_area(self, place: str, timeout_s: int) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/perception/inspect_area",
+            "agentic_msgs/srv/InspectArea",
+            {"place": place, "request_id": new_id("inspect"), "timeout_s": int(timeout_s)},
+            timeout_s,
+        )
+        data = _parse_response(output)
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "summary": str(data.get("summary") or result_json.get("summary", "")),
+            "objects": list(data.get("objects") or result_json.get("objects", [])),
+            "anomalies": list(data.get("anomalies") or result_json.get("anomalies", [])),
+        }
+
+    async def stop_robot(self, reason: str) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/robot/stop",
+            "agentic_msgs/srv/StopRobot",
+            {"reason": reason, "request_id": new_id("stop")},
+        )
+        data = _parse_response(output)
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "message": str(data.get("message", "")),
+            "reason": reason,
+        }
+
+    async def ask_human(
+        self,
+        question: str,
+        options=None,
+        timeout_s: int = 60,
+        require_confirmation: bool = False,
+    ) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/human/ask",
+            "agentic_msgs/srv/AskHuman",
+            {
+                "question": question,
+                "options": list(options or []),
+                "timeout_s": int(timeout_s),
+                "require_explicit_confirmation": bool(require_confirmation),
+            },
+            timeout_s,
+        )
+        data = _parse_response(output)
+        return {
+            "answered": bool(data.get("answered", False)),
+            "answer": str(data.get("answer", "")),
+            "reason": str(data.get("reason", "")),
+        }
+
+    async def report_say(self, message: str) -> dict[str, Any]:
+        print(message)
+        return {"success": True, "message": message, "transport": "runtime_stdout"}
+
+    async def _service_call(self, name: str, srv_type: str, payload: dict[str, Any], timeout_s: int | None = None) -> str:
+        return await self.runner(["ros2", "service", "call", name, srv_type, _ros2_payload(payload)], int(timeout_s or self.timeout_s))
+
+    async def _action_send_goal(self, name: str, action_type: str, payload: dict[str, Any], timeout_s: int | None = None) -> str:
+        return await self.runner(
+            ["ros2", "action", "send_goal", name, action_type, _ros2_payload(payload), "--feedback"],
+            int(timeout_s or self.timeout_s),
+        )
+
+    async def _run_command(self, command: list[str], timeout_s: int) -> str:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.communicate()
+            raise TimeoutError(f"ROS2 bridge command timed out: {' '.join(command)}")
+        if process.returncode != 0:
+            raise RuntimeError(stderr.decode("utf-8", errors="ignore") or f"command failed: {' '.join(command)}")
+        return stdout.decode("utf-8", errors="ignore")
+
+
+def _ros2_payload(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _decode_json_field(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        decoded = json.loads(str(value))
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _parse_response(output: str) -> dict[str, Any]:
+    text = output.strip()
+    if not text:
+        return {}
+    if text.startswith("{") and text.endswith("}"):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    for line in reversed(text.splitlines()):
+        candidate = line.strip()
+        if candidate.startswith("{") and candidate.endswith("}"):
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+    return _parse_ros_repr(text)
+
+
+def _parse_ros_repr(text: str) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key in ["success", "allowed", "answered"]:
+        match = re.search(rf"\b{key}\s*[:=]\s*(True|False|true|false)", text)
+        if match:
+            result[key] = match.group(1).lower() == "true"
+    for key in ["error_code", "reason", "message", "summary", "answer", "result_json"]:
+        match = re.search(rf"\b{key}\s*[:=]\s*'([^']*)'", text)
+        if not match:
+            match = re.search(rf'\b{key}\s*[:=]\s*"([^"]*)"', text)
+        if match:
+            result[key] = match.group(1)
+            continue
+        match = re.search(rf"\b{key}\s*[:=]\s*([^\n,)]+)", text)
+        if match:
+            result[key] = match.group(1).strip()
+    for key in ["objects", "anomalies"]:
+        match = re.search(rf"\b{key}\s*[:=]\s*(\[[^\]]*\])", text)
+        if match:
+            try:
+                result[key] = ast.literal_eval(match.group(1))
+            except (SyntaxError, ValueError):
+                result[key] = []
+    place = _parse_place_object(text)
+    if place:
+        result["place"] = place
+    state = _parse_nested_object(
+        text,
+        "state",
+        ["robot_id", "mode", "battery_state", "current_place", "active_task_id", "state_json"],
+        bool_fields=["is_localized", "is_moving", "estop_pressed"],
+        float_fields=["battery_percent"],
+    )
+    if state:
+        result["state"] = state
+    return result
+
+
+def _normalize_place(place: dict[str, Any], fallback_name: str = "") -> dict[str, Any]:
+    normalized = dict(place)
+    metadata_json = normalized.pop("metadata_json", None)
+    if "metadata" not in normalized:
+        normalized["metadata"] = _decode_json_field(metadata_json)
+    if "name" not in normalized and fallback_name:
+        normalized["name"] = fallback_name
+    normalized.setdefault("pose", {})
+    return normalized
+
+
+def _normalize_state(state: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(state)
+    state_json = normalized.pop("state_json", None)
+    if "state" not in normalized:
+        normalized["state"] = _decode_json_field(state_json)
+    normalized.setdefault("pose", {})
+    return normalized
+
+
+def _parse_place_object(text: str) -> dict[str, Any]:
+    place = _parse_nested_object(text, "place", ["id", "name", "frame_id", "metadata_json"], bool_fields=["allowed"])
+    if not place:
+        return {}
+
+    position_match = re.search(
+        r"position=.*?\bx\s*[:=]\s*(-?\d+(?:\.\d+)?).*?\by\s*[:=]\s*(-?\d+(?:\.\d+)?).*?\bz\s*[:=]\s*(-?\d+(?:\.\d+)?)",
+        text,
+        flags=re.DOTALL,
+    )
+    if position_match:
+        pose = {
+            "x": float(position_match.group(1)),
+            "y": float(position_match.group(2)),
+            "z": float(position_match.group(3)),
+        }
+        orientation_match = re.search(
+            r"orientation=.*?\bz\s*[:=]\s*(-?\d+(?:\.\d+)?).*?\bw\s*[:=]\s*(-?\d+(?:\.\d+)?)",
+            text,
+            flags=re.DOTALL,
+        )
+        if orientation_match:
+            pose["yaw"] = 2.0 * math.atan2(float(orientation_match.group(1)), float(orientation_match.group(2)))
+        place["pose"] = pose
+    return _normalize_place(place)
+
+
+def _parse_nested_object(
+    text: str,
+    object_name: str,
+    string_fields: list[str],
+    bool_fields: list[str] | None = None,
+    float_fields: list[str] | None = None,
+) -> dict[str, Any]:
+    if object_name not in text:
+        return {}
+
+    parsed: dict[str, Any] = {}
+    for field in string_fields:
+        match = re.search(rf"\b{field}\s*[:=]\s*'([^']*)'", text)
+        if not match:
+            match = re.search(rf'\b{field}\s*[:=]\s*"([^"]*)"', text)
+        if match:
+            parsed[field] = match.group(1)
+    for field in bool_fields or []:
+        match = re.search(rf"\b{field}\s*[:=]\s*(True|False|true|false)", text)
+        if match:
+            parsed[field] = match.group(1).lower() == "true"
+    for field in float_fields or []:
+        match = re.search(rf"\b{field}\s*[:=]\s*(-?\d+(?:\.\d+)?)", text)
+        if match:
+            parsed[field] = float(match.group(1))
+    return parsed

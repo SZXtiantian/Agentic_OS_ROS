@@ -1,0 +1,10 @@
+string place
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string summary
+string[] objects
+string[] anomalies
+string result_json

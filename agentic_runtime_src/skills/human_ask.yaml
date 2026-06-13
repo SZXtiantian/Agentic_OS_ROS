@@ -1,0 +1,40 @@
+name: human.ask
+version: 0.1.0
+description: Ask a human for input or confirmation.
+input_schema:
+  type: object
+  required: [question]
+  properties:
+    question:
+      type: string
+    options:
+      type: array
+    timeout_s:
+      type: integer
+    require_confirmation:
+      type: boolean
+output_schema:
+  type: object
+  required: [answered, answer]
+  properties:
+    answered:
+      type: boolean
+    answer:
+      type: string
+permission_requirements:
+  - human.ask
+resource_requirements:
+  locks: []
+safety_constraints:
+  allow_cancel: true
+timeout_s: 60
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: mock
+  bridge: human_io
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

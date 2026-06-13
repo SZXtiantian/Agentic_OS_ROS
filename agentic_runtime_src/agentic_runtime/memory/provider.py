@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from typing import Any, Protocol
+
+
+class MemoryProvider(Protocol):
+    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> None: ...
+
+    def recall(self, app_id: str, key: str) -> Any: ...
+
+    def search(self, app_id: str, query: str, limit: int = 5) -> list[dict[str, Any]]: ...
+
+    def delete(self, app_id: str, key: str) -> bool: ...

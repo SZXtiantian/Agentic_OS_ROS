@@ -1,0 +1,39 @@
+name: world.resolve_place
+version: 0.1.0
+description: Resolve a human-readable place name into a registered place.
+input_schema:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+    place:
+      type: object
+    error_code:
+      type: string
+permission_requirements:
+  - world.read
+resource_requirements:
+  locks: []
+safety_constraints:
+  require_known_place: false
+  require_estop_released: false
+  allow_cancel: false
+timeout_s: 10
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_service
+  bridge: world_model
+  service: /agentic/world/resolve_place
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

@@ -1,0 +1,10 @@
+capabilities:
+  - robot.get_state
+  - world.resolve_place
+  - robot.navigate_to
+  - robot.inspect_area
+  - robot.stop
+  - memory.remember
+  - memory.recall
+  - human.ask
+  - report.say

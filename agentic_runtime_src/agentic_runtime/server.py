@@ -1,0 +1,99 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from agentic_runtime.audit import AuditLogger
+from agentic_runtime.app_factory import AppFactory
+from agentic_runtime.config import RuntimeConfig
+from agentic_runtime.config_manager import ConfigManager
+from agentic_runtime.context_manager import ContextManager
+from agentic_runtime.execution_monitor import ExecutionMonitor
+from agentic_runtime.hardware_adapter import BridgeManager
+from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.memory import create_memory_manager
+from agentic_runtime.permission_manager import PermissionManager
+from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
+from agentic_runtime.scheduler import SessionRunner, SingleRobotScheduler
+from agentic_runtime.session import SessionManager, SessionStore
+from agentic_runtime.skill_executor.cancellation import CancellationManager
+from agentic_runtime.skill_executor.dispatcher import SkillDispatcher
+from agentic_runtime.skill_executor.executor import SkillExecutor
+from agentic_runtime.skill_executor.resource_manager import ResourceManager
+from agentic_runtime.skill_registry import SkillRegistry
+from agentic_runtime.storage import StorageManager
+from agentic_runtime.syscall import SyscallStore
+from agentic_runtime.tool_manager import ToolManager
+
+
+@dataclass
+class RuntimeServer:
+    config: RuntimeConfig
+    registry: SkillRegistry
+    executor: SkillExecutor
+    monitor: ExecutionMonitor
+    bridge_client: object
+    audit_logger: AuditLogger
+    session_manager: SessionManager
+    syscall_store: SyscallStore
+    storage_manager: StorageManager
+    context_manager: ContextManager
+    app_factory: AppFactory
+    session_runner: SessionRunner
+    scheduler: SingleRobotScheduler
+    tool_manager: ToolManager
+    config_manager: ConfigManager
+    bridge_manager: BridgeManager
+    kernel_service: KernelService
+
+    @classmethod
+    def create(cls, mock: bool = True) -> "RuntimeServer":
+        config = RuntimeConfig.load()
+        registry = SkillRegistry(config.skill_root).load()
+        audit_logger = AuditLogger(config.audit_log_path)
+        memory_manager = create_memory_manager(config.memory_provider, config.memory_db_path)
+        session_store = SessionStore(config.session_root)
+        session_manager = SessionManager(session_store)
+        syscall_store = SyscallStore(config.session_root)
+        resource_manager = ResourceManager()
+        bridge_client = create_ros_bridge_client(config, mock=mock)
+        dispatcher = SkillDispatcher(bridge_client, memory_manager)
+        executor = SkillExecutor(
+            registry=registry,
+            permission_manager=PermissionManager(),
+            resource_manager=resource_manager,
+            dispatcher=dispatcher,
+            audit_logger=audit_logger,
+            cancellation_manager=CancellationManager(),
+            syscall_store=syscall_store,
+            session_manager=session_manager,
+        )
+        monitor = ExecutionMonitor(audit_logger, resource_manager)
+        storage_manager = StorageManager(config.storage_root)
+        context_manager = ContextManager(config.context_root)
+        app_factory = AppFactory(config.app_root, executor)
+        session_runner = SessionRunner(app_factory, session_manager, storage_manager, context_manager)
+        scheduler = SingleRobotScheduler(session_runner)
+        bridge_manager = BridgeManager(config.bridge_root, config.bridge_profile_root, capability_registry=registry.capabilities)
+        tool_manager = ToolManager(audit_logger=audit_logger)
+        config_manager = ConfigManager(config, registry)
+        server = cls(
+            config=config,
+            registry=registry,
+            executor=executor,
+            monitor=monitor,
+            bridge_client=bridge_client,
+            audit_logger=audit_logger,
+            session_manager=session_manager,
+            syscall_store=syscall_store,
+            storage_manager=storage_manager,
+            context_manager=context_manager,
+            app_factory=app_factory,
+            session_runner=session_runner,
+            scheduler=scheduler,
+            tool_manager=tool_manager,
+            config_manager=config_manager,
+            bridge_manager=bridge_manager,
+            kernel_service=None,  # type: ignore[arg-type]
+        )
+        server.kernel_service = KernelService(server)
+        return server

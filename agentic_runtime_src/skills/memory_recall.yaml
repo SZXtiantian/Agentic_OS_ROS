@@ -1,0 +1,33 @@
+name: memory.recall
+version: 0.1.0
+description: Recall app memory by key.
+input_schema:
+  type: object
+  required: [key]
+  properties:
+    key:
+      type: string
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+    value: {}
+permission_requirements:
+  - memory.read
+resource_requirements:
+  locks: []
+safety_constraints:
+  allow_cancel: false
+timeout_s: 3
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: runtime_internal
+  bridge: memory_store
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

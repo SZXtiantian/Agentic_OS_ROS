@@ -1,0 +1,7 @@
+string skill_name
+string args_json
+string app_id
+---
+bool allowed
+string error_code
+string reason

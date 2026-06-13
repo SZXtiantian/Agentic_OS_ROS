@@ -1,0 +1,53 @@
+name: robot.navigate_to
+version: 0.1.0
+description: Navigate robot to a registered place.
+input_schema:
+  type: object
+  required: [place]
+  properties:
+    place:
+      type: string
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 300
+output_schema:
+  type: object
+  required: [success, reason]
+  properties:
+    success:
+      type: boolean
+    reason:
+      type: string
+    error_code:
+      type: string
+    result:
+      type: object
+permission_requirements:
+  - robot.move
+resource_requirements:
+  locks:
+    - base
+safety_constraints:
+  require_known_place: true
+  require_localized: true
+  require_estop_released: true
+  forbidden_zone_check: true
+  allow_cancel: true
+  max_duration_s: 120
+  max_linear_speed_mps: 0.5
+timeout_s: 120
+retry_policy:
+  max_attempts: 1
+  retry_on:
+    - NAVIGATION_TRANSIENT_FAILURE
+backend:
+  type: ros2_action
+  bridge: navigation_bridge_node
+  action: /agentic/robot/navigate_to_place
+  ros2_backend_action: /navigate_to_pose
+  ros2_backend_action_type: nav2_msgs/action/NavigateToPose
+observability:
+  audit: true
+  record_feedback: true
+  record_result: true

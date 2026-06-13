@@ -1,0 +1,5 @@
+models:
+  default_reasoning_model:
+    provider: mock
+    enabled: false
+  edge_lora_root: /opt/agentic/agentic_os/kernel/model_library

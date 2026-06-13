@@ -1,0 +1,11 @@
+string robot_id
+string mode
+string battery_state
+float32 battery_percent
+bool is_localized
+bool is_moving
+bool estop_pressed
+string current_place
+geometry_msgs/Pose pose
+string active_task_id
+string state_json

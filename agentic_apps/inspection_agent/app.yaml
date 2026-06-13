@@ -1,0 +1,47 @@
+name: inspection_agent
+version: 0.1.0
+description: Inspect a named room using robot navigation and perception.
+entrypoint: main:run
+
+permissions:
+  - robot.state.read
+  - robot.move
+  - robot.stop
+  - world.read
+  - perception.inspect
+  - memory.read
+  - memory.write
+  - human.ask
+  - report.say
+
+required_capabilities:
+  - robot.get_state
+  - robot.navigate_to
+  - robot.inspect_area
+  - robot.stop
+  - world.resolve_place
+  - memory.remember
+  - memory.recall
+  - human.ask
+  - report.say
+
+safety_policy:
+  allow_autonomous_navigation: true
+  allow_manipulation: false
+  require_human_confirmation_for:
+    - entering_restricted_area
+    - moving_near_human
+    - retry_after_navigation_failure
+  forbidden_zones:
+    - stairs
+    - elevator
+    - lab_restricted_zone
+  max_task_duration_s: 300
+  max_navigation_duration_s: 120
+  stop_on_human_request: true
+
+runtime_limits:
+  max_concurrent_tasks: 1
+  max_retries_per_skill: 1
+  max_memory_write_per_task: 20
+  llm_planning_enabled: false

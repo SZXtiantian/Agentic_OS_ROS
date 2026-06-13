@@ -1,0 +1,14 @@
+safety:
+  require_estop_released: true
+  max_linear_speed_mps: 0.5
+  max_angular_speed_radps: 0.8
+  max_navigation_duration_s: 120
+  max_task_duration_s: 300
+  forbidden_zones:
+    - stairs
+    - elevator
+    - lab_restricted_zone
+  require_permission_check: true
+  require_resource_lock: true
+  require_safety_guard: true
+  require_audit_log: true

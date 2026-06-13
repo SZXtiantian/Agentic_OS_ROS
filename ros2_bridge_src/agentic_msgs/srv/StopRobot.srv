@@ -1,0 +1,6 @@
+string reason
+string request_id
+---
+bool success
+string error_code
+string message

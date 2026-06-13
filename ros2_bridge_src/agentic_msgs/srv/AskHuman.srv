@@ -1,0 +1,8 @@
+string question
+string[] options
+int32 timeout_s
+bool require_explicit_confirmation
+---
+bool answered
+string answer
+string reason

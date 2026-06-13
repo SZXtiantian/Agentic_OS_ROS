@@ -1,0 +1,12 @@
+string place
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string reason
+string result_json
+---
+string status
+float32 progress
+string feedback_json

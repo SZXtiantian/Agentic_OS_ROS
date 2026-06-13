@@ -1,0 +1,32 @@
+name: report.say
+version: 0.1.0
+description: Report a message to the user.
+input_schema:
+  type: object
+  required: [message]
+  properties:
+    message:
+      type: string
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+permission_requirements:
+  - report.say
+resource_requirements:
+  locks: []
+safety_constraints:
+  allow_cancel: false
+timeout_s: 3
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: runtime_internal
+  bridge: report
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

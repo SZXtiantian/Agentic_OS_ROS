@@ -1,0 +1,13 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+
+
+@dataclass
+class RunAppRequest:
+    place: str = "厨房"
+    mock: bool = True
+    wait: bool = True
+
+    def to_dict(self) -> dict:
+        return asdict(self)

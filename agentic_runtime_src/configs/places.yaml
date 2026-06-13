@@ -1,0 +1,27 @@
+places:
+  厨房:
+    id: kitchen
+    frame_id: map
+    pose:
+      x: 3.2
+      y: 1.5
+      yaw: 1.57
+    allowed: true
+
+  客厅:
+    id: living_room
+    frame_id: map
+    pose:
+      x: 0.8
+      y: 2.1
+      yaw: 0.0
+    allowed: true
+
+  楼梯:
+    id: stairs
+    frame_id: map
+    pose:
+      x: 5.0
+      y: 0.0
+      yaw: 0.0
+    allowed: false

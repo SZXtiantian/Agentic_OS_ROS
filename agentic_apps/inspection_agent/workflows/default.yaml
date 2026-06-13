@@ -1,0 +1,45 @@
+name: default_room_inspection
+version: 0.1.0
+
+inputs:
+  place:
+    type: string
+    default: 厨房
+
+steps:
+  - id: resolve_place
+    call: world.resolve_place
+    args:
+      name: "{{ place }}"
+    on_error: stop_and_report
+
+  - id: check_state
+    call: robot.get_state
+    on_error: stop_and_report
+
+  - id: navigate
+    call: robot.navigate_to
+    args:
+      place: "{{ place }}"
+      timeout_s: 120
+    on_error: ask_human_retry_or_cancel
+
+  - id: inspect
+    call: robot.inspect_area
+    args:
+      place: "{{ place }}"
+      timeout_s: 60
+    on_error: report_inspection_failed
+
+  - id: remember
+    call: memory.remember
+    args:
+      key: last_inspection
+      value:
+        place: "{{ place }}"
+        result: "{{ steps.inspect.output }}"
+
+  - id: report
+    call: report.say
+    args:
+      message: "{{ steps.inspect.output.summary }}"

@@ -1,0 +1,6 @@
+string name
+---
+bool success
+string error_code
+string reason
+agentic_msgs/Place place
