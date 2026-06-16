@@ -10,26 +10,42 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from agentic_runtime.llm import LLMError, OpenAICompatibleChatClient
+from agentic_runtime.llm import LLMError
 from agentic_runtime.types import new_id
 
 from .app_index import AppIndex
+from .errors import DispatchError
 
 
 DISPATCHER_DIR = Path(__file__).resolve().parent
 
 
 class DispatcherPlanner:
+    def __init__(self, llm_chat: Any | None = None) -> None:
+        self.llm_chat = llm_chat
+
     def plan(self, user_text: str, app_index: AppIndex, flags: Any, *, task_id: str, route_plan_id: str) -> dict[str, Any]:
-        if not getattr(flags, "no_llm", False) and os.environ.get("AGENTIC_LLM_ENABLED") == "1":
+        require_llm = _require_llm(flags)
+        if getattr(flags, "no_llm", False) and require_llm:
+            raise DispatchError("DISPATCH_LLM_REQUIRED_BUT_DISABLED", "LLM is required, but --no-llm was provided")
+        if self.llm_chat is not None and not getattr(flags, "no_llm", False) and (
+            require_llm or os.environ.get("AGENTIC_LLM_ENABLED") == "1"
+        ):
             try:
                 plan = self._plan_with_llm(user_text, app_index, flags, task_id=task_id, route_plan_id=route_plan_id)
                 plan["fallback"] = {"used": False, "reason": ""}
                 return _apply_forced_app(plan, flags)
-            except (LLMError, ValidationError, OSError, json.JSONDecodeError, ValueError) as exc:
+            except Exception as exc:
+                if require_llm:
+                    raise DispatchError(
+                        "DISPATCH_LLM_REQUIRED_FAILED",
+                        f"required LLM route planning failed: {exc.__class__.__name__}: {str(exc)[:160]}",
+                    ) from exc
                 fallback = self._rule_plan(user_text, flags, task_id=task_id, route_plan_id=route_plan_id)
                 fallback["fallback"] = {"used": True, "reason": f"{exc.__class__.__name__}: {str(exc)[:160]}"}
                 return _apply_forced_app(fallback, flags)
+        if require_llm:
+            raise DispatchError("DISPATCH_LLMCHAT_UNAVAILABLE", "LLM is required, but AgenticOS LLMChat is unavailable")
         return _apply_forced_app(self._rule_plan(user_text, flags, task_id=task_id, route_plan_id=route_plan_id), flags)
 
     def _plan_with_llm(
@@ -42,14 +58,27 @@ class DispatcherPlanner:
         route_plan_id: str,
     ) -> dict[str, Any]:
         prompt = _build_user_prompt(user_text, app_index, flags, task_id=task_id, route_plan_id=route_plan_id)
-        client = OpenAICompatibleChatClient()
-        plan = client.chat_json(system_prompt=_system_prompt(), user_prompt=prompt)
+        if self.llm_chat is None:
+            raise LLMError("LLMCHAT_UNAVAILABLE", "AgenticOS LLMChat service is unavailable")
+        plan = self.llm_chat.chat_json(system_prompt=_system_prompt(), user_prompt=prompt)
         plan.setdefault("task_id", task_id)
         plan.setdefault("route_plan_id", route_plan_id)
         plan.setdefault("created_at", _now())
         plan.setdefault("user_text", user_text)
         plan.setdefault("fallback", {"used": False, "reason": ""})
         Draft202012Validator(_schema()).validate(plan)
+        if plan.get("planner_mode") != "llm":
+            raise LLMError("LLM_PLAN_MODE_INVALID", "dispatcher LLM plan must use planner_mode=llm")
+        app_task_input = dict(plan.get("app_task_input") or {})
+        app_task_input.setdefault("text", user_text)
+        app_task_input["mock"] = bool(getattr(flags, "mock", False))
+        app_task_input["allow_arm_motion"] = bool(getattr(flags, "allow_arm_motion", False))
+        app_task_input["assume_yes"] = bool(getattr(flags, "assume_yes", False))
+        app_task_input["parent_task_id"] = task_id
+        app_task_input["route_plan_id"] = route_plan_id
+        if _require_llm(flags):
+            app_task_input["require_llm"] = True
+        plan["app_task_input"] = app_task_input
         return plan
 
     def _rule_plan(self, user_text: str, flags: Any, *, task_id: str, route_plan_id: str) -> dict[str, Any]:
@@ -62,6 +91,7 @@ class DispatcherPlanner:
             "assume_yes": bool(getattr(flags, "assume_yes", False)),
             "parent_task_id": task_id,
             "route_plan_id": route_plan_id,
+            "require_llm": _require_llm(flags),
         }
 
         if not text:
@@ -296,8 +326,42 @@ def _build_user_prompt(user_text: str, app_index: AppIndex, flags: Any, *, task_
                 "mock": bool(getattr(flags, "mock", False)),
                 "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
                 "assume_yes": bool(getattr(flags, "assume_yes", False)),
+                "require_llm": _require_llm(flags),
             },
-            "output_contract": "Return one JSON object only. Do not include markdown.",
+            "output_contract": (
+                "Return exactly one JSON object with every field in output_template. "
+                "Use selected_app_id, not app_id. Use planner_mode='llm'. "
+                "Do not omit schema_version, created_at, user_text, route_reason, "
+                "risk_class, requires_robot_motion, needs_confirmation, app_task_input, "
+                "preflight_checks, fallback, or user_summary."
+            ),
+            "output_template": {
+                "schema_version": "1.0",
+                "task_id": task_id,
+                "route_plan_id": route_plan_id,
+                "created_at": "<created_at_iso8601>",
+                "user_text": user_text,
+                "planner_mode": "llm",
+                "intent": "<one allowed intent>",
+                "selected_app_id": "<one allowed selected_app_id>",
+                "route_reason": "<short routing reason>",
+                "risk_class": "<read_only | named_motion | emergency_control | unsupported>",
+                "requires_robot_motion": False,
+                "needs_confirmation": False,
+                "target": "workspace",
+                "app_task_input": {
+                    "text": user_text,
+                    "mock": bool(getattr(flags, "mock", False)),
+                    "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
+                    "assume_yes": bool(getattr(flags, "assume_yes", False)),
+                    "parent_task_id": task_id,
+                    "route_plan_id": route_plan_id,
+                    "require_llm": _require_llm(flags),
+                },
+                "preflight_checks": [],
+                "fallback": {"used": False, "reason": ""},
+                "user_summary": "<short Chinese summary>",
+            },
         },
         ensure_ascii=False,
     )
@@ -305,6 +369,10 @@ def _build_user_prompt(user_text: str, app_index: AppIndex, flags: Any, *, task_
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _require_llm(flags: Any) -> bool:
+    return bool(getattr(flags, "require_llm", False)) or os.environ.get("AGENTIC_LLM_REQUIRE") == "1"
 
 
 def _has_any(compact: str, raw: str, tokens: list[str]) -> bool:

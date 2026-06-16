@@ -3,6 +3,7 @@ from pathlib import Path
 
 from agentic_runtime.dispatcher import DispatcherAgent
 from agentic_runtime.dispatcher.app_index import AppIndex
+from agentic_runtime.dispatcher.errors import DispatchError
 from agentic_runtime.dispatcher.planner import DispatcherPlanner
 from agentic_runtime.dispatcher.validation import DispatcherValidator
 from agentic_runtime.nl_gateway import GatewayFlags
@@ -95,3 +96,25 @@ def test_route_validation_accepts_enabled_app():
     plan = _plan("拍一张照片")
     validated = DispatcherValidator().validate(plan, AppIndex.load("/home/ubuntu/agentic_ws/src"), GatewayFlags(mock=True))
     assert validated["validated"] is True
+
+
+def test_require_llm_rejects_dispatcher_rule_fallback():
+    class BadLLMChat:
+        def chat_json(self, *, system_prompt, user_prompt):
+            raise RuntimeError("network down")
+
+    planner = DispatcherPlanner(llm_chat=BadLLMChat())
+    flags = GatewayFlags(mock=True, require_llm=True)
+
+    try:
+        planner.plan(
+            "拍一张照片",
+            AppIndex.load("/home/ubuntu/agentic_ws/src"),
+            flags,
+            task_id="task_test",
+            route_plan_id="plan_route_test",
+        )
+    except DispatchError as exc:
+        assert exc.code == "DISPATCH_LLM_REQUIRED_FAILED"
+    else:
+        raise AssertionError("required LLM planning must not fall back to rule_based")

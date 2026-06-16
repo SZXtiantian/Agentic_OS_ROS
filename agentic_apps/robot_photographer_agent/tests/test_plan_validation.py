@@ -34,11 +34,8 @@ def _llm_plan(**overrides):
     return plan
 
 
-class _FakeLLMClient:
+class _FakeLLMChat:
     response = _llm_plan()
-
-    def __init__(self):
-        pass
 
     def chat_json(self, *, system_prompt, user_prompt):
         assert "Robot Photographer" in system_prompt
@@ -55,9 +52,8 @@ def test_read_only_plan_validates():
 
 def test_llm_first_planner_accepts_schema_valid_plan(monkeypatch):
     monkeypatch.setenv("AGENTIC_LLM_ENABLED", "1")
-    monkeypatch.setattr(planner, "OpenAICompatibleChatClient", _FakeLLMClient)
 
-    plan = plan_task("前后对比拍照")
+    plan = plan_task("前后对比拍照", llm_chat=_FakeLLMChat())
 
     assert plan["planner_mode"] == "llm"
     assert plan["intent"] == "before_after_capture"
@@ -65,19 +61,27 @@ def test_llm_first_planner_accepts_schema_valid_plan(monkeypatch):
 
 
 def test_bad_llm_json_falls_back_to_rule_planner(monkeypatch):
-    class BadLLMClient:
+    class BadLLMChat:
         def chat_json(self, *, system_prompt, user_prompt):
-            from agentic_runtime.llm import LLMError
-
-            raise LLMError("LLM_OUTPUT_INVALID_JSON", "bad json")
+            raise RuntimeError("bad json")
 
     monkeypatch.setenv("AGENTIC_LLM_ENABLED", "1")
-    monkeypatch.setattr(planner, "OpenAICompatibleChatClient", BadLLMClient)
 
-    plan = plan_task("拍一张照片")
+    plan = plan_task("拍一张照片", llm_chat=BadLLMChat())
 
     assert plan["planner_mode"] == "rule_based"
     assert plan["intent"] == "capture_photo"
+
+
+def test_required_llm_planner_does_not_fallback_to_rule_based(monkeypatch):
+    class BadLLMChat:
+        def chat_json(self, *, system_prompt, user_prompt):
+            raise RuntimeError("network down")
+
+    monkeypatch.setenv("AGENTIC_LLM_ENABLED", "1")
+
+    with pytest.raises(RuntimeError):
+        plan_task({"text": "拍一张照片", "require_llm": True}, llm_chat=BadLLMChat())
 
 
 def test_llm_schema_invalid_falls_back_to_rule_planner(monkeypatch):
@@ -86,9 +90,8 @@ def test_llm_schema_invalid_falls_back_to_rule_planner(monkeypatch):
             return {"intent": "capture_photo"}
 
     monkeypatch.setenv("AGENTIC_LLM_ENABLED", "1")
-    monkeypatch.setattr(planner, "OpenAICompatibleChatClient", InvalidPlanClient)
 
-    plan = plan_task("状态")
+    plan = plan_task("状态", llm_chat=InvalidPlanClient())
 
     assert plan["planner_mode"] == "rule_based"
     assert plan["intent"] == "status"
@@ -107,9 +110,8 @@ def test_schema_valid_llm_motion_is_policy_rejected_without_permission(monkeypat
 
     monkeypatch.setenv("AGENTIC_LLM_ENABLED", "1")
     monkeypatch.delenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", raising=False)
-    monkeypatch.setattr(planner, "OpenAICompatibleChatClient", MotionLLMClient)
 
-    plan = plan_task("把相机抬起来再拍一张")
+    plan = plan_task("把相机抬起来再拍一张", llm_chat=MotionLLMClient())
     with pytest.raises(PhotoPlanValidationError) as exc:
         validate_plan(plan, allow_arm_motion=False, assume_yes=True)
 
@@ -261,3 +263,10 @@ def test_no_rclpy_or_direct_ros_patterns_in_app_source():
         text = path.read_text(encoding="utf-8")
         for pattern in forbidden:
             assert pattern not in text
+
+
+def test_app_planner_does_not_construct_llm_provider_client():
+    text = (APP_DIR / "planner.py").read_text(encoding="utf-8")
+    assert "OpenAICompatibleChatClient" not in text
+    assert "load_llm_config" not in text
+    assert "AGENTIC_LLM_API_KEY" not in text

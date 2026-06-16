@@ -12,6 +12,7 @@ from agentic_runtime.context_manager import ContextManager
 from agentic_runtime.execution_monitor import ExecutionMonitor
 from agentic_runtime.hardware_adapter import BridgeManager
 from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.llm import LLMChat
 from agentic_runtime.memory import create_memory_manager
 from agentic_runtime.permission_manager import PermissionManager
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
@@ -48,6 +49,7 @@ class RuntimeServer:
     bridge_manager: BridgeManager
     kernel_service: KernelService
     task_log_manager: TaskLogManager
+    llm_chat: LLMChat
 
     @classmethod
     def create(cls, mock: bool = True) -> "RuntimeServer":
@@ -86,6 +88,7 @@ class RuntimeServer:
         tool_manager = ToolManager(audit_logger=audit_logger)
         config_manager = ConfigManager(config, registry)
         task_log_manager = TaskLogManager()
+        llm_chat = LLMChat()
         server = cls(
             config=config,
             registry=registry,
@@ -105,6 +108,7 @@ class RuntimeServer:
             bridge_manager=bridge_manager,
             kernel_service=None,  # type: ignore[arg-type]
             task_log_manager=task_log_manager,
+            llm_chat=llm_chat,
         )
         server.kernel_service = KernelService(server)
         return server

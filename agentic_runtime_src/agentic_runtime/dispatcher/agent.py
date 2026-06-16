@@ -21,7 +21,7 @@ class DispatcherAgent:
     ) -> None:
         self.runtime = runtime
         self.app_index = app_index or AppIndex.load(runtime.config.app_root)
-        self.planner = planner or DispatcherPlanner()
+        self.planner = planner or DispatcherPlanner(llm_chat=getattr(runtime, "llm_chat", None))
         self.validator = validator or DispatcherValidator()
         self.executor = executor
 

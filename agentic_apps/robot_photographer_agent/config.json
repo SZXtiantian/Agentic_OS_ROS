@@ -6,7 +6,8 @@
     "agenticos/arm_move_named",
     "agenticos/robot_stop",
     "agenticos/robot_status",
-    "agenticos/recent_photos"
+    "agenticos/recent_photos",
+    "agenticos/llm_chat"
   ],
   "meta": {
     "author": "AgenticOS",

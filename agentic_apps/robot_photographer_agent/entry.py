@@ -30,7 +30,19 @@ class RobotPhotographerAgent:
 
     async def arun(self, task_input: Any) -> dict[str, Any]:
         task = _normalize_task(task_input)
-        plan = plan_task(task)
+        runtime = self.runtime or RuntimeServer.create(mock=bool(task.get("mock", self.mock)))
+        try:
+            plan = plan_task(task, llm_chat=getattr(runtime, "llm_chat", None))
+        except Exception as exc:
+            return {
+                "schema_version": "1.0",
+                "success": False,
+                "plan_id": "",
+                "planner_mode": "",
+                "steps": [],
+                "error_code": "ROBOT_PHOTOGRAPHER_LLM_REQUIRED_FAILED",
+                "reason": f"required LLM photo planning failed: {exc.__class__.__name__}: {str(exc)[:160]}",
+            }
         try:
             validated = validate_plan(
                 plan,
@@ -49,7 +61,6 @@ class RobotPhotographerAgent:
                 "plan": plan,
             }
 
-        runtime = self.runtime or RuntimeServer.create(mock=bool(task.get("mock", self.mock)))
         return await runtime.scheduler.run_app(
             "robot_photographer_agent",
             plan=validated,

@@ -3,7 +3,7 @@ import urllib.error
 
 import pytest
 
-from agentic_runtime.llm import LLMConfig, LLMError, OpenAICompatibleChatClient, load_llm_config
+from agentic_runtime.llm import LLMChat, LLMConfig, LLMError, OpenAICompatibleChatClient, load_llm_config
 
 
 class _FakeResponse:
@@ -70,6 +70,16 @@ def test_openai_compatible_client_posts_chat_completion_and_parses_object(monkey
     assert captured["timeout"] == config.timeout_s
     assert captured["body"]["model"] == "gpt-4o-mini"
     assert captured["body"]["temperature"] == 0.0
+
+
+def test_llmchat_facade_delegates_provider_client():
+    class FakeClient:
+        def chat_json(self, *, system_prompt, user_prompt):
+            return {"system": system_prompt, "user": user_prompt}
+
+    result = LLMChat(client=FakeClient()).chat_json(system_prompt="system", user_prompt="user")
+
+    assert result == {"system": "system", "user": "user"}
 
 
 def test_llm_client_rejects_markdown_fenced_json(monkeypatch):

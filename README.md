@@ -48,6 +48,14 @@ AgenticOS-safe Agent App for real robot photography. It supports:
 - status and stop
 - controlled named arm poses for multi-angle photo capture
 - deterministic image-difference verification
+- Runtime-owned LLM planning through `LLMChat`
+
+LLM planning is an AgenticOS Runtime service. Agent Apps consume the injected
+`llm_chat` interface and must not construct provider clients or read model
+secrets directly. Normal operation may fall back to deterministic rule planning,
+but real LLM acceptance uses `--require-llm` / `AGENTIC_LLM_REQUIRE=1` so the
+Dispatcher and Robot Photographer cannot silently return `planner_mode:
+rule_based`.
 
 Real arm motion is gated by Runtime policy and requires:
 
@@ -87,6 +95,7 @@ Use the installed natural-language entrypoint:
 ```bash
 /opt/agentic/bin/agentic --mock --json "拍一张照片"
 /opt/agentic/bin/agentic --real --json "拍一张工作区照片"
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"
 AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 /opt/agentic/bin/agentic --real --allow-arm-motion --yes --json "从中间、左边、右边、上面拍照并验证差异"
 ```
 
@@ -97,4 +106,3 @@ AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 /opt/agentic/bin/agentic --real --allow-ar
 - Do not place API keys in source. LLM keys are loaded from
   `/opt/agentic/etc/secrets/yunwu.env` or `AGENTIC_LLM_API_KEY`.
 - Do not add Gazebo/gz/fake Nav2/RViz-only demos to this real robot workspace.
-

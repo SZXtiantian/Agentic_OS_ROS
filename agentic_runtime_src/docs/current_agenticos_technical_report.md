@@ -1,6 +1,7 @@
 # 当前 AgenticOS 技术报告
 
 生成时间：2026-06-14 17:40 CST  
+更新：2026-06-16，Robot Photographer、自然语言 Dispatcher、`perception.capture_photo`、Runtime-owned `LLMChat` 和 required-LLM 验收路径已进入当前源码树。
 主机角色：真实机器人部署环境  
 报告范围：`/opt/agentic` 安装层、`/home/ubuntu/agentic_ws/src` Agent App 工作区、`/home/ubuntu/agentic_ws/ros2_bridge_src` AgenticOS ROS2 bridge/HAL 工作区。
 
@@ -18,14 +19,16 @@
 - 已有真实机器人 camera + manipulator bridge profile。
 - 已发现真实相机 topic `/depth_cam/rgb0/image_raw` 和机械臂 `/servo_controller`。
 - 已实现 `camera_arm_inspection_agent`，可以通过 AgenticOS 读取真实相机 metadata，并在环境变量允许时调用 allowlist 中的机械臂动作。
-- 已新增 `robot_photographer_agent` 的中文技术设计文档，准备进入纵向摄影应用实现阶段。
+- 已实现 `robot_photographer_agent` 的 AIOS-compatible App package、plan-first executor、schema/policy tests、四姿态多角度拍摄计划和照片差异验证。
+- 已新增自然语言 Dispatcher 路由到 `robot_photographer_agent`，并支持 `--require-llm` / `AGENTIC_LLM_REQUIRE=1` 禁止 required-LLM 验收回退到 rule-based。
+- 已新增 Runtime-owned `LLMChat` facade；Agent Apps 只使用注入的 `llm_chat`，不构造 provider client、不读取模型配置或 API key。
 
 当前仍需注意：
 
 - 默认 `/opt/agentic/etc/agentic.yaml` 中 `ros_bridge_mode` 仍是 `mock`。
-- 当前模型配置是 `provider: mock`、`enabled: false`，还没有真实 LLM provider 接入。
-- 自然语言 `agentic chat --real` 目前是规则解析，不是真正 LLM planning。
-- `perception.observe` 已能返回真实相机 metadata，但尚未作为正式能力保存照片 PNG；完整拍照能力将在 `perception.capture_photo` 中实现。
+- 真实 LLM 验收仍需要本机 `/opt/agentic/etc/secrets/yunwu.env` 或环境变量提供 API key，且不能把 secret 写入源码、文档或日志。
+- 自然语言入口以 `/opt/agentic/bin/agentic` 为主，`agentic photo` 保留为兼容/调试入口。
+- `perception.capture_photo` 已作为正式能力进入 Runtime/SDK/bridge/client 路径；真实执行仍依赖 bridge services 正常启动。
 - 真实 bridge services 需要启动 `/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh` 后才会出现在 ROS graph。
 
 ## 2. AgenticOS 的定位
@@ -430,9 +433,9 @@ ActionGroupController.stop_action_group
 
 当前不足：
 
-- bridge 还没有正式的 `CapturePhoto` service。
-- 观察能力目前返回的是 metadata，不是标准 photo artifact。
-- 还没有完整 `robot_photographer_agent` 应用和 `agentic photo` CLI。
+- 真实拍照仍依赖 bridge services 和相机 topic 在线。
+- required-LLM 验收必须显式设置 `--require-llm` 或 `AGENTIC_LLM_REQUIRE=1`。
+- `camera_pitch_down_15` 暂不开放，不能映射到 `left_down.d6a` 或其他未验证动作组。
 
 ## 8. Agent App 当前状态
 
@@ -442,10 +445,7 @@ ActionGroupController.stop_action_group
 app_template
 camera_arm_inspection_agent
 inspection_agent
-laundry_agent
-pickup_agent
-robotic_coding_agent
-robotops_agent
+robot_photographer_agent
 room_inspection_app
 ```
 
@@ -485,26 +485,29 @@ room_inspection_app
 
 ### 8.3 `robot_photographer_agent`
 
-尚未实现。当前已经完成中文技术设计文档：
+已实现为当前代表性的真实机器人摄影 Agent App：
 
 ```text
+/home/ubuntu/agentic_ws/src/robot_photographer_agent
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/docs/robot_photographer_agent_technical_design.md
-/opt/agentic/docs/robot_photographer_agent_technical_design.md
 ```
 
-目标是实现：
+当前支持：
 
-- `agentic photo --real`
+- `/opt/agentic/bin/agentic --real --json "拍一张工作区照片"`
+- required-LLM 验收：`AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"`
 - 单张拍照
-- `camera_up` 后拍照
+- `camera_pitch_up_15` 后拍照
 - `arm_home`
 - 连拍
 - 前后对比拍照
 - 最近照片
 - 状态
 - 停止
-- LLM intent parser abstraction + rule-based fallback
+- Runtime-owned LLMChat + rule-based fallback
 - `perception.capture_photo`
+- 四姿态多角度拍摄：center / yaw_left / yaw_right / pitch_up
+- deterministic image-difference verification
 
 ## 9. CLI 当前状态
 
@@ -855,7 +858,7 @@ camera_up
 
 ## 16. 建议的下一步
 
-优先级 1：实现 Robot Photographer 纵向应用。
+优先级 1：完成 Robot Photographer required-LLM 和真实机器人验收闭环。
 
 参考文档：
 
@@ -865,13 +868,11 @@ camera_up
 
 核心目标：
 
-- 新增 `perception.capture_photo`。
-- bridge 保存真实 PNG + metadata。
-- Runtime / SDK 暴露高层拍照 API。
-- 新增 `robot_photographer_agent`。
-- 新增 `agentic photo --real`。
-- 自然语言规划使用 LLM abstraction + rule fallback。
-- 机械臂动作只允许 `camera_up`、`arm_home`。
+- 运行 required-LLM 验收，确认 Dispatcher 和 App planner 都是 `planner_mode=llm`。
+- 确认 LLM 失败时返回 `DISPATCH_LLM_REQUIRED_FAILED` 或 `ROBOT_PHOTOGRAPHER_LLM_REQUIRED_FAILED`，不接受 rule fallback。
+- 运行真实只读拍照验收，确认 PNG、metadata、audit、session、storage index 全链路存在。
+- 在 `AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1` 和 `--allow-arm-motion --yes` 下验证四姿态多角度拍摄。
+- 保持 `camera_pitch_down_15` 未开放，直到有独立安全后端和图像证据。
 
 优先级 2：清理启动环境 warning。
 

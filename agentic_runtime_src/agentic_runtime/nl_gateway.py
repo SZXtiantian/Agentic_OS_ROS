@@ -37,6 +37,7 @@ class GatewayFlags:
     show_plan: bool = False
     dry_run: bool = False
     no_llm: bool = False
+    require_llm: bool = False
     forced_app_id: str | None = None
     tasks_limit: int = 20
 
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--show-plan", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-llm", action="store_true")
+    parser.add_argument("--require-llm", action="store_true")
     parser.add_argument("--app", dest="forced_app_id")
     parser.add_argument("--tasks-limit", type=int, default=20)
     parser.add_argument("text", nargs="*")
@@ -147,6 +149,7 @@ def _flags_from_args(args: argparse.Namespace) -> GatewayFlags:
         show_plan=bool(args.show_plan),
         dry_run=bool(args.dry_run),
         no_llm=bool(args.no_llm),
+        require_llm=bool(args.require_llm),
         forced_app_id=args.forced_app_id,
         tasks_limit=int(args.tasks_limit),
     )

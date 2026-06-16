@@ -7,9 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
 
-from agentic_runtime.llm import LLMError, OpenAICompatibleChatClient
 from agentic_runtime.types import new_id
 
 
@@ -23,27 +21,29 @@ CAMERA_POSE_ACTIONS = [
 ARM_ACTIONS = ["arm_home", *CAMERA_POSE_ACTIONS]
 
 
-def plan_task(task_input: Any) -> dict[str, Any]:
+def plan_task(task_input: Any, *, llm_chat: Any | None = None) -> dict[str, Any]:
     task = _normalize_task(task_input)
-    if _llm_planning_enabled():
+    require_llm = _llm_required(task)
+    if llm_chat is not None and (_llm_planning_enabled() or require_llm):
         try:
-            return _plan_task_with_llm(task)
-        except LLMError:
+            return _plan_task_with_llm(task, llm_chat=llm_chat)
+        except Exception:
+            if require_llm:
+                raise
             pass
-        except (ValidationError, OSError, json.JSONDecodeError):
-            pass
+    if require_llm:
+        raise RuntimeError("AgenticOS LLMChat is required but unavailable")
     return _rule_plan_task(task)
 
 
-def _plan_task_with_llm(task: dict[str, Any]) -> dict[str, Any]:
+def _plan_task_with_llm(task: dict[str, Any], *, llm_chat: Any) -> dict[str, Any]:
     text = str(task.get("text", "")).strip()
     if not text:
-        raise LLMError("LLM_INPUT_EMPTY", "empty task text")
-    client = OpenAICompatibleChatClient()
-    plan = client.chat_json(system_prompt=_load_system_prompt(), user_prompt=_build_user_prompt(text))
+        raise ValueError("empty task text")
+    plan = llm_chat.chat_json(system_prompt=_load_system_prompt(), user_prompt=_build_user_prompt(text))
     Draft202012Validator(_load_plan_schema()).validate(plan)
     if plan.get("planner_mode") != "llm":
-        raise LLMError("LLM_PLAN_MODE_INVALID", "LLM plan must use planner_mode=llm")
+        raise ValueError("LLM plan must use planner_mode=llm")
     return plan
 
 
@@ -156,6 +156,10 @@ def _rule_plan_task(task_input: Any) -> dict[str, Any]:
 
 def _llm_planning_enabled() -> bool:
     return os.environ.get("AGENTIC_LLM_ENABLED") == "1"
+
+
+def _llm_required(task: dict[str, Any]) -> bool:
+    return bool(task.get("require_llm", False)) or os.environ.get("AGENTIC_LLM_REQUIRE") == "1"
 
 
 def _load_system_prompt() -> str:

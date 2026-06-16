@@ -604,7 +604,7 @@ You only output one JSON object matching task_route_plan.schema.json.
 You do not call tools.
 You do not control hardware.
 You do not invent apps or capabilities.
-You select exactly one app_id or unsupported.
+You select exactly one selected_app_id or unsupported.
 You must preserve robot safety boundaries.
 If the request requires arbitrary joints, Cartesian trajectory, direct ROS, base movement, unverified pitch down, grabbing, or simulation, return unsupported.
 ```
@@ -1204,6 +1204,7 @@ agenticctl ...
 --dry-run
 --app <app_id>        可选，强制指定 App，主要用于调试
 --no-llm             强制 rule fallback
+--require-llm        禁止 LLM 路由或 App 规划失败后回退到 rule_based
 --tasks-limit <n>    查看最近任务时的返回数量
 ```
 
@@ -2406,6 +2407,7 @@ scripts/build_robot_bridge.sh
 /opt/agentic/bin/agentic --mock --json "上一个任务的结果"
 /opt/agentic/bin/agentic --mock --json "向下拍一张"
 /opt/agentic/bin/agentic --mock --show-plan --dry-run --json "拍一组多角度照片"
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --mock --json --require-llm "拍一张工作区照片"
 /opt/agentic/bin/agenticctl tasks --limit 20
 ```
 

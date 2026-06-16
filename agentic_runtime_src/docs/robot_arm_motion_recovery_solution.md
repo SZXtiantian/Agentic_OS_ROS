@@ -489,7 +489,7 @@ init / horizontal        -> camera_center 或 arm_home，需实测决定
 detect_left             -> camera_yaw_left_15，需实测决定
 detect_right            -> camera_yaw_right_15，需实测决定
 left_up / right_up      -> camera_pitch_up_15 或组合姿态，需实测决定
-left_down / right_down  -> camera_pitch_down_15 或组合姿态，需实测决定
+left_down / right_down  -> 不得直接映射为 camera_pitch_down_15；需创建并验证独立安全 camera_down 动作后再开放
 camera_up               -> camera_up，已存在候选但仍需真实运动验证
 ```
 

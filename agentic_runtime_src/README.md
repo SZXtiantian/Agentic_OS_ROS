@@ -16,15 +16,16 @@ Development workspaces:
 /home/ubuntu/agentic_ws
 ```
 
-Runtime source moved to:
+Runtime source lives at:
 
 ```text
 /home/ubuntu/agentic_ws/src/agentic_runtime_src
 ```
 
-Primary App moved to:
+Representative Agent Apps live under:
 
 ```text
+/home/ubuntu/agentic_ws/src/robot_photographer_agent
 /home/ubuntu/agentic_ws/src/inspection_agent
 ```
 
@@ -78,8 +79,17 @@ python /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/check_forbidden_i
 cd /home/ubuntu/agentic_ws/src/agentic_runtime_src
 python -m pip install -e ".[dev]"
 pytest -q
-python -m agentic_runtime.cli run-app inspection_agent --place 厨房 --mock
-python -m agentic_runtime.cli status
+/opt/agentic/bin/agentic --mock --json "拍一张照片"
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
+  /opt/agentic/bin/agentic --mock --json --require-llm "拍一张工作区照片"
 ```
 
 Agentic ROS2 bridge packages live under `/home/ubuntu/agentic_ws/ros2_bridge_src/agentic_*`. They are adapters, not the Agentic Runtime itself. The robot ROS2 workspace `/home/ubuntu/ros2_ws/src` should not contain Agentic source packages.
+
+## LLM Boundary
+
+AgenticOS Runtime owns `LLMChat`, provider selection, model config, API-key
+loading, timeout handling, and JSON parsing. Dispatcher and Agent Apps may use
+only the Runtime-owned `llm_chat` facade. `--require-llm` or
+`AGENTIC_LLM_REQUIRE=1` turns LLM fallback into a structured error instead of an
+accepted rule-based plan.

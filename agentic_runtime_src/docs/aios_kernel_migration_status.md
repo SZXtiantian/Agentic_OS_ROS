@@ -42,14 +42,20 @@ Reference docs:
 /opt/agentic/docs/llm_provider_testing.md
 ```
 
-Optional LLM test provider:
+Runtime LLM provider:
 
 ```text
 provider: yunwu
 config: /opt/agentic/etc/models.yaml
-secret_env: YUNWU_API_KEY
+secret_env: AGENTIC_LLM_API_KEY or YUNWU_API_KEY
 secret_file: /opt/agentic/etc/secrets/yunwu.env
 ```
+
+`LLMChat` is owned by AgenticOS Runtime. Dispatcher and Agent Apps use the
+Runtime facade only; they do not construct provider clients, parse model
+configuration, or read API keys. Required LLM validation must set
+`--require-llm` or `AGENTIC_LLM_REQUIRE=1`, which turns Dispatcher/App LLM
+failure into structured errors instead of accepted rule fallback.
 
 Goal command:
 

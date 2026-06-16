@@ -27,19 +27,33 @@ Robot Photographer
 推荐 CLI：
 
 ```bash
+/opt/agentic/bin/agentic --real --json
+```
+
+兼容/调试 CLI：
+
+```bash
 agentic photo --real
 ```
 
 单条命令模式：
 
 ```bash
-agentic photo --real "拍一张工作区照片"
+/opt/agentic/bin/agentic --real --json "拍一张工作区照片"
+```
+
+强制真实 LLM 验收：
+
+```bash
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
+  /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"
 ```
 
 允许机械臂运动：
 
 ```bash
-AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 agentic photo --real --allow-arm-motion
+AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 \
+  /opt/agentic/bin/agentic --real --allow-arm-motion --yes
 ```
 
 Robot Photographer 的任务：
@@ -137,7 +151,8 @@ Agentic APP 组成
     "agenticos/arm_move_named",
     "agenticos/robot_stop",
     "agenticos/robot_status",
-    "agenticos/recent_photos"
+    "agenticos/recent_photos",
+    "agenticos/llm_chat"
   ],
   "meta": {
     "author": "AgenticOS",
@@ -147,6 +162,18 @@ Agentic APP 组成
   "build": {
     "entry": "entry.py",
     "module": "RobotPhotographerAgent"
+  },
+  "dispatch": {
+    "enabled": true,
+    "priority": 100,
+    "intents": [
+      "capture_photo",
+      "multi_angle_photo",
+      "recent_photos",
+      "robot_status",
+      "robot_stop"
+    ],
+    "default_target": "workspace"
   }
 }
 ```
@@ -157,6 +184,7 @@ Agentic APP 组成
 - `tools` 只能声明 AgenticOS tool wrapper。
 - tool wrapper 只能调用 AgenticOS Runtime/SDK/system call，不能 import ROS 或接触硬件。
 - `build.module` 必须能加载 `RobotPhotographerAgent`。
+- `agenticos/llm_chat` 只表示 App 依赖 Runtime-owned LLM facade；App 不能读取 provider config 或 API key。
 
 ## 5. `app.yaml`：机器人权限与安全 Manifest
 
@@ -169,19 +197,9 @@ name: robot_photographer_agent
 version: 0.1.0
 description: AIOS-compatible AgenticOS-safe real robot photography agent.
 runtime_type: aios_agent_package
-entrypoint: entry:RobotPhotographerAgent
+entrypoint: main:run
+aios_entrypoint: entry:RobotPhotographerAgent
 executor_entrypoint: main:execute_plan
-
-required_capabilities:
-  - robot.get_state
-  - robot.stop
-  - perception.capture_photo
-  - arm.get_state
-  - arm.move_named
-  - storage.list_recent_photos
-  - memory.remember
-  - memory.recall
-  - report.say
 
 permissions:
   - robot.state.read
@@ -193,6 +211,19 @@ permissions:
   - memory.read
   - memory.write
   - report.say
+  - llm.chat
+
+required_capabilities:
+  - llm.chat
+  - robot.get_state
+  - robot.stop
+  - perception.capture_photo
+  - arm.get_state
+  - arm.move_named
+  - storage.list_recent_photos
+  - memory.remember
+  - memory.recall
+  - report.say
 
 resources:
   - camera
@@ -203,20 +234,17 @@ allowed_targets:
   - workspace
 
 allowed_arm_actions:
+  - arm_home
   - camera_center
   - camera_yaw_left_15
   - camera_yaw_right_15
   - camera_pitch_up_15
-  - camera_pitch_down_15
-  - arm_home
 
 limits:
   burst_count_max: 5
   burst_interval_s_max: 5
   arm_action_timeout_s_max: 8
   capture_timeout_s_max: 5
-  multi_angle_pose_count_max: 5
-  min_image_difference_score: 0.08
 
 motion_confirmation_policy:
   motion_disabled_by_default: true
@@ -226,6 +254,17 @@ motion_confirmation_policy:
 
 evidence:
   root: /opt/agentic/var/evidence/photos
+  role: runtime_raw_evidence
+
+app_storage:
+  root: storage
+  runs: storage/runs
+  photos: storage/photos
+  videos: storage/videos
+  logs: storage/logs
+  indexes: storage/indexes
+  tmp: storage/tmp
+  role: app_owned_user_outputs
 
 safety_policy:
   allow_autonomous_navigation: false
@@ -234,6 +273,13 @@ safety_policy:
   allow_freeform_grasping: false
   allow_base_motion: false
   stop_on_human_request: true
+
+runtime_limits:
+  max_concurrent_tasks: 1
+  max_retries_per_skill: 0
+  max_memory_write_per_task: 20
+  llm_planning_enabled: true
+  llm_planning_provider: agenticos.runtime.llm_chat
 ```
 
 ## 6. AIOS Tool 与 AgenticOS Capability 分层
@@ -271,6 +317,7 @@ agenticos/arm_move_named           -> arm.move_named
 agenticos/robot_stop               -> robot.stop
 agenticos/robot_status             -> robot.get_state + arm.get_state
 agenticos/recent_photos            -> storage.list_recent_photos
+agenticos/llm_chat                 -> Runtime-owned LLMChat facade
 ```
 
 ## 7. Plan-first 架构
@@ -285,7 +332,7 @@ LLM -> tool call -> tool.run() -> hardware
 
 ```text
 user task
-  -> planner LLM 或 rule fallback
+  -> planner via Runtime LLMChat 或 rule fallback
   -> bounded photo plan
   -> schema validation
   -> policy validation
@@ -338,7 +385,8 @@ class RobotPhotographerAgent:
         self.runtime = runtime
 
     def run(self, task_input):
-        plan = planner.plan_task(task_input)
+        runtime = self.runtime or RuntimeServer.create(mock=task_input.get("mock", False))
+        plan = planner.plan_task(task_input, llm_chat=runtime.llm_chat)
         validated_plan = validation.validate_plan(
             plan,
             policy_path="policies/robot_photographer.policy.yaml",
@@ -354,7 +402,8 @@ class RobotPhotographerAgent:
   "text": "把相机抬起来再拍一张",
   "allow_arm_motion": true,
   "assume_yes": true,
-  "target": "workspace"
+  "target": "workspace",
+  "require_llm": false
 }
 ```
 
@@ -375,18 +424,20 @@ llm
 rule_based
 ```
 
-Robot Photographer 使用 **LLM-first + rule fallback**：
+Robot Photographer 使用 **Runtime LLMChat + rule fallback**：
 
-1. 只有 `AGENTIC_LLM_ENABLED=1` 且 Runtime LLM 配置和 secret 可用时才调用 LLM。
-2. LLM provider 由 AgenticOS Runtime 拥有，App 只使用 Runtime 的 OpenAI-compatible client。
-3. 默认 provider 为 Yunwu，默认 base URL 为 `https://yunwu.ai/v1`，client 拼接 `/chat/completions`。
-4. 默认模型为 `gpt-4o-mini`，可通过 `AGENTIC_LLM_MODEL` 或 `/opt/agentic/etc/models.yaml` 修改。
-5. API key 只能从环境变量 `AGENTIC_LLM_API_KEY` 或 `/opt/agentic/etc/secrets/yunwu.env` 读取。
-6. LLM 只允许输出 `photo_plan.schema.json` 兼容 JSON object，不能输出 markdown fence、解释文本、代码或工具调用。
-7. LLM 输出必须继续经过 schema validation、policy validation、risk classification、confirmation gate。
-8. LLM 超时、网络失败、非 JSON、markdown fence、响应结构异常或 schema invalid 时，planner 回退到 rule_based。
-9. 如果 LLM 输出 schema 合法但违反 policy、motion permission、confirmation 或 risk classification，validator 返回结构化错误，不执行 executor。
-10. deterministic executor 不调用 LLM，也不处理自然语言。
+1. AgenticOS Runtime owns `LLMChat` and the provider client.
+2. App planner 只接收注入的 `llm_chat` facade，不能构造 `OpenAICompatibleChatClient`，不能读取 model config 或 API key。
+3. 只有 `AGENTIC_LLM_ENABLED=1`、`AGENTIC_LLM_REQUIRE=1` 或 task input `require_llm=true` 时才尝试 LLM 规划。
+4. 默认 provider 为 Yunwu，默认 base URL 为 `https://yunwu.ai/v1`，client 在 Runtime 内拼接 `/chat/completions`。
+5. 默认模型为 `gpt-4o-mini`，可通过 `AGENTIC_LLM_MODEL` 或 `/opt/agentic/etc/models.yaml` 修改。
+6. API key 只能从环境变量 `AGENTIC_LLM_API_KEY` / `YUNWU_API_KEY` 或 `/opt/agentic/etc/secrets/yunwu.env` 读取。
+7. LLM 只允许输出 `photo_plan.schema.json` 兼容 JSON object，不能输出 markdown fence、解释文本、代码或工具调用。
+8. LLM 输出必须继续经过 schema validation、policy validation、risk classification、confirmation gate。
+9. 普通模式下，LLM 超时、网络失败、非 JSON、markdown fence、响应结构异常或 schema invalid 时，planner 可回退到 `rule_based`。
+10. `--require-llm` / `AGENTIC_LLM_REQUIRE=1` / `require_llm=true` 模式下，任何 LLM 规划失败都必须返回结构化错误，不能回退为 accepted `rule_based` plan。
+11. 如果 LLM 输出 schema 合法但违反 policy、motion permission、confirmation 或 risk classification，validator 返回结构化错误，不执行 executor。
+12. deterministic executor 不调用 LLM，也不处理自然语言。
 
 Runtime LLM 配置：
 
@@ -618,8 +669,7 @@ schemas/photo_plan.schema.json
               "camera_center",
               "camera_yaw_left_15",
               "camera_yaw_right_15",
-              "camera_pitch_up_15",
-              "camera_pitch_down_15"
+              "camera_pitch_up_15"
             ]
           },
           "timeout_s": {"type": "integer", "minimum": 1, "maximum": 8},
@@ -765,7 +815,6 @@ motion:
     - camera_yaw_left_15
     - camera_yaw_right_15
     - camera_pitch_up_15
-    - camera_pitch_down_15
   disallowed:
     arbitrary_joint_targets: true
     cartesian_trajectories: true
@@ -779,7 +828,7 @@ burst:
   interval_s_max: 5
 
 multi_angle:
-  max_pose_count: 5
+  max_pose_count: 4
   require_return_home_after_sequence: true
   require_difference_verification: true
   min_image_difference_score: 0.08
@@ -1160,14 +1209,13 @@ PHOTO_DIFFERENCE_TOO_SMALL
   - `/home/ubuntu/software/arm_pc/ActionGroups/detect_left.d6a`
   - `/home/ubuntu/software/arm_pc/ActionGroups/detect_right.d6a`
   - `/home/ubuntu/software/arm_pc/ActionGroups/camera_up.d6a`
-  - `/home/ubuntu/software/arm_pc/ActionGroups/left_down.d6a`
 - 允许的命名机械臂动作：
   - `arm_home` -> 后端动作 `init`
   - `camera_center` -> 后端动作 `horizontal`
   - `camera_yaw_left_15` -> 后端动作 `detect_left`
   - `camera_yaw_right_15` -> 后端动作 `detect_right`
   - `camera_pitch_up_15` -> 后端动作 `camera_up`
-  - `camera_pitch_down_15` -> 后端动作 `left_down`
+- `camera_pitch_down_15` 暂不允许映射到 `left_down.d6a` 或任何其他后端动作，直到完成独立安全验证。
 - 如果任一后端 action group 文件缺失，bridge 必须返回 `CAMERA_POSE_BACKEND_MISSING` 或 `ARM_ACTION_BACKEND_MISSING`，不能 fake success。
 - bridge 拥有动作执行权时的 stop 后端：
   - `ActionGroupController.stop_action_group`
@@ -1306,8 +1354,6 @@ plan：
     {"type": "capture_photo", "target": "workspace", "label": "yaw_right_15", "timeout_s": 5},
     {"type": "arm_named_action", "name": "camera_pitch_up_15", "timeout_s": 8},
     {"type": "capture_photo", "target": "workspace", "label": "pitch_up_15", "timeout_s": 5},
-    {"type": "arm_named_action", "name": "camera_pitch_down_15", "timeout_s": 8},
-    {"type": "capture_photo", "target": "workspace", "label": "pitch_down_15", "timeout_s": 5},
     {"type": "verify_photo_differences", "method": "deterministic_cv_metrics", "min_difference_score": 0.08},
     {"type": "arm_named_action", "name": "arm_home", "timeout_s": 8}
   ]
@@ -1597,10 +1643,10 @@ LLM 只允许在第 5-6 步生成 plan，不能进入第 11-22 步。
 
 流程：
 
-1. planner LLM 或 rule fallback 输出 `intent=multi_angle_capture` 的 bounded JSON plan。
-2. plan 只能包含 `camera_center`、`camera_yaw_left_15`、`camera_yaw_right_15`、`camera_pitch_up_15`、`camera_pitch_down_15` 和 `arm_home`。
+1. planner via Runtime LLMChat 或 rule fallback 输出 `intent=multi_angle_capture` 的 bounded JSON plan。
+2. plan 只能包含 `camera_center`、`camera_yaw_left_15`、`camera_yaw_right_15`、`camera_pitch_up_15` 和 `arm_home`。`camera_pitch_down_15` 暂不开放，因为安全后端动作尚未验证。
 3. validator 做 schema validation，拒绝任意角度、任意关节、笛卡尔轨迹、servo pulse 或底盘移动字段。
-4. validator 做 policy validation，确认 pose 数量 `<= 5`、target 为 `workspace`、超时 `<= 8s`。
+4. validator 做 policy validation，确认 pose 数量 `<= 4`、target 为 `workspace`、超时 `<= 8s`。
 5. validator 检查 motion permission 和 confirmation gate。
 6. executor 按顺序执行每个 `arm_named_action`，每一步都经 Runtime permission / safety / resource lock / audit。
 7. bridge 根据 profile 把受控名映射到真实 `.d6a` 文件；文件缺失时返回 `CAMERA_POSE_BACKEND_MISSING` 或 `ARM_ACTION_BACKEND_MISSING`。
@@ -1610,7 +1656,7 @@ LLM 只允许在第 5-6 步生成 plan，不能进入第 11-22 步。
 11. verifier 写入 `/opt/agentic/var/evidence/photos/verification_<plan_id>.json`。
 12. 如果图片缺失、读取失败、重复或任一成对差异低于阈值，返回结构化错误，不能 fake success。
 13. executor 最后执行 `arm_home`，并返回结构化 `PhotoResult`。
-14. Codex / 验收脚本抽样查看图片，确认中心、左、右、上、下视角在视觉上确实不同；如果不明显，报告 `ANGLE_DIFFERENCE_NOT_VISUALLY_CONFIRMED`。
+14. Codex / 验收脚本抽样查看图片，确认中心、左、右、上视角在视觉上确实不同；如果不明显，报告 `ANGLE_DIFFERENCE_NOT_VISUALLY_CONFIRMED`。
 
 ### 20.4 Stop
 
@@ -1632,19 +1678,25 @@ stop 不需要 LLM。
 
 ## 21. CLI 设计
 
-新增：
+主入口：
 
 ```text
-agentic photo
+/opt/agentic/bin/agentic
 ```
 
 源代码模块：
 
 ```text
-agentic_runtime/photo_cli.py
+agentic_runtime/nl_gateway.py
 ```
 
 CLI options：
+
+```text
+agentic [--real|--mock] [--json] [--allow-arm-motion] [--yes] [--require-llm] [command...]
+```
+
+兼容/调试入口：
 
 ```text
 agentic photo [--real|--mock] [--json] [--allow-arm-motion] [--yes] [command...]
@@ -1654,11 +1706,12 @@ agentic photo [--real|--mock] [--json] [--allow-arm-motion] [--yes] [command...]
 
 1. 加载 AgenticOS 环境。
 2. 在 `--real` 模式下确保 bridge services 正在运行。
-3. 构造 AIOS-compatible `task_input`。
-4. 加载 `robot_photographer_agent/config.json`。
-5. 加载 `entry.py` 中的 `RobotPhotographerAgent`。
-6. 调用 `agent.run(task_input)`。
-7. 打印结构化或人类可读结果。
+3. Dispatcher 生成并校验 route plan，字段必须使用 `selected_app_id`。
+4. 对摄影任务选择 `robot_photographer_agent`。
+5. 构造 AIOS-compatible `task_input`，必要时携带 `require_llm=true`。
+6. 加载 `entry.py` 中的 `RobotPhotographerAgent`。
+7. 调用 `agent.run(task_input)`。
+8. 打印结构化或人类可读结果。
 
 交互式示例：
 
@@ -1705,6 +1758,15 @@ ARM_CONFIRMATION_REQUIRED
 ARM_ACTION_NOT_ALLOWED
 PHOTO_COUNT_LIMIT_EXCEEDED
 PHOTO_INTERVAL_LIMIT_EXCEEDED
+```
+
+LLM planning:
+
+```text
+DISPATCH_LLM_REQUIRED_BUT_DISABLED
+DISPATCH_LLMCHAT_UNAVAILABLE
+DISPATCH_LLM_REQUIRED_FAILED
+ROBOT_PHOTOGRAPHER_LLM_REQUIRED_FAILED
 ```
 
 camera / capture：
@@ -1769,8 +1831,12 @@ STOP_BACKEND_UNIMPLEMENTED
 - mock bridge client `capture_photo` test。
 - bridge build test。
 - OpenAI-compatible LLM client config / request / JSON parsing test。
+- Runtime `LLMChat` facade delegation test。
 - LLM bad JSON fallback test。
 - LLM schema invalid fallback test。
+- required-LLM dispatcher failure returns `DISPATCH_LLM_REQUIRED_FAILED` instead of rule fallback。
+- required-LLM app planner failure returns `ROBOT_PHOTOGRAPHER_LLM_REQUIRED_FAILED` instead of rule fallback。
+- App planner does not construct provider clients or read API-key env vars。
 - schema-valid LLM motion rejected by policy / confirmation gate test。
 - multi-angle plan schema validation test。
 - verifier duplicate / low-difference rejection test。
@@ -1810,7 +1876,14 @@ Nav2
 只读拍照：
 
 ```bash
-agentic photo --real "拍一张照片"
+/opt/agentic/bin/agentic --real --json "拍一张照片"
+```
+
+强制真实 LLM 只读验收：
+
+```bash
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
+  /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"
 ```
 
 期望：
@@ -1824,7 +1897,8 @@ metadata_path: /opt/agentic/var/evidence/photos/*.json
 允许机械臂运动：
 
 ```bash
-AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 agentic photo --real --allow-arm-motion --yes "把相机抬起来再拍一张"
+AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 \
+  /opt/agentic/bin/agentic --real --allow-arm-motion --yes "把相机抬起来再拍一张"
 ```
 
 期望：
@@ -1838,7 +1912,8 @@ stop_available true
 多角度真实拍摄：
 
 ```bash
-AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 agentic photo --real --allow-arm-motion --yes "拍一组多角度照片并验证差异"
+AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 \
+  /opt/agentic/bin/agentic --real --allow-arm-motion --yes "拍一组多角度照片并验证差异"
 ```
 
 期望：
@@ -1856,7 +1931,7 @@ min_pair_difference_score >= 0.08
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/real_robot_arm_camera_acceptance.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/real_robot_multi_angle_photo_acceptance.sh
-AGENTIC_LLM_ENABLED=1 agentic photo --mock --json "前后对比拍照"
+AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --mock --json --require-llm "前后对比拍照"
 ```
 
 ## 25. 实现顺序
