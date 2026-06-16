@@ -1,0 +1,6 @@
+steps:
+  - parse_task_to_photo_plan
+  - validate_schema_and_policy
+  - gate_named_motion
+  - execute_validated_plan
+  - record_evidence_memory_audit

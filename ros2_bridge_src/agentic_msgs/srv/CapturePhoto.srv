@@ -1,0 +1,11 @@
+string target
+string label
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string reason
+string image_path
+string metadata_path
+string evidence_json

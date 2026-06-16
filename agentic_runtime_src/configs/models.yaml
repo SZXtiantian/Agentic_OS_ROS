@@ -1,5 +1,10 @@
 models:
   default_reasoning_model:
-    provider: mock
-    enabled: false
+    provider: yunwu
+    base_url: https://yunwu.ai/v1
+    model: gpt-4o-mini
+    timeout_s: 20
+    temperature: 0
+    max_tokens: 800
+    enabled: true
   edge_lora_root: /opt/agentic/agentic_os/kernel/model_library

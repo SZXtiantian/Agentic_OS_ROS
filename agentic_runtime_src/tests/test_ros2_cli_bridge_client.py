@@ -127,3 +127,126 @@ def test_bridge_factory_can_select_cli_without_rclpy(tmp_path):
     client = create_ros_bridge_client(config, mock=False)
 
     assert isinstance(client, Ros2CliBridgeClient)
+
+
+def test_ros2_cli_bridge_client_camera_arm_methods():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        if "/agentic/perception/observe" in command:
+            return (
+                "response:\n"
+                "agentic_msgs.srv.Observe_Response(success=True, error_code='', "
+                "summary='Observed workspace', objects=[], evidence_path='/opt/agentic/var/evidence/a.json', "
+                "evidence_json='{\"width\": 640, \"height\": 480}')"
+            )
+        if "/agentic/arm/get_state" in command:
+            return (
+                "response:\n"
+                "agentic_msgs.srv.GetArmState_Response(success=True, error_code='', reason='', "
+                "state=agentic_msgs.msg.ArmState(readiness='ready', active_action='', is_moving=False, "
+                "gripper_ready=True, stop_available=False, state_json='{\"source\": \"bridge\"}'))"
+            )
+        if "/agentic/arm/move_named" in command:
+            return '{"success": true, "error_code": "", "reason": "", "result_json": "{\\"backend_action\\": \\"camera_up\\"}"}'
+        if "/agentic/gripper/set" in command:
+            return '{"success": true, "error_code": "", "reason": "", "result_json": "{\\"command\\": \\"open\\"}"}'
+        raise AssertionError(command)
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        observed = await client.observe("workspace", 5)
+        state = await client.get_arm_state()
+        arm = await client.move_arm_named("camera_up", 8)
+        gripper = await client.set_gripper("open", timeout_s=5)
+        assert observed["success"] is True
+        assert observed["evidence"]["width"] == 640
+        assert state["state"]["readiness"] == "ready"
+        assert state["state"]["state"]["source"] == "bridge"
+        assert arm["result"]["backend_action"] == "camera_up"
+        assert gripper["result"]["command"] == "open"
+
+    asyncio.run(run())
+
+    assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/perception/observe"]
+    assert calls[1][0][:4] == ["ros2", "service", "call", "/agentic/arm/get_state"]
+    assert calls[2][0][:4] == ["ros2", "action", "send_goal", "/agentic/arm/move_named"]
+    assert calls[3][0][:4] == ["ros2", "service", "call", "/agentic/gripper/set"]
+
+
+def test_ros2_cli_bridge_client_capture_photo_method():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        assert "/agentic/perception/capture_photo" in command
+        return (
+            "response:\n"
+            "agentic_msgs.srv.CapturePhoto_Response(success=True, error_code='', reason='', "
+            "image_path='/opt/agentic/var/evidence/photos/p.png', "
+            "metadata_path='/opt/agentic/var/evidence/photos/p.json', "
+            "evidence_json='{\"width\": 640, \"height\": 400, \"encoding\": \"bgr8\"}')"
+        )
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.capture_photo("workspace", "photo", 5)
+        assert result["success"] is True
+        assert result["image_path"].endswith("p.png")
+        assert result["metadata_path"].endswith("p.json")
+        assert result["evidence"]["width"] == 640
+
+    asyncio.run(run())
+
+    assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/perception/capture_photo"]
+
+
+def test_ros2_cli_bridge_client_capture_photo_failure_is_structured():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"success": false, "error_code": "CAMERA_UNAVAILABLE", "reason": "no frame", "image_path": "", "metadata_path": "", "evidence_json": "{}"}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.capture_photo("workspace", "photo", 5)
+        assert result["success"] is False
+        assert result["error_code"] == "CAMERA_UNAVAILABLE"
+        assert result["image_path"] == ""
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_safety_timeout_retries_once():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        if len(calls) == 1:
+            raise TimeoutError("slow discovery")
+        return '{"allowed": true, "error_code": "", "reason": ""}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.check_safety("perception.observe", {"target": "workspace"}, "app")
+        assert result["allowed"] is True
+
+    asyncio.run(run())
+
+    assert len(calls) == 2
+    assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/safety/check"]
+    assert calls[0][1] == 20
+
+
+def test_ros2_cli_bridge_client_safety_timeout_returns_structured_error():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        raise TimeoutError("still unavailable")
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.check_safety("perception.observe", {"target": "workspace"}, "app")
+        assert result["allowed"] is False
+        assert result["error_code"] == "SAFETY_BACKEND_TIMEOUT"
+
+    asyncio.run(run())

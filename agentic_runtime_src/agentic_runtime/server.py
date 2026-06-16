@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.app_factory import AppFactory
@@ -22,6 +24,7 @@ from agentic_runtime.skill_executor.resource_manager import ResourceManager
 from agentic_runtime.skill_registry import SkillRegistry
 from agentic_runtime.storage import StorageManager
 from agentic_runtime.syscall import SyscallStore
+from agentic_runtime.task_log import TaskLogManager
 from agentic_runtime.tool_manager import ToolManager
 
 
@@ -44,10 +47,16 @@ class RuntimeServer:
     config_manager: ConfigManager
     bridge_manager: BridgeManager
     kernel_service: KernelService
+    task_log_manager: TaskLogManager
 
     @classmethod
     def create(cls, mock: bool = True) -> "RuntimeServer":
-        config = RuntimeConfig.load()
+        config_path = None
+        if not mock and not os.environ.get("AGENTIC_RUNTIME_CONFIG"):
+            candidate = Path("/opt/agentic/etc/agentic_robot.yaml")
+            if candidate.exists():
+                config_path = candidate
+        config = RuntimeConfig.load(config_path)
         registry = SkillRegistry(config.skill_root).load()
         audit_logger = AuditLogger(config.audit_log_path)
         memory_manager = create_memory_manager(config.memory_provider, config.memory_db_path)
@@ -76,6 +85,7 @@ class RuntimeServer:
         bridge_manager = BridgeManager(config.bridge_root, config.bridge_profile_root, capability_registry=registry.capabilities)
         tool_manager = ToolManager(audit_logger=audit_logger)
         config_manager = ConfigManager(config, registry)
+        task_log_manager = TaskLogManager()
         server = cls(
             config=config,
             registry=registry,
@@ -94,6 +104,7 @@ class RuntimeServer:
             config_manager=config_manager,
             bridge_manager=bridge_manager,
             kernel_service=None,  # type: ignore[arg-type]
+            task_log_manager=task_log_manager,
         )
         server.kernel_service = KernelService(server)
         return server

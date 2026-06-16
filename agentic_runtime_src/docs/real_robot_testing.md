@@ -4,6 +4,9 @@ This machine is treated as a real-robot test environment, not a simulation
 environment. Do not start fake Nav2, Gazebo, or RViz-only simulation harnesses
 from AgenticOS scripts on this host.
 
+For the full deployment gap list, implementation tasks, and the goal prompt for
+the deployment Codex, see `real_robot_deployment_taskbook.md`.
+
 ## Boundary
 
 AgenticOS owns:

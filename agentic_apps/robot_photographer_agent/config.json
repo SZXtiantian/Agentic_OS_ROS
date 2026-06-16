@@ -1,0 +1,51 @@
+{
+  "name": "robot_photographer_agent",
+  "description": "A real-robot photography Agent App running on AgenticOS. It captures workspace photos and may execute only allowlisted named camera-arm motions through AgenticOS-safe capabilities.",
+  "tools": [
+    "agenticos/perception_capture_photo",
+    "agenticos/arm_move_named",
+    "agenticos/robot_stop",
+    "agenticos/robot_status",
+    "agenticos/recent_photos"
+  ],
+  "meta": {
+    "author": "AgenticOS",
+    "version": "0.1.0",
+    "license": "Proprietary"
+  },
+  "build": {
+    "entry": "entry.py",
+    "module": "RobotPhotographerAgent"
+  },
+  "dispatch": {
+    "enabled": true,
+    "priority": 100,
+    "intents": [
+      "capture_photo",
+      "multi_angle_photo",
+      "recent_photos",
+      "robot_status",
+      "robot_stop"
+    ],
+    "keywords_zh": [
+      "拍照",
+      "照片",
+      "相机",
+      "图片",
+      "多角度",
+      "最近照片"
+    ],
+    "keywords_en": [
+      "photo",
+      "camera",
+      "picture",
+      "multi-angle"
+    ],
+    "risk_classes": [
+      "read_only",
+      "named_motion",
+      "emergency_control"
+    ],
+    "default_target": "workspace"
+  }
+}

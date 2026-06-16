@@ -1,0 +1,84 @@
+name: robot_photographer_agent
+version: 0.1.0
+description: AIOS-compatible AgenticOS-safe real robot photography agent.
+runtime_type: aios_agent_package
+entrypoint: main:run
+aios_entrypoint: entry:RobotPhotographerAgent
+executor_entrypoint: main:execute_plan
+
+permissions:
+  - robot.state.read
+  - robot.stop
+  - perception.capture
+  - arm.state.read
+  - arm.move.named
+  - storage.read
+  - memory.read
+  - memory.write
+  - report.say
+
+required_capabilities:
+  - robot.get_state
+  - robot.stop
+  - perception.capture_photo
+  - arm.get_state
+  - arm.move_named
+  - storage.list_recent_photos
+  - memory.remember
+  - memory.recall
+  - report.say
+
+resources:
+  - camera
+  - arm
+  - photo_verifier
+
+allowed_targets:
+  - workspace
+
+allowed_arm_actions:
+  - arm_home
+  - camera_center
+  - camera_yaw_left_15
+  - camera_yaw_right_15
+  - camera_pitch_up_15
+
+limits:
+  burst_count_max: 5
+  burst_interval_s_max: 5
+  arm_action_timeout_s_max: 8
+  capture_timeout_s_max: 5
+
+motion_confirmation_policy:
+  motion_disabled_by_default: true
+  allow_env: AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION
+  allow_cli_flag: --allow-arm-motion
+  require_confirmation_unless_cli_flag: --yes
+
+evidence:
+  root: /opt/agentic/var/evidence/photos
+  role: runtime_raw_evidence
+
+app_storage:
+  root: storage
+  runs: storage/runs
+  photos: storage/photos
+  videos: storage/videos
+  logs: storage/logs
+  indexes: storage/indexes
+  tmp: storage/tmp
+  role: app_owned_user_outputs
+
+safety_policy:
+  allow_autonomous_navigation: false
+  allow_arbitrary_joint_targets: false
+  allow_cartesian_trajectories: false
+  allow_freeform_grasping: false
+  allow_base_motion: false
+  stop_on_human_request: true
+
+runtime_limits:
+  max_concurrent_tasks: 1
+  max_retries_per_skill: 0
+  max_memory_write_per_task: 20
+  llm_planning_enabled: false

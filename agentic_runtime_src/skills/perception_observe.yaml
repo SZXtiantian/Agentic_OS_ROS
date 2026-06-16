@@ -1,0 +1,50 @@
+name: perception.observe
+version: 0.1.0
+description: Observe a target through the AgenticOS camera bridge.
+input_schema:
+  type: object
+  required: [target]
+  properties:
+    target:
+      type: string
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 10
+output_schema:
+  type: object
+  required: [success, summary]
+  properties:
+    success:
+      type: boolean
+    summary:
+      type: string
+    objects:
+      type: array
+    evidence_path:
+      type: string
+    evidence:
+      type: object
+permission_requirements:
+  - perception.observe
+resource_requirements:
+  locks:
+    - camera
+safety_constraints:
+  require_estop_released: false
+  camera_target_allowlist: true
+  allow_cancel: true
+  max_duration_s: 10
+  runtime_timeout_margin_s: 5
+timeout_s: 10
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_service
+  bridge: inspection_bridge_node
+  service: /agentic/perception/observe
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

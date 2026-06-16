@@ -8,9 +8,25 @@ from agentic_runtime.skill_registry.skill_manifest import validate_skill_manifes
 
 def test_loads_all_mvp_skills():
     registry = SkillRegistry(RuntimeConfig.load().skill_root).load()
-    assert len(registry.list_skills()) == 9
+    names = {skill.name for skill in registry.list_skills()}
+    assert {
+        "robot.get_state",
+        "world.resolve_place",
+        "robot.navigate_to",
+        "robot.inspect_area",
+        "perception.observe",
+        "arm.get_state",
+        "arm.move_named",
+        "gripper.set",
+        "robot.stop",
+        "memory.remember",
+        "memory.recall",
+        "human.ask",
+        "report.say",
+    } <= names
     assert registry.get_skill("robot.navigate_to").backend["bridge"] == "navigation_bridge_node"
     assert registry.get_skill("navigate_to").backend["bridge"] == "navigation_bridge_node"
+    assert registry.get_skill("arm.move_named").backend["bridge"] == "manipulation_bridge_node"
 
 
 def test_missing_name_fails():

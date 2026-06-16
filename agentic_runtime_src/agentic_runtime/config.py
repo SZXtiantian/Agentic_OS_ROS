@@ -64,6 +64,7 @@ class RuntimeConfig:
                 Path(os.environ["AGENTIC_RUNTIME_CONFIG"]).expanduser()
                 if os.environ.get("AGENTIC_RUNTIME_CONFIG")
                 else None,
+                agentic_home / "etc" / "agentic.yaml" if os.environ.get("AGENTIC_HOME") else None,
                 repo_root / "configs" / "runtime.yaml",
                 agentic_home / "etc" / "agentic.yaml",
                 Path("/home/ubuntu/configs/runtime.yaml"),

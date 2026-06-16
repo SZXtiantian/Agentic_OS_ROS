@@ -1,0 +1,10 @@
+string command
+string force
+float32 percentage
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string reason
+string result_json

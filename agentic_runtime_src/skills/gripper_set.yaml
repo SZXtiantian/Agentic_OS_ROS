@@ -1,0 +1,55 @@
+name: gripper.set
+version: 0.1.0
+description: Execute an allowlisted gripper command through AgenticOS bridge limits.
+input_schema:
+  type: object
+  required: [command]
+  properties:
+    command:
+      type: string
+    force:
+      type: string
+    percentage:
+      type: number
+      minimum: 0
+      maximum: 100
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 5
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+    reason:
+      type: string
+    error_code:
+      type: string
+    result:
+      type: object
+permission_requirements:
+  - gripper.control
+resource_requirements:
+  locks:
+    - gripper
+safety_constraints:
+  require_estop_released: true
+  gripper_allowlist: true
+  allow_cancel: true
+  max_duration_s: 5
+  runtime_timeout_margin_s: 1
+timeout_s: 5
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_service
+  bridge: manipulation_bridge_node
+  service: /agentic/gripper/set
+  ros2_backend_type: servo_controller
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

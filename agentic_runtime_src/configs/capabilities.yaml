@@ -3,8 +3,14 @@ capabilities:
   - world.resolve_place
   - robot.navigate_to
   - robot.inspect_area
+  - perception.observe
+  - perception.capture_photo
+  - arm.get_state
+  - arm.move_named
+  - gripper.set
   - robot.stop
   - memory.remember
   - memory.recall
+  - storage.list_recent_photos
   - human.ask
   - report.say

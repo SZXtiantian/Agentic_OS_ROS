@@ -4,6 +4,8 @@ from pathlib import Path
 import agentic_runtime
 from agentic_runtime.app_manager import AppManager
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.sdk import AgentContext
+from agentic_runtime.types import AppManifest
 
 
 def test_sdk_room_flow_and_memory():
@@ -32,3 +34,26 @@ def test_sdk_no_forbidden_patterns():
         text = path.read_text(encoding="utf-8")
         for pattern in forbidden:
             assert pattern not in text
+
+
+def test_sdk_capture_photo_writes_mock_evidence(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "photos"))
+
+    async def run():
+        server = RuntimeServer.create(mock=True)
+        app = AppManifest(
+            name="photo_test",
+            version="0",
+            description="",
+            entrypoint="main:run",
+            permissions=["perception.capture"],
+            required_capabilities=["perception.capture_photo"],
+        )
+        ctx = AgentContext(server.executor, app, "sess_photo")
+        result = await ctx.perception.capture_photo(target="workspace", label="sdk", timeout_s=5)
+        assert result.success is True
+        assert Path(result.image_path).exists()
+        assert Path(result.metadata_path).exists()
+        assert result.evidence["perception_backend_status"] == "MOCK"
+
+    asyncio.run(run())

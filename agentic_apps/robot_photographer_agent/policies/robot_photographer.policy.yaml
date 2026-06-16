@@ -1,0 +1,47 @@
+policy_version: "1.0"
+name: robot_photographer_policy
+
+targets:
+  allowed:
+    - workspace
+
+read_only:
+  capture_photo_allowed_by_default: true
+
+motion:
+  disabled_by_default: true
+  allow_env: AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION
+  allow_cli_flag: --allow-arm-motion
+  require_confirmation: true
+  confirmation_bypass_cli_flag: --yes
+  allowed_named_actions:
+    - arm_home
+    - camera_center
+    - camera_yaw_left_15
+    - camera_yaw_right_15
+    - camera_pitch_up_15
+  disallowed:
+    arbitrary_joint_targets: true
+    cartesian_trajectories: true
+    freeform_grasping: true
+    base_motion: true
+    direct_servo_pulses_from_app: true
+  arm_action_timeout_s_max: 8
+
+multi_angle:
+  max_pose_count: 4
+  require_return_home_after_sequence: true
+  require_difference_verification: true
+  min_image_difference_score: 0.08
+
+burst:
+  count_max: 5
+  interval_s_max: 5
+
+capture:
+  timeout_s_max: 5
+
+evidence:
+  root: /opt/agentic/var/evidence/photos
+  require_metadata: true
+  require_index: true

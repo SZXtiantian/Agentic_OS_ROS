@@ -14,16 +14,22 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SkillDescription.msg"
   "msg/WorldObject.msg"
   "msg/RobotState.msg"
+  "msg/ArmState.msg"
   "msg/Place.msg"
   "msg/SafetyState.msg"
   "srv/ResolvePlace.srv"
   "srv/GetRobotState.srv"
   "srv/StopRobot.srv"
+  "srv/Observe.srv"
+  "srv/CapturePhoto.srv"
   "srv/InspectArea.srv"
+  "srv/GetArmState.srv"
+  "srv/SetGripper.srv"
   "srv/AskHuman.srv"
   "srv/CheckSafety.srv"
   "action/ExecuteSkill.action"
   "action/NavigateToPlace.action"
+  "action/MoveArmNamed.action"
   DEPENDENCIES geometry_msgs
 )
 

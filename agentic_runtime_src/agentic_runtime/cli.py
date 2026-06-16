@@ -6,6 +6,7 @@ import json
 
 from agentic_runtime.hardware_adapter import Ros2BridgeProfile
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.task_log import TaskLogManager
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,14 @@ def build_parser() -> argparse.ArgumentParser:
     audit = sub.add_parser("audit")
     audit.add_argument("--limit", type=int, default=20)
     audit.add_argument("--json", action="store_true")
+
+    tasks_cmd = sub.add_parser("tasks")
+    tasks_cmd.add_argument("--limit", type=int, default=20)
+    tasks_cmd.add_argument("--json", action="store_true")
+
+    task_cmd = sub.add_parser("task")
+    task_cmd.add_argument("task_id")
+    task_cmd.add_argument("--json", action="store_true")
 
     apps = sub.add_parser("apps")
     apps.add_argument("--json", action="store_true")
@@ -167,6 +176,35 @@ def audit(args) -> int:
     return 0
 
 
+def tasks(args) -> int:
+    manager = TaskLogManager()
+    records = [record.to_dict() for record in manager.list_recent(limit=args.limit)]
+    if args.json:
+        print_json(records)
+        return 0
+    for record in records:
+        print(f"{record['task_id']} {record['status']} {record.get('selected_app_id', '')} {record.get('result_summary', {}).get('summary', '')}")
+    return 0
+
+
+def task(args) -> int:
+    manager = TaskLogManager()
+    record = manager.get(args.task_id)
+    if record is None:
+        print_json({"success": False, "error_code": "TASK_NOT_FOUND", "task_id": args.task_id})
+        return 1
+    data = record.to_dict()
+    if args.json:
+        print_json(data)
+        return 0
+    print(f"task_id={data['task_id']}")
+    print(f"status={data['status']}")
+    print(f"selected_app={data.get('selected_app_id', '')}")
+    print(f"summary={data.get('result_summary', {}).get('summary', '')}")
+    print_json(data)
+    return 0
+
+
 def apps(args) -> int:
     server = RuntimeServer.create(mock=True)
     records = server.app_factory.list_apps()
@@ -234,6 +272,10 @@ def main(argv=None) -> int:
         return stop(args)
     if args.command == "audit":
         return audit(args)
+    if args.command == "tasks":
+        return tasks(args)
+    if args.command == "task":
+        return task(args)
     if args.command == "apps":
         return apps(args)
     if args.command == "skills":

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Robot Photographer Photo Result",
+  "type": "object",
+  "required": ["schema_version", "success", "plan_id", "steps", "error_code", "reason"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "success": {"type": "boolean"},
+    "plan_id": {"type": "string"},
+    "session_id": {"type": "string"},
+    "audit_ids": {"type": "array", "items": {"type": "string"}},
+    "steps": {"type": "array"},
+    "error_code": {"type": "string"},
+    "reason": {"type": "string"}
+  },
+  "additionalProperties": true
+}

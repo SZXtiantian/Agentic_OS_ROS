@@ -91,7 +91,8 @@ class SkillExecutor:
                 resource_result = "locked"
                 syscall.resource_lock_result = resource_result
 
-            timeout_s = int(args.get("timeout_s") or skill.timeout_s)
+            operation_timeout_s = int(args.get("timeout_s") or skill.timeout_s)
+            timeout_s = operation_timeout_s + int(skill.safety_constraints.get("runtime_timeout_margin_s", 0))
             cancel_event = self.cancellation_manager.event_for(session_id)
             syscall.mark_started(SyscallStatus.EXECUTING)
             self._record_syscall(syscall)
@@ -110,6 +111,7 @@ class SkillExecutor:
                 status,
                 result.error_code,
                 started,
+                result.to_dict(),
             )
             result.audit_id = audit_id
             syscall.permission_result = permission_result
@@ -148,6 +150,7 @@ class SkillExecutor:
                 status,
                 result.error_code,
                 started,
+                result.to_dict(),
             )
             syscall.permission_result = permission_result
             syscall.safety_result = safety_result
@@ -177,6 +180,7 @@ class SkillExecutor:
                 "failed",
                 result.error_code,
                 started,
+                result.to_dict(),
             )
             syscall.permission_result = permission_result
             syscall.safety_result = safety_result
@@ -199,6 +203,10 @@ class SkillExecutor:
             or constraints.get("require_localized")
             or constraints.get("require_estop_released")
             or constraints.get("forbidden_zone_check")
+            or constraints.get("camera_target_allowlist")
+            or constraints.get("named_action_allowlist")
+            or constraints.get("workspace_bounds_check")
+            or constraints.get("gripper_allowlist")
         )
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
@@ -252,6 +260,7 @@ class SkillExecutor:
         status: str,
         error_code: str,
         started: float,
+        result: dict[str, Any] | None = None,
     ) -> str:
         return self.audit_logger.write(
             {
@@ -266,6 +275,7 @@ class SkillExecutor:
                 "status": status,
                 "error_code": error_code,
                 "duration_ms": int((time.monotonic() - started) * 1000),
+                "result": result or {},
             }
         )
 

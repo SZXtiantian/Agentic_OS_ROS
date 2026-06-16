@@ -26,6 +26,8 @@ class RobotAPI:
             summary=result.data.get("summary", ""),
             objects=list(result.data.get("objects", [])),
             anomalies=list(result.data.get("anomalies", [])),
+            evidence_path=str(result.data.get("evidence_path", "")),
+            evidence=dict(result.data.get("evidence", {})),
         )
 
     async def stop(self, reason: str = "app_requested") -> SkillResult:

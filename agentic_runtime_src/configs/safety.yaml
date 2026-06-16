@@ -12,3 +12,30 @@ safety:
   require_resource_lock: true
   require_safety_guard: true
   require_audit_log: true
+  camera:
+    allowed_targets:
+      - workspace
+      - arm_workspace
+      - desk
+    max_observe_duration_s: 60
+    max_capture_duration_s: 5
+  manipulation:
+    max_arm_duration_s: 8
+    allowed_named_actions:
+      - arm_home
+      - camera_center
+      - camera_yaw_left_15
+      - camera_yaw_right_15
+      - camera_pitch_up_15
+    allowed_gripper_commands:
+      - open
+      - close
+    allowed_gripper_forces:
+      - low
+    workspace_bounds_m:
+      x: [0.12, 0.32]
+      y: [-0.18, 0.18]
+      z: [0.05, 0.36]
+    gripper_pulse_limits:
+      min_pulse: 350
+      max_pulse: 760

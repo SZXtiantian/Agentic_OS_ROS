@@ -1,0 +1,37 @@
+name: storage.list_recent_photos
+version: 0.1.0
+description: List recent AgenticOS-managed photo evidence records.
+input_schema:
+  type: object
+  properties:
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 20
+output_schema:
+  type: object
+  required: [success, photos]
+  properties:
+    success:
+      type: boolean
+    photos:
+      type: array
+    index_path:
+      type: string
+permission_requirements:
+  - storage.read
+resource_requirements:
+  locks: []
+safety_constraints:
+  require_estop_released: false
+timeout_s: 5
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: runtime_internal
+  manager: storage
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

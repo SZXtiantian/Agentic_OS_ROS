@@ -127,8 +127,51 @@ class InspectionResult:
     summary: str
     objects: list[str] = field(default_factory=list)
     anomalies: list[str] = field(default_factory=list)
+    evidence_path: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
     error_code: str = ""
     reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ObservationResult:
+    success: bool
+    summary: str
+    objects: list[str] = field(default_factory=list)
+    evidence_path: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+    error_code: str = ""
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class PhotoCaptureResult:
+    success: bool
+    image_path: str = ""
+    metadata_path: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+    error_code: str = ""
+    reason: str = ""
+    audit_id: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ArmState:
+    readiness: str
+    active_action: str
+    is_moving: bool
+    gripper_ready: bool
+    stop_available: bool
+    state: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Robot Photographer Photo Plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_id",
+    "intent",
+    "risk_class",
+    "requires_motion",
+    "needs_confirmation",
+    "planner_mode",
+    "target",
+    "steps",
+    "user_summary"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "plan_id": {"type": "string", "minLength": 1},
+    "intent": {
+      "type": "string",
+      "enum": [
+        "capture_photo",
+        "capture_burst",
+        "move_camera_pose",
+        "arm_home",
+        "before_after_capture",
+        "multi_angle_capture",
+        "verify_photo_differences",
+        "recent_photos",
+        "status",
+        "stop",
+        "unsupported"
+      ]
+    },
+    "risk_class": {
+      "type": "string",
+      "enum": ["read_only", "named_motion", "emergency_control"]
+    },
+    "requires_motion": {"type": "boolean"},
+    "needs_confirmation": {"type": "boolean"},
+    "planner_mode": {"type": "string", "enum": ["llm", "rule_based"]},
+    "target": {"type": "string", "enum": ["workspace"]},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "capture_photo",
+              "arm_named_action",
+              "recent_photos",
+              "status",
+              "stop",
+              "sleep",
+              "verify_photo_differences"
+            ]
+          },
+          "target": {"type": "string", "enum": ["workspace"]},
+          "label": {"type": "string"},
+          "name": {
+            "type": "string",
+            "enum": [
+              "arm_home",
+              "camera_center",
+              "camera_yaw_left_15",
+              "camera_yaw_right_15",
+              "camera_pitch_up_15"
+            ]
+          },
+          "timeout_s": {"type": "integer", "minimum": 1, "maximum": 8},
+          "count": {"type": "integer", "minimum": 1, "maximum": 5},
+          "duration_s": {"type": "number", "minimum": 0, "maximum": 5},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+          "reason": {"type": "string"},
+          "method": {"type": "string", "enum": ["deterministic_cv_metrics"]},
+          "min_difference_score": {"type": "number", "minimum": 0.0, "maximum": 1.0}
+        },
+        "additionalProperties": false
+      }
+    },
+    "user_summary": {"type": "string"}
+  },
+  "additionalProperties": false
+}

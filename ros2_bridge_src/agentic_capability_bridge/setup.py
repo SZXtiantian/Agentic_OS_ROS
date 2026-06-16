@@ -23,6 +23,7 @@ setup(
         "console_scripts": [
             "state_bridge_node = agentic_capability_bridge.state_bridge_node:main",
             "inspection_bridge_node = agentic_capability_bridge.inspection_bridge_node:main",
+            "manipulation_bridge_node = agentic_capability_bridge.manipulation_bridge_node:main",
             "navigation_bridge_node = agentic_capability_bridge.navigation_bridge_node:main",
         ],
     },

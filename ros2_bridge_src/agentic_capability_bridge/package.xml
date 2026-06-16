@@ -11,6 +11,13 @@
   <depend>agentic_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>nav2_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>servo_controller</depend>
+  <depend>servo_controller_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-opencv</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
   <export>

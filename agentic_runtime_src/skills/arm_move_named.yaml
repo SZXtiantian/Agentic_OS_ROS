@@ -1,0 +1,50 @@
+name: arm.move_named
+version: 0.1.0
+description: Execute an allowlisted named arm action.
+input_schema:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 8
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+    reason:
+      type: string
+    error_code:
+      type: string
+    result:
+      type: object
+permission_requirements:
+  - arm.move.named
+resource_requirements:
+  locks:
+    - arm
+safety_constraints:
+  require_estop_released: true
+  named_action_allowlist: true
+  workspace_bounds_check: true
+  allow_cancel: true
+  max_duration_s: 8
+  runtime_timeout_margin_s: 2
+timeout_s: 8
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_action
+  bridge: manipulation_bridge_node
+  action: /agentic/arm/move_named
+  ros2_backend_type: openclaw_action_group
+observability:
+  audit: true
+  record_feedback: true
+  record_result: true

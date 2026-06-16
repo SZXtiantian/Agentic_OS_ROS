@@ -32,6 +32,32 @@ No directory should be both a conceptual OS map and an executable Python package
 Generated cache directories such as `__pycache__` and `.pytest_cache` are not
 part of the installed filesystem contract.
 
+## Source And Publish Trees
+
+The active development source trees on this host are intentionally outside
+`/opt/agentic`:
+
+```text
+/home/ubuntu/agentic_ws/src/agentic_runtime_src
+/home/ubuntu/agentic_ws/src/<agent_app>
+/home/ubuntu/agentic_ws/ros2_bridge_src/<bridge_package>
+```
+
+These source trees are installed into `/opt/agentic` by the installer; the whole
+source workspace must not be copied into `/opt/agentic` as a git repository.
+
+Legacy or handoff repositories such as:
+
+```text
+/home/ubuntu/Agentic_OS_ROS_publish
+```
+
+are publication/export mirrors, not active runtime roots. If such a repository
+is kept, it should either be updated from the active `agentic_ws` sources before
+publishing, or archived outside the active deployment path. It must not be
+treated as `/opt/agentic`, and it must not be used as a second source of truth
+for runtime, app, or bridge behavior.
+
 ## Authoritative Meanings
 
 ### `/opt/agentic/bin`

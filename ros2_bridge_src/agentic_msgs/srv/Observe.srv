@@ -1,0 +1,10 @@
+string target
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string summary
+string[] objects
+string evidence_path
+string evidence_json

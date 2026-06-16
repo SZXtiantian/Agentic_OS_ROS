@@ -12,8 +12,13 @@ FORBIDDEN_APP_PATTERNS = [
     "/" + "scan",
     "/" + "odom",
     "/" + "tf",
+    "/" + "servo_controller",
+    "/" + "kinematics",
+    "/" + "depth_cam",
     "Navigate" + "ToPose",
     "Move" + "Group",
+    "Move" + "It",
+    "Nav" + "2",
     "Action" + "Client",
     "create_" + "publisher",
     "create_" + "subscription",
@@ -32,7 +37,10 @@ class AppValidator:
         module_path = app_dir / f"{module_name}.py"
         if not module_path.exists():
             raise AppValidationError(f"app entrypoint module missing: {module_path}")
-        text = module_path.read_text(encoding="utf-8", errors="ignore")
-        for pattern in FORBIDDEN_APP_PATTERNS:
-            if pattern in text:
-                raise AppValidationError(f"forbidden robot/ROS2 access in app source: {pattern}")
+        for path in sorted(app_dir.rglob("*.py")):
+            if "tests" in path.relative_to(app_dir).parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for pattern in FORBIDDEN_APP_PATTERNS:
+                if pattern in text:
+                    raise AppValidationError(f"forbidden robot/ROS2 access in app source: {pattern}")

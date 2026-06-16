@@ -52,11 +52,18 @@ class Ros2CliBridgeClient:
         }
 
     async def check_safety(self, skill_name: str, args: dict[str, Any], app_id: str) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/safety/check",
-            "agentic_msgs/srv/CheckSafety",
-            {"skill_name": skill_name, "args_json": json.dumps(args, ensure_ascii=False), "app_id": app_id},
-        )
+        payload = {"skill_name": skill_name, "args_json": json.dumps(args, ensure_ascii=False), "app_id": app_id}
+        timeout_s = max(self.timeout_s, 20)
+        try:
+            output = await self._service_call("/agentic/safety/check", "agentic_msgs/srv/CheckSafety", payload, timeout_s)
+        except TimeoutError:
+            await asyncio.sleep(0.5)
+            try:
+                output = await self._service_call("/agentic/safety/check", "agentic_msgs/srv/CheckSafety", payload, timeout_s)
+            except TimeoutError as exc:
+                return {"allowed": False, "error_code": "SAFETY_BACKEND_TIMEOUT", "reason": str(exc)}
+        except RuntimeError as exc:
+            return {"allowed": False, "error_code": "SAFETY_BACKEND_UNAVAILABLE", "reason": str(exc)}
         data = _parse_response(output)
         return {
             "allowed": bool(data.get("allowed", False)),
@@ -87,7 +94,7 @@ class Ros2CliBridgeClient:
             "/agentic/perception/inspect_area",
             "agentic_msgs/srv/InspectArea",
             {"place": place, "request_id": new_id("inspect"), "timeout_s": int(timeout_s)},
-            timeout_s,
+            timeout_s + 5,
         )
         data = _parse_response(output)
         result_json = _decode_json_field(data.get("result_json"))
@@ -97,6 +104,102 @@ class Ros2CliBridgeClient:
             "summary": str(data.get("summary") or result_json.get("summary", "")),
             "objects": list(data.get("objects") or result_json.get("objects", [])),
             "anomalies": list(data.get("anomalies") or result_json.get("anomalies", [])),
+            "evidence_path": str(result_json.get("evidence_path", "")),
+            "evidence": dict(result_json.get("evidence", {})),
+        }
+
+    async def observe(self, target: str, timeout_s: int) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/perception/observe",
+            "agentic_msgs/srv/Observe",
+            {"target": target, "request_id": new_id("observe"), "timeout_s": int(timeout_s)},
+            timeout_s + 5,
+        )
+        data = _parse_response(output)
+        evidence = _decode_json_field(data.get("evidence_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", data.get("summary", ""))),
+            "summary": str(data.get("summary", "")),
+            "objects": list(data.get("objects") or []),
+            "evidence_path": str(data.get("evidence_path", "")),
+            "evidence": evidence,
+        }
+
+    async def capture_photo(self, target: str, label: str, timeout_s: int) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/perception/capture_photo",
+            "agentic_msgs/srv/CapturePhoto",
+            {"target": target, "label": label, "request_id": new_id("capture"), "timeout_s": int(timeout_s)},
+            timeout_s + 5,
+        )
+        data = _parse_response(output)
+        evidence = _decode_json_field(data.get("evidence_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "image_path": str(data.get("image_path", "")),
+            "metadata_path": str(data.get("metadata_path", "")),
+            "evidence": evidence,
+        }
+
+    async def get_arm_state(self) -> dict[str, Any]:
+        output = await self._service_call(
+            "/agentic/arm/get_state",
+            "agentic_msgs/srv/GetArmState",
+            {"request_id": new_id("arm_state")},
+        )
+        data = _parse_response(output)
+        state = _normalize_arm_state(data.get("state") or {})
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "state": state,
+        }
+
+    async def move_arm_named(self, name: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
+        if cancel_event is not None and cancel_event.is_set():
+            return {"success": False, "error_code": "SKILL_CANCELLED", "reason": "arm action cancelled before dispatch"}
+        output = await self._action_send_goal(
+            "/agentic/arm/move_named",
+            "agentic_msgs/action/MoveArmNamed",
+            {"name": name, "request_id": new_id("arm"), "timeout_s": int(timeout_s)},
+            timeout_s + 2,
+        )
+        data = _parse_response(output)
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "result": result_json,
+        }
+
+    async def set_gripper(
+        self,
+        command: str,
+        force: str = "low",
+        percentage: float | None = None,
+        timeout_s: int = 5,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "command": command,
+            "force": force,
+            "percentage": float(percentage) if percentage is not None else 0.0,
+            "request_id": new_id("gripper"),
+            "timeout_s": int(timeout_s),
+        }
+        output = await self._service_call("/agentic/gripper/set", "agentic_msgs/srv/SetGripper", payload, timeout_s + 1)
+        data = _parse_response(output)
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": bool(data.get("success", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "result": result_json,
         }
 
     async def stop_robot(self, reason: str) -> dict[str, Any]:
@@ -213,7 +316,18 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         match = re.search(rf"\b{key}\s*[:=]\s*(True|False|true|false)", text)
         if match:
             result[key] = match.group(1).lower() == "true"
-    for key in ["error_code", "reason", "message", "summary", "answer", "result_json"]:
+    for key in [
+        "error_code",
+        "reason",
+        "message",
+        "summary",
+        "answer",
+        "result_json",
+        "evidence_path",
+        "evidence_json",
+        "image_path",
+        "metadata_path",
+    ]:
         match = re.search(rf"\b{key}\s*[:=]\s*'([^']*)'", text)
         if not match:
             match = re.search(rf'\b{key}\s*[:=]\s*"([^"]*)"', text)
@@ -242,6 +356,14 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
     )
     if state:
         result["state"] = state
+    arm_state = _parse_nested_object(
+        text,
+        "state",
+        ["readiness", "active_action", "state_json"],
+        bool_fields=["is_moving", "gripper_ready", "stop_available"],
+    )
+    if arm_state and ("readiness" in arm_state or "gripper_ready" in arm_state or "stop_available" in arm_state):
+        result["state"] = arm_state
     return result
 
 
@@ -262,6 +384,19 @@ def _normalize_state(state: dict[str, Any]) -> dict[str, Any]:
     if "state" not in normalized:
         normalized["state"] = _decode_json_field(state_json)
     normalized.setdefault("pose", {})
+    return normalized
+
+
+def _normalize_arm_state(state: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(state)
+    state_json = normalized.pop("state_json", None)
+    if "state" not in normalized:
+        normalized["state"] = _decode_json_field(state_json)
+    normalized.setdefault("readiness", "")
+    normalized.setdefault("active_action", "")
+    normalized.setdefault("is_moving", False)
+    normalized.setdefault("gripper_ready", False)
+    normalized.setdefault("stop_available", False)
     return normalized
 
 

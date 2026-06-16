@@ -1,31 +1,58 @@
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.venv/
-venv/
-
-# ROS2 / colcon build products
+# Build and install artifacts
 build/
 install/
 log/
+.colcon/
+
+# Python caches and test outputs
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Agent App runtime outputs
+agentic_apps/*/storage/**
+!agentic_apps/*/storage/
+!agentic_apps/*/storage/.gitkeep
+!agentic_apps/*/storage/**/
+!agentic_apps/*/storage/**/.gitkeep
+agentic_apps/*/memory/*.db
+agentic_apps/*/memory/*.sqlite*
+
+# Runtime state, evidence, audit, task logs, and local generated data
+var/
+agentic_runtime_src/var/
+**/runs/**
+**/photos/**
+**/videos/**
+**/logs/**
+**/indexes/*.jsonl
 *.bag
 *.db3
 
-# AgenticOS runtime state
-var/
-*.sqlite3
-*.jsonl
+# Robot/user media captures
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.mp4
+*.mov
+*.avi
 
-# Local secrets and credentials
+# Secrets and local environment
+.env
 *.env
-secrets/
-auth.json
-config.toml
-.codex/
+*.pem
+*.key
+*secret*
+*secrets*
+/etc/secrets/
 
-# Editors / OS
+# Local editor/system files
+.DS_Store
 .vscode/
 .idea/
-.DS_Store
 

@@ -11,6 +11,9 @@ FORBIDDEN_PATTERNS = [
     "/scan",
     "/odom",
     "/tf",
+    "/servo_controller",
+    "/depth_cam",
+    "/kinematics",
     "NavigateToPose",
     "MoveGroup",
     "ActionClient",
@@ -27,6 +30,8 @@ SCAN_ROOTS = [
     RUNTIME_SRC / "agentic_runtime",
     RUNTIME_SRC / "agentic_runtime" / "sdk",
     WORKSPACE_SRC / "inspection_agent",
+    WORKSPACE_SRC / "camera_arm_inspection_agent",
+    WORKSPACE_SRC / "robot_photographer_agent",
     WORKSPACE_SRC / "room_inspection_app",
     WORKSPACE_SRC / "pickup_agent",
     WORKSPACE_SRC / "laundry_agent",
@@ -35,11 +40,15 @@ SCAN_ROOTS = [
     WORKSPACE_SRC / "app_template",
 ]
 
-TEXT_SUFFIXES = {".py", ".yaml", ".yml", ".md", ".txt"}
+TEXT_SUFFIXES = {".py", ".yaml", ".yml", ".json", ".md", ".txt"}
 
 
 def should_scan(path: Path) -> bool:
     if "__pycache__" in path.parts:
+        return False
+    if "tests" in path.parts:
+        return False
+    if "storage" in path.parts:
         return False
     if path.name.startswith("."):
         return False

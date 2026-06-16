@@ -1,12 +1,45 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
+import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 
 from agentic_os.kernel.world_model import WorldModel
 
 from agentic_runtime.config import load_places, load_safety
+
+
+def _write_mock_photo(image_path: Path, label: str) -> bool:
+    try:
+        import cv2
+        import numpy as np
+    except Exception:
+        return False
+    digest = hashlib.sha256(str(label).encode("utf-8")).digest()
+    seed = digest[0]
+    seed_b = digest[1] or 1
+    seed_c = digest[2] or 1
+    height, width = 400, 640
+    x = np.tile(np.linspace(0, 255, width, dtype=np.uint8), (height, 1))
+    y = np.tile(np.linspace(0, 255, height, dtype=np.uint8).reshape(height, 1), (1, width))
+    image = np.dstack(
+        (
+            ((x.astype(np.uint16) + seed) % 255).astype(np.uint8),
+            ((y.astype(np.uint16) + seed_b * 2) % 255).astype(np.uint8),
+            ((x.astype(np.uint16) // 2 + y.astype(np.uint16) // 2 + seed_c * 3) % 255).astype(np.uint8),
+        )
+    )
+    center = (int(80 + digest[3] % 480), int(80 + digest[4] % 240))
+    color = (int(digest[5]), int(digest[6]), int(digest[7]))
+    cv2.circle(image, center, 45 + int(digest[8] % 55), color, -1)
+    cv2.line(image, (0, int(digest[9] % height)), (width - 1, int(digest[10] % height)), color, 5)
+    cv2.putText(image, str(label), (40, 200), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255 - seed, seed_b, seed_c), 3)
+    return bool(cv2.imwrite(str(image_path), image))
 
 
 class MockRosBridgeClient:
@@ -19,6 +52,8 @@ class MockRosBridgeClient:
         self.navigation_sleep_s = navigation_sleep_s
         self.navigation_calls: list[dict[str, Any]] = []
         self.stop_calls: list[dict[str, Any]] = []
+        self.arm_calls: list[dict[str, Any]] = []
+        self.gripper_calls: list[dict[str, Any]] = []
         self.reports: list[str] = []
         self.estop_pressed = False
         self.is_localized = True
@@ -77,6 +112,25 @@ class MockRosBridgeClient:
                 return {"allowed": False, "error_code": "FORBIDDEN_ZONE", "reason": f"forbidden place: {place_name}"}
             if not self.is_localized:
                 return {"allowed": False, "error_code": "ROBOT_NOT_LOCALIZED", "reason": "robot is not localized"}
+        if skill_name == "arm.move_named":
+            name = {"camera_up": "camera_pitch_up_15"}.get(str(args.get("name", "")), args.get("name"))
+            if name not in {
+                "arm_home",
+                "camera_center",
+                "camera_yaw_left_15",
+                "camera_yaw_right_15",
+                "camera_pitch_up_15",
+            }:
+                return {"allowed": False, "error_code": "ARM_ACTION_NOT_ALLOWED", "reason": "arm action is not allowlisted"}
+            if int(args.get("timeout_s", 8)) > 8:
+                return {"allowed": False, "error_code": "ARM_TIMEOUT_LIMIT_EXCEEDED", "reason": "arm timeout exceeds max"}
+        if skill_name == "gripper.set":
+            command = args.get("command")
+            force = args.get("force", "low")
+            if command not in {"open", "open_gripper", "close", "close_gripper_low_force"}:
+                return {"allowed": False, "error_code": "GRIPPER_COMMAND_NOT_ALLOWED", "reason": "gripper command is not allowlisted"}
+            if force != "low":
+                return {"allowed": False, "error_code": "GRIPPER_FORCE_NOT_ALLOWED", "reason": "gripper force is not allowlisted"}
         return {"allowed": True, "error_code": "", "reason": ""}
 
     async def navigate_to(self, place: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
@@ -95,9 +149,82 @@ class MockRosBridgeClient:
         return {
             "success": True,
             "summary": f"{place}检查完成，未发现异常。",
-            "objects": ["table", "chair"],
+            "objects": [],
             "anomalies": [],
+            "evidence_path": "",
+            "evidence": {"source": "mock_camera_metadata", "place": place, "perception_backend_status": "MOCK"},
         }
+
+    async def observe(self, target: str, timeout_s: int) -> dict[str, Any]:
+        del timeout_s
+        return {
+            "success": True,
+            "summary": f"{target} camera metadata observation complete (mock).",
+            "objects": [],
+            "evidence_path": "",
+            "evidence": {"source": "mock_camera_metadata", "target": target, "perception_backend_status": "MOCK"},
+        }
+
+    async def capture_photo(self, target: str, label: str, timeout_s: int) -> dict[str, Any]:
+        del timeout_s
+        timestamp = int(time.time())
+        photo_dir = Path(os.environ.get("AGENTIC_PHOTO_EVIDENCE_ROOT", "/tmp/agentic_mock_photos"))
+        photo_dir.mkdir(parents=True, exist_ok=True)
+        image_path = photo_dir / f"{label}_{timestamp}.png"
+        metadata_path = photo_dir / f"{label}_{timestamp}.json"
+        evidence = {
+            "source": "mock_camera_capture",
+            "target": target,
+            "label": label,
+            "topic": "mock",
+            "width": 640,
+            "height": 400,
+            "encoding": "bgr8",
+            "image_path": str(image_path),
+            "metadata_path": str(metadata_path),
+            "perception_backend_status": "MOCK",
+        }
+        if not _write_mock_photo(image_path, label):
+            image_path.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="))
+        metadata_path.write_text(json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        with (photo_dir / "index.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"kind": "photo", **evidence, "created_unix": time.time()}, ensure_ascii=False, sort_keys=True) + "\n")
+        return {
+            "success": True,
+            "image_path": str(image_path),
+            "metadata_path": str(metadata_path),
+            "evidence": evidence,
+        }
+
+    async def get_arm_state(self) -> dict[str, Any]:
+        return {
+            "success": True,
+            "state": {
+                "readiness": "mock_ready",
+                "active_action": "",
+                "is_moving": False,
+                "gripper_ready": True,
+                "stop_available": False,
+                "state": {"source": "mock"},
+            },
+        }
+
+    async def move_arm_named(self, name: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
+        self.arm_calls.append({"name": name, "timeout_s": timeout_s})
+        if cancel_event is not None and cancel_event.is_set():
+            return {"success": False, "error_code": "SKILL_CANCELLED", "reason": "arm action cancelled"}
+        await asyncio.sleep(0.01)
+        return {"success": True, "reason": "", "result": {"name": name, "mode": "mock"}}
+
+    async def set_gripper(
+        self,
+        command: str,
+        force: str = "low",
+        percentage: float | None = None,
+        timeout_s: int = 5,
+    ) -> dict[str, Any]:
+        self.gripper_calls.append({"command": command, "force": force, "percentage": percentage, "timeout_s": timeout_s})
+        return {"success": True, "reason": "", "result": {"command": command, "force": force, "mode": "mock"}}
 
     async def stop_robot(self, reason: str) -> dict[str, Any]:
         self.stop_calls.append({"reason": reason})

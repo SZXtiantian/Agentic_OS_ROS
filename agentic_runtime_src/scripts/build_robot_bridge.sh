@@ -3,6 +3,9 @@ set -euo pipefail
 
 set +u
 source /opt/ros/humble/setup.bash
+if [ -f /home/ubuntu/ros2_ws/install/setup.bash ]; then
+  source /home/ubuntu/ros2_ws/install/setup.bash
+fi
 set -u
 
 cd /home/ubuntu/agentic_ws

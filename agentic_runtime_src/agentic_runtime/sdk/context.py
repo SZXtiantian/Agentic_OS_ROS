@@ -3,9 +3,12 @@ from __future__ import annotations
 from agentic_runtime.types import AppManifest
 
 from .human import HumanAPI
+from .manipulation import ArmAPI, GripperAPI
 from .memory import MemoryAPI
+from .perception import PerceptionAPI
 from .report import ReportAPI
 from .robot import RobotAPI
+from .storage import StorageAPI
 from .world import WorldAPI
 
 
@@ -15,8 +18,12 @@ class AgentContext:
         self.app_manifest = app_manifest
         self.session_id = session_id
         self.robot = RobotAPI(self)
+        self.perception = PerceptionAPI(self)
+        self.arm = ArmAPI(self)
+        self.gripper = GripperAPI(self)
         self.world = WorldAPI(self)
         self.memory = MemoryAPI(self)
+        self.storage = StorageAPI(self)
         self.human = HumanAPI(self)
         self.report = ReportAPI(self)
 

@@ -21,12 +21,14 @@ class SessionRunner:
         self.storage_manager = storage_manager
         self.context_manager = context_manager
 
-    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = True) -> dict[str, Any]:
-        session = self.session_manager.create_session(app_id, task={"place": place}, mock=mock)
-        self.context_manager.snapshot(session.session_id, app_id, task={"place": place})
+    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = True, **kwargs: Any) -> dict[str, Any]:
+        task = dict(kwargs)
+        task.setdefault("place", place)
+        session = self.session_manager.create_session(app_id, task=task, mock=mock)
+        self.context_manager.snapshot(session.session_id, app_id, task=task)
         self.session_manager.start_session(session.session_id)
         try:
-            app_result = await self.app_factory.run_app(app_id, place=place, session_id=session.session_id)
+            app_result = await self.app_factory.run_app(app_id, session_id=session.session_id, **task)
             result = dict(app_result.get("result") or {})
             if result.get("success"):
                 self.storage_manager.write_artifact(
@@ -41,12 +43,12 @@ class SessionRunner:
             self.context_manager.snapshot(
                 session.session_id,
                 app_id,
-                task={"place": place},
+                task=task,
                 error_code=record.error_code,
                 cancel_requested=record.stop_requested,
             )
             return {"session_id": session.session_id, "app_id": app_id, "status": record.status, "result": result}
         except Exception as exc:
             record = self.session_manager.fail_session(session.session_id, "APP_EXCEPTION", {"success": False, "reason": str(exc)})
-            self.context_manager.snapshot(session.session_id, app_id, task={"place": place}, error_code=record.error_code)
+            self.context_manager.snapshot(session.session_id, app_id, task=task, error_code=record.error_code)
             return {"session_id": session.session_id, "app_id": app_id, "status": record.status, "result": record.result}

@@ -3,10 +3,12 @@ set -euo pipefail
 
 SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="/opt/agentic"
+INSTALL_USER="${SUDO_USER:-$(id -un)}"
+INSTALL_GROUP="$(id -gn "$INSTALL_USER" 2>/dev/null || id -gn)"
 
 if sudo -n true >/dev/null 2>&1; then
   sudo mkdir -p "$TARGET"
-  sudo chown -R "$(id -un):$(id -gn)" "$TARGET"
+  sudo chown -R "$INSTALL_USER:$INSTALL_GROUP" "$TARGET"
 else
   TARGET="/home/ubuntu/staging_opt_agentic"
   mkdir -p "$TARGET"
@@ -26,11 +28,14 @@ mkdir -p \
   "$TARGET/skills" \
   "$TARGET/var/log" \
   "$TARGET/var/audit" \
+  "$TARGET/var/evidence" \
   "$TARGET/var/memory" \
   "$TARGET/var/world_model" \
   "$TARGET/var/storage" \
   "$TARGET/var/context" \
   "$TARGET/var/sessions" \
+  "$TARGET/var/tasks" \
+  "$TARGET/var/tasks/plans" \
   "$TARGET/docs" \
   "$TARGET/tests"
 
@@ -61,6 +66,10 @@ cp "$SRC_ROOT/configs/safety.yaml" "$TARGET/etc/safety.yaml"
 cp "$SRC_ROOT/configs/models.yaml" "$TARGET/etc/models.yaml"
 cp "$SRC_ROOT/configs/capabilities.yaml" "$TARGET/etc/capabilities.yaml"
 cp "$SRC_ROOT/configs/places.yaml" "$TARGET/etc/places.yaml"
+if [ -d "$SRC_ROOT/configs/bridge_profiles" ]; then
+  rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" \
+    "$SRC_ROOT/configs/bridge_profiles/" "$TARGET/etc/bridge_profiles/"
+fi
 
 cat > "$TARGET/README.md" <<'EOF'
 # AgenticOS System Root
@@ -106,7 +115,25 @@ export PATH=$AGENTIC_HOME/bin:$PATH
 export PYTHONPATH=$AGENTIC_HOME/lib/python3:$AGENTIC_HOME:$PYTHONPATH
 export PYTHONDONTWRITEBYTECODE=1
 
-echo "Agentic OS environment loaded from $AGENTIC_HOME"
+if [ -f /opt/ros/humble/setup.bash ]; then
+  set +u
+  source /opt/ros/humble/setup.bash
+  set -u
+fi
+if [ -f /home/ubuntu/ros2_ws/install/setup.bash ]; then
+  set +u
+  source /home/ubuntu/ros2_ws/install/setup.bash
+  set -u
+fi
+if [ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]; then
+  set +u
+  source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+  set -u
+fi
+
+if [ "${AGENTIC_QUIET:-0}" != "1" ]; then
+  echo "Agentic OS environment loaded from $AGENTIC_HOME"
+fi
 EOF
 
 if [ "$TARGET" != "/opt/agentic" ]; then
@@ -117,7 +144,7 @@ chmod +x "$TARGET/setup.bash"
 cat > "$TARGET/bin/agenticctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${AGENTIC_HOME:-/opt/agentic}/setup.bash" >/dev/null
+AGENTIC_QUIET=1 source "${AGENTIC_HOME:-/opt/agentic}/setup.bash"
 if [ "$#" -eq 0 ]; then
   set -- status
 fi
@@ -127,33 +154,58 @@ EOF
 cat > "$TARGET/bin/agentic-run" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${AGENTIC_HOME:-/opt/agentic}/setup.bash" >/dev/null
+AGENTIC_QUIET=1 source "${AGENTIC_HOME:-/opt/agentic}/setup.bash"
 python -m agentic_runtime.cli run-app "$@"
 EOF
 
 cat > "$TARGET/bin/agentic-app" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${AGENTIC_HOME:-/opt/agentic}/setup.bash" >/dev/null
+AGENTIC_QUIET=1 source "${AGENTIC_HOME:-/opt/agentic}/setup.bash"
 python -m agentic_runtime.cli "$@"
 EOF
 
 cat > "$TARGET/bin/agentic" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${AGENTIC_HOME:-/opt/agentic}/setup.bash" >/dev/null
-python -m agentic_runtime.cli "$@"
+AGENTIC_QUIET=1 source "${AGENTIC_HOME:-/opt/agentic}/setup.bash"
+if [ "${1:-}" = "enter" ] || [ "${1:-}" = "env" ]; then
+  shift || true
+  export PS1="(agentic) ${PS1:-\\u@\\h:\\w\\$ }"
+  echo "AgenticOS environment active. Try: agentic chat --real"
+  exec "${SHELL:-/bin/bash}" -i "$@"
+fi
+if [ "${1:-}" = "chat" ] || [ "${1:-}" = "shell" ]; then
+  shift || true
+  python -m agentic_runtime.nl_gateway "$@"
+  exit $?
+fi
+if [ "${1:-}" = "photo" ]; then
+  shift || true
+  python -m agentic_runtime.photo_cli "$@"
+  exit $?
+fi
+if [ "${1:-}" = "run" ] || [ "${1:-}" = "run-app" ] || [ "${1:-}" = "status" ] || [ "${1:-}" = "sessions" ] || [ "${1:-}" = "session" ] || [ "${1:-}" = "stop" ] || [ "${1:-}" = "audit" ] || [ "${1:-}" = "apps" ] || [ "${1:-}" = "skills" ] || [ "${1:-}" = "refresh" ] || [ "${1:-}" = "bridge" ] || [ "${1:-}" = "tasks" ] || [ "${1:-}" = "task" ]; then
+  python -m agentic_runtime.cli "$@"
+  exit $?
+fi
+python -m agentic_runtime.nl_gateway "$@"
 EOF
 
 cat > "$TARGET/bin/agenticd" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-source "${AGENTIC_HOME:-/opt/agentic}/setup.bash" >/dev/null
+AGENTIC_QUIET=1 source "${AGENTIC_HOME:-/opt/agentic}/setup.bash"
 python -m agentic_runtime.kernel_service.server "$@"
 EOF
 
 chmod +x "$TARGET/bin/agentic" "$TARGET/bin/agenticctl" "$TARGET/bin/agentic-run" "$TARGET/bin/agentic-app" "$TARGET/bin/agenticd"
 
 find "$TARGET" -type d \( -name '__pycache__' -o -name '.pytest_cache' \) -prune -exec rm -rf {} +
+
+if [ "$TARGET" = "/opt/agentic" ]; then
+  sudo chown -R "$INSTALL_USER:$INSTALL_GROUP" "$TARGET/var" "$TARGET/etc/secrets"
+  sudo chmod -R u+rwX,g+rwX "$TARGET/var"
+fi
 
 echo "Agentic OS installed to $TARGET"

@@ -9,10 +9,22 @@ permissions:
     description: Read known places and world model.
   perception.inspect:
     description: Inspect a known area.
+  perception.observe:
+    description: Observe the workspace through a camera-backed AgenticOS bridge.
+  perception.capture:
+    description: Capture a real camera photo through the AgenticOS bridge and save evidence.
+  arm.state.read:
+    description: Read arm readiness and active action metadata.
+  arm.move.named:
+    description: Execute only allowlisted named arm actions.
+  gripper.control:
+    description: Control the gripper through allowlisted low-force commands.
   memory.read:
     description: Read app memory.
   memory.write:
     description: Write app memory.
+  storage.read:
+    description: Read AgenticOS-managed evidence and artifact indexes.
   human.ask:
     description: Ask human for confirmation or input.
   report.say:

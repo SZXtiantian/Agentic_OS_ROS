@@ -32,6 +32,7 @@ safety_constraints:
   require_known_place: true
   require_estop_released: false
   allow_cancel: true
+  runtime_timeout_margin_s: 5
 timeout_s: 60
 retry_policy:
   max_attempts: 0

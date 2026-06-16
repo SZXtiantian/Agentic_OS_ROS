@@ -11,6 +11,7 @@ def test_inspection_agent_happy_path():
         result = await manager.run_app("inspection_agent", place="厨房")
         assert result["result"]["success"] is True
         assert result["result"]["inspection"]["summary"] == "厨房检查完成，未发现异常。"
+        assert result["result"]["inspection"]["objects"] == []
         audits = server.executor.audit_logger.recent(limit=20)
         names = [record["skill_name"] for record in audits]
         for expected in [
@@ -22,6 +23,40 @@ def test_inspection_agent_happy_path():
             "report.say",
         ]:
             assert expected in names
+
+    asyncio.run(run())
+
+
+def test_camera_arm_inspection_agent_read_only_mock_path():
+    async def run():
+        server = RuntimeServer.create(mock=True)
+        manager = AppManager(server.config.app_root, server.executor)
+        result = await manager.run_app("camera_arm_inspection_agent", place="workspace")
+        assert result["result"]["success"] is True
+        assert result["result"]["motion_enabled"] is False
+        assert result["result"]["observation"]["objects"] == []
+        audits = server.executor.audit_logger.recent(limit=20)
+        names = [record["skill_name"] for record in audits]
+        for expected in [
+            "robot.get_state",
+            "arm.get_state",
+            "perception.observe",
+            "memory.remember",
+            "report.say",
+        ]:
+            assert expected in names
+
+    asyncio.run(run())
+
+
+def test_camera_arm_inspection_agent_motion_mock_path():
+    async def run():
+        server = RuntimeServer.create(mock=True)
+        manager = AppManager(server.config.app_root, server.executor)
+        result = await manager.run_app("camera_arm_inspection_agent", place="workspace", move_arm=True)
+        assert result["result"]["success"] is True
+        assert result["result"]["arm_action"]["success"] is True
+        assert result["result"]["gripper_action"]["success"] is True
 
     asyncio.run(run())
 

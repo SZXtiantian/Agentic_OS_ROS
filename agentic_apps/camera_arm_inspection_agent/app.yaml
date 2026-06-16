@@ -1,0 +1,47 @@
+name: camera_arm_inspection_agent
+version: 0.1.0
+description: Real-robot camera and manipulator inspection demo through AgenticOS APIs.
+entrypoint: main:run
+
+permissions:
+  - robot.state.read
+  - robot.stop
+  - perception.observe
+  - arm.state.read
+  - arm.move.named
+  - gripper.control
+  - memory.read
+  - memory.write
+  - report.say
+
+required_capabilities:
+  - robot.get_state
+  - robot.stop
+  - perception.observe
+  - arm.get_state
+  - arm.move_named
+  - gripper.set
+  - memory.remember
+  - memory.recall
+  - report.say
+
+safety_policy:
+  allow_autonomous_navigation: false
+  allow_manipulation: true
+  allowed_arm_actions:
+    - arm_home
+    - camera_up
+  allowed_gripper_actions:
+    - open_gripper
+    - close_gripper_low_force
+  require_human_confirmation_for:
+    - arm_motion
+  max_task_duration_s: 120
+  max_arm_duration_s: 8
+  stop_on_human_request: true
+
+runtime_limits:
+  max_concurrent_tasks: 1
+  max_retries_per_skill: 0
+  max_memory_write_per_task: 20
+  llm_planning_enabled: false

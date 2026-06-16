@@ -1,0 +1,124 @@
+profile_name: rosorin_arm_camera
+robot_id: rosorin_real_robot
+ros_domain_id: 0
+evidence:
+  directory: /opt/agentic/var/evidence
+camera:
+  mode: rgb_depth_optional
+  primary_rgb_topic: /depth_cam/rgb0/image_raw
+  fallback_rgb_topics:
+    - /camera/color/image_raw
+  camera_info_topics:
+    - /camera/color/camera_info
+    - /depth_cam/rgb0/camera_info
+  depth_topics:
+    - /camera/depth/image_raw
+  point_cloud_topics:
+    - /camera/depth/points
+  frame_freshness_s: 5.0
+  observe_timeout_s: 5
+perception:
+  backend_type: camera_metadata
+  detection_topic: ""
+  detection_type: interfaces/msg/ObjectsInfo
+arm:
+  backend_type: servo_action_group
+  action_command_topic: /servo_controller
+  action_status_service: ""
+  action_group_path: /home/ubuntu/software/arm_pc/ActionGroups
+  servo_command_topic: /servo_controller
+  kinematics_pose_service: /kinematics/set_pose_target
+  max_duration_s: 8
+  allowed_named_actions:
+    arm_home:
+      backend: servo_action_group
+      backend_action: init
+      duration_s: 5
+      description: Return arm to the vendor init action group file.
+    camera_center:
+      backend: servo_action_group
+      backend_action: horizontal
+      duration_s: 5
+      description: Move camera to the center/horizontal vendor action group.
+    camera_yaw_left_15:
+      backend: servo_action_group
+      backend_action: detect_left
+      duration_s: 5
+      description: Move camera to the left inspection action group.
+    camera_yaw_right_15:
+      backend: servo_action_group
+      backend_action: detect_right
+      duration_s: 5
+      description: Move camera to the right inspection action group.
+    camera_pitch_up_15:
+      backend: servo_action_group
+      backend_action: camera_up
+      duration_s: 5
+      description: Move camera to the upward inspection action group.
+  workspace_bounds_m:
+    x: [0.12, 0.32]
+    y: [-0.18, 0.18]
+    z: [0.05, 0.36]
+  joint_pulse_limits:
+    joint1: [0, 1000]
+    joint2: [0, 1000]
+    joint3: [0, 1000]
+    joint4: [0, 1000]
+    joint5: [0, 1000]
+    r_joint: [0, 1000]
+  stop_backend:
+    type: action_group_controller.stop_action_group
+    reason: AgenticOS bridge owns the vendor ActionGroupController instance while an action is active.
+gripper:
+  backend_type: servo_controller
+  servo_command_topic: /servo_controller
+  servo_id: 10
+  position_unit: pulse
+  duration_s: 0.6
+  limits:
+    min_pulse: 350
+    max_pulse: 760
+    open_pulse: 760
+    close_low_force_pulse: 520
+  allowed_commands:
+    open_gripper:
+      command: open
+      pulse: 760
+      force: low
+    close_gripper_low_force:
+      command: close
+      pulse: 520
+      force: low
+discovered_interfaces:
+  camera_launch:
+    - /home/ubuntu/ros2_ws/src/peripherals/launch/depth_camera.launch.py
+    - /home/ubuntu/ros2_ws/src/peripherals/launch/usb_cam.launch.py
+  candidate_camera_topics:
+    - /depth_cam/rgb0/image_raw
+    - /depth_cam/depth0/image_raw
+    - /depth_cam/depth0/points
+    - /depth_cam/ir0/image_raw
+    - /camera/color/image_raw
+    - /camera/depth/image_raw
+    - /camera/depth/points
+  arm_topics:
+    - /servo_controller
+    - /joint_controller
+    - /ros_robot_controller/bus_servo/set_position
+  arm_services:
+    - /init_pose/init_finish
+    - /ros_robot_controller/bus_servo/get_state
+    - /claw_arm_group_control/arm_group_status
+    - /kinematics/set_pose_target
+  message_types:
+    servo_position: servo_controller_msgs/msg/ServosPosition
+    kinematics_pose: kinematics_msgs/srv/SetRobotPose
+  action_group_files:
+    - /home/ubuntu/software/arm_pc/ActionGroups/init.d6a
+    - /home/ubuntu/software/arm_pc/ActionGroups/horizontal.d6a
+    - /home/ubuntu/software/arm_pc/ActionGroups/detect_left.d6a
+    - /home/ubuntu/software/arm_pc/ActionGroups/detect_right.d6a
+    - /home/ubuntu/software/arm_pc/ActionGroups/camera_up.d6a
+    - /home/ubuntu/software/arm_pc/ActionGroups/left_down.d6a
+  optional_vendor_nodes_not_running_in_current_graph:
+    - /claw_arm_group_control
