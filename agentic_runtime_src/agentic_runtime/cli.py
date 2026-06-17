@@ -66,6 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_status.add_argument("--json", action="store_true")
     bridge_install = bridge_sub.add_parser("install")
     bridge_install.add_argument("--profile", default="ros2_mock")
+    bridge_install.add_argument("--dry-run", action="store_true")
     bridge_install.add_argument("--json", action="store_true")
     return parser
 
@@ -248,7 +249,7 @@ def bridge(args) -> int:
     if args.bridge_command == "status":
         data = server.bridge_manager.status()
     else:
-        data = server.bridge_manager.install_profile(Ros2BridgeProfile(name=args.profile))
+        data = server.bridge_manager.install_profile(Ros2BridgeProfile(name=args.profile), dry_run=args.dry_run)
     if args.json:
         print_json(data)
     else:

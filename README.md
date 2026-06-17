@@ -65,6 +65,20 @@ AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1
 
 and explicit CLI flags such as `--allow-arm-motion --yes`.
 
+Latest real-hardware validation on this workspace:
+
+- Date: 2026-06-17
+- Deployment root: `/opt/agentic`
+- App: `robot_photographer_agent`
+- Mode: real ROS2 bridge, real Aurora 930 camera
+- Command: `/opt/agentic/bin/agentic photo --real --json 拍一张照片`
+- Result: `success: true`, `status: completed`
+- Captured topic: `/depth_cam/rgb0/image_raw`
+- Captured frame: `640x400`, `bgr8`, `frame_id=rgb_camera_link`
+- Raw evidence: `/opt/agentic/var/evidence/photos/photo_20260617_135737_capture_4f697c881380.png`
+- App output: `/opt/agentic/var/storage/robot_photographer_agent/runs/sess_bbe925939d7a/photos/01_photo.png`
+- Audit IDs: `audit_009543`, `audit_009544`
+
 ## Common Commands
 
 Install/update the runtime into `/opt/agentic`:
@@ -95,6 +109,7 @@ Use the installed natural-language entrypoint:
 ```bash
 /opt/agentic/bin/agentic --mock --json "拍一张照片"
 /opt/agentic/bin/agentic --real --json "拍一张工作区照片"
+/opt/agentic/bin/agentic photo --real --json "拍一张照片"
 AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"
 AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 /opt/agentic/bin/agentic --real --allow-arm-motion --yes --json "从中间、左边、右边、上面拍照并验证差异"
 ```

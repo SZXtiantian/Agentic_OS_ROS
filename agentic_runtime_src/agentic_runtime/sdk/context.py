@@ -3,6 +3,7 @@ from __future__ import annotations
 from agentic_runtime.types import AppManifest
 
 from .human import HumanAPI
+from .kernel import KernelAPI
 from .manipulation import ArmAPI, GripperAPI
 from .memory import MemoryAPI
 from .perception import PerceptionAPI
@@ -17,6 +18,8 @@ class AgentContext:
         self.executor = executor
         self.app_manifest = app_manifest
         self.session_id = session_id
+        self.kernel_service = getattr(executor, "kernel_service", None)
+        self.kernel = KernelAPI(self)
         self.robot = RobotAPI(self)
         self.perception = PerceptionAPI(self)
         self.arm = ArmAPI(self)

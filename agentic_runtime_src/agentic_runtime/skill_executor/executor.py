@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 from agentic_runtime.audit import AuditLogger
+from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_runtime.errors import (
     AgenticRuntimeError,
     PermissionDeniedError,
@@ -35,6 +36,7 @@ class SkillExecutor:
         cancellation_manager: CancellationManager | None = None,
         syscall_store=None,
         session_manager=None,
+        access_manager: AccessManager | None = None,
     ) -> None:
         self.registry = registry
         self.permission_manager = permission_manager
@@ -44,6 +46,7 @@ class SkillExecutor:
         self.cancellation_manager = cancellation_manager or CancellationManager()
         self.syscall_store = syscall_store
         self.session_manager = session_manager
+        self.access_manager = access_manager
 
     async def execute(
         self,
@@ -70,6 +73,17 @@ class SkillExecutor:
             self.permission_manager.check(app, skill)
             permission_result = "allowed"
             syscall.permission_result = permission_result
+
+            if self.access_manager is not None and self._requires_access_check(skill.name):
+                access_decision = self.access_manager.check(
+                    AccessRequest(
+                        subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),
+                        action="execute",
+                        resource=AccessResource(self._access_resource_type(skill.name), skill.name),
+                    )
+                )
+                if not access_decision.allowed:
+                    raise PermissionDeniedError(access_decision.reason or access_decision.error_code)
 
             if skill.name == "robot.stop":
                 self.cancellation_manager.cancel_session(session_id)
@@ -208,6 +222,22 @@ class SkillExecutor:
             or constraints.get("workspace_bounds_check")
             or constraints.get("gripper_allowlist")
         )
+
+    def _requires_access_check(self, skill_name: str) -> bool:
+        return skill_name in {
+            "robot.navigate_to",
+            "robot.stop",
+            "robot.inspect_area",
+            "arm.move_named",
+            "gripper.set",
+            "perception.observe",
+            "perception.capture_photo",
+        }
+
+    def _access_resource_type(self, skill_name: str) -> str:
+        if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo"}:
+            return "robot_sensor"
+        return "robot_motion"
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
         success = bool(raw.get("success", raw.get("answered", True)))

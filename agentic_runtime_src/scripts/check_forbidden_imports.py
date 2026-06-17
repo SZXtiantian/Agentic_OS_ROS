@@ -28,7 +28,7 @@ WORKSPACE_SRC = RUNTIME_SRC.parent
 SCAN_ROOTS = [
     RUNTIME_SRC / "agentic_os",
     RUNTIME_SRC / "agentic_runtime",
-    RUNTIME_SRC / "agentic_runtime" / "sdk",
+    WORKSPACE_SRC / "agentic_apps",
     WORKSPACE_SRC / "inspection_agent",
     WORKSPACE_SRC / "camera_arm_inspection_agent",
     WORKSPACE_SRC / "robot_photographer_agent",
@@ -47,8 +47,6 @@ def should_scan(path: Path) -> bool:
     if "__pycache__" in path.parts:
         return False
     if "tests" in path.parts:
-        return False
-    if "storage" in path.parts:
         return False
     if path.name.startswith("."):
         return False

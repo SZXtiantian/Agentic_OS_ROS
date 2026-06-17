@@ -78,6 +78,79 @@ status=completed
 success=true
 ```
 
+## Run Robot Photographer With Real Camera
+
+This validates the installed AgenticOS runtime in `/opt/agentic`, the
+AgenticOS ROS2 bridge, and the real camera driver. It is not a mock test.
+
+Terminal 1: start or verify the AgenticOS bridge services:
+
+```bash
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh
+ros2 service list | grep -E '^/agentic/(perception/capture_photo|safety/check|robot/get_state)'
+```
+
+Terminal 2: start the real Aurora 930 camera driver and wait for a publisher
+on `/depth_cam/rgb0/image_raw`:
+
+```bash
+source /opt/agentic/setup.bash
+export need_compile=False
+export DEPTH_CAMERA_TYPE=aurora
+ros2 launch peripherals depth_camera.launch.py
+```
+
+In another terminal:
+
+```bash
+source /opt/agentic/setup.bash
+ros2 topic info /depth_cam/rgb0/image_raw -v
+timeout 8 ros2 topic echo --once /depth_cam/rgb0/image_raw sensor_msgs/msg/Image --field header
+```
+
+Expected signs of readiness:
+
+```text
+Publisher count: 1
+Node name: aurora
+frame_id: rgb_camera_link
+```
+
+Terminal 3: run the installed AgenticOS app path with real bridge mode:
+
+```bash
+source /opt/agentic/setup.bash
+AGENTIC_PHOTO_EVIDENCE_ROOT=/opt/agentic/var/evidence/photos \
+AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT=/opt/agentic/var/storage/robot_photographer_agent \
+  /opt/agentic/bin/agentic photo --real --json 拍一张照片
+```
+
+Latest validation result on 2026-06-17:
+
+```text
+status: completed
+success: true
+perception_backend_status: CAPTURED
+topic: /depth_cam/rgb0/image_raw
+frame_id: rgb_camera_link
+width: 640
+height: 400
+encoding: bgr8
+audit_ids: audit_009543, audit_009544
+```
+
+Evidence from that run:
+
+```text
+/opt/agentic/var/evidence/photos/photo_20260617_135737_capture_4f697c881380.png
+/opt/agentic/var/evidence/photos/photo_20260617_135737_capture_4f697c881380.json
+/opt/agentic/var/storage/robot_photographer_agent/runs/sess_bbe925939d7a/photos/01_photo.png
+/opt/agentic/var/storage/robot_photographer_agent/runs/sess_bbe925939d7a/metadata/01_photo.json
+```
+
+The app output image and raw evidence image were both verified as `640x400`
+RGB PNG files.
+
 ## Evidence To Show
 
 ```bash

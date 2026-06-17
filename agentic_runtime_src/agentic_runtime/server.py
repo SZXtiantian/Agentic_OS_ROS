@@ -111,4 +111,6 @@ class RuntimeServer:
             llm_chat=llm_chat,
         )
         server.kernel_service = KernelService(server)
+        server.executor.kernel_service = server.kernel_service
+        server.executor.access_manager = server.kernel_service.access_manager
         return server

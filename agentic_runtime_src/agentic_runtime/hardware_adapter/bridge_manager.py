@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from .installer import BridgeInstaller
 from .ros2_profile import Ros2BridgeProfile
 
 
 class BridgeManager:
-    def __init__(self, bridge_root: Path, profile_root: Path, capability_registry=None) -> None:
+    def __init__(self, bridge_root: Path, profile_root: Path, capability_registry=None, installer_kwargs: dict[str, Any] | None = None) -> None:
         self.bridge_root = bridge_root
         self.profile_root = profile_root
         self.capability_registry = capability_registry
+        self.installer_kwargs = dict(installer_kwargs or {})
         self.bridge_root.mkdir(parents=True, exist_ok=True)
         self.profile_root.mkdir(parents=True, exist_ok=True)
 
@@ -25,25 +28,43 @@ class BridgeManager:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         return {
             "bridge_type": "ros2",
-            "installed": self.bridge_root.exists(),
+            "installed": metadata.get("status") == "installed_profile",
             "bridge_root": str(self.bridge_root),
             "profile_root": str(self.profile_root),
             "profiles": profiles,
             "metadata": metadata,
         }
 
-    def install_profile(self, profile: Ros2BridgeProfile) -> dict:
+    def install_profile(self, profile: Ros2BridgeProfile, *, dry_run: bool = True) -> dict:
         self.bridge_root.mkdir(parents=True, exist_ok=True)
+        installer = BridgeInstaller(
+            Path(profile.source_workspace),
+            self.bridge_root,
+            profile_root=self.profile_root,
+            **self.installer_kwargs,
+        )
+        install_result = installer.install(dry_run=dry_run)
+        if not install_result.get("success", False):
+            return install_result
+        plan = install_result["plan"]
         status = {
+            "success": True,
             "profile": profile.name,
             "bridge_type": profile.bridge_type,
-            "source_workspace": profile.source_workspace,
-            "installed_root": profile.installed_root,
+            "source_workspace": plan["source_workspace"],
+            "installed_root": str(self.bridge_root),
             "capabilities": profile.capabilities or self._capability_names(),
-            "status": "installed_mock_profile",
+            "status": "installed_profile",
+            "dry_run": dry_run,
+            "build_timestamp": _utc_now(),
+            "source_commit": plan.get("source_commit", "unknown"),
+            "ros_distro": plan["ros_distro"],
+            "bridge_endpoint": profile.metadata.get("bridge_endpoint", "ros2-cli://agentic-bridge"),
+            "health_check_command": self._health_check_command(plan),
+            "install_result": install_result,
         }
         (self.bridge_root / "status.json").write_text(json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        (self.profile_root / f"{profile.name}.yaml").write_text(
+        self._profile_path(profile).write_text(
             yaml.safe_dump(self._profile_payload(profile, status), allow_unicode=True, sort_keys=True),
             encoding="utf-8",
         )
@@ -63,4 +84,25 @@ class BridgeManager:
             "capabilities": status["capabilities"],
             "capability_specs": capabilities,
             "status": status["status"],
+            "dry_run": status["dry_run"],
+            "build_timestamp": status["build_timestamp"],
+            "source_commit": status["source_commit"],
+            "ros_distro": status["ros_distro"],
+            "bridge_endpoint": status["bridge_endpoint"],
+            "health_check_command": status["health_check_command"],
+            "installed_root": status["installed_root"],
         }
+
+    def _profile_path(self, profile: Ros2BridgeProfile) -> Path:
+        safe_name = Path(profile.name).name
+        if safe_name != profile.name or safe_name in {"", ".", ".."}:
+            safe_name = "ros2_profile"
+        return self.profile_root / f"{safe_name}.yaml"
+
+    def _health_check_command(self, plan: dict[str, Any]) -> str:
+        workspace_root = plan.get("workspace_root", "/home/ubuntu/agentic_ws")
+        return f"source {workspace_root}/install/ros2_bridge/setup.bash && ros2 node list"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()

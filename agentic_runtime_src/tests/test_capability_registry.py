@@ -70,7 +70,7 @@ def test_bridge_profile_persists_capability_specs(tmp_path):
     profile_path = server.bridge_manager.profile_root / "ros2_mock.yaml"
     payload = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
 
-    assert result["status"] == "installed_mock_profile"
+    assert result["status"] == "installed_profile"
     assert profile_path.exists()
     assert "robot.navigate_to" in payload["capabilities"]
     assert any(item["name"] == "robot.navigate_to" and item["kind"] == CapabilityKind.NAV2_ACTION for item in payload["capability_specs"])
