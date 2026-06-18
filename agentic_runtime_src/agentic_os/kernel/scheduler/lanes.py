@@ -13,10 +13,24 @@ class SchedulerLaneSpec:
     max_workers: int = 1
     preemptible: bool = False
     manager_key: str = ""
+    batchable: bool = False
+    batch_window_ms: int = 0
+    max_batch_size: int = 1
+    queue_timeout_s: float | None = None
 
 
 DEFAULT_SCHEDULER_LANES = (
-    SchedulerLaneSpec("llm", KernelQueueName.LLM, concurrent=True, max_workers=1, preemptible=True, manager_key="llm"),
+    SchedulerLaneSpec(
+        "llm",
+        KernelQueueName.LLM,
+        concurrent=True,
+        max_workers=1,
+        preemptible=True,
+        manager_key="llm",
+        batchable=True,
+        batch_window_ms=20,
+        max_batch_size=8,
+    ),
     SchedulerLaneSpec("memory", KernelQueueName.MEMORY, concurrent=True, max_workers=1, manager_key="memory"),
     SchedulerLaneSpec("storage", KernelQueueName.STORAGE, concurrent=True, max_workers=1, manager_key="storage"),
     SchedulerLaneSpec("tool", KernelQueueName.TOOL, concurrent=True, max_workers=1, manager_key="tool"),

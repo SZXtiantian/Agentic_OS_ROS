@@ -22,6 +22,8 @@ class KernelSyscallStatus:
     QUEUED = "queued"
     EXECUTING = "executing"
     SUSPENDING = "suspending"
+    SUSPENDED = "suspended"
+    RESUMING = "resuming"
     DONE = "done"
     FAILED = "failed"
     REJECTED = "rejected"
@@ -45,6 +47,8 @@ class KernelSyscall:
     params: dict[str, Any] = field(default_factory=dict)
     syscall_id: str = field(default_factory=lambda: monotonic_id("ksc"))
     source: str = ""
+    aid: str | None = None
+    agent_id: str | None = None
     priority: int = 0
     status: str = KernelSyscallStatus.CREATED
     response: Any = None
@@ -89,6 +93,15 @@ class KernelSyscall:
         self.started_at = self.started_at or utc_now()
         self.start_time = self.start_time or time.time()
 
+    def mark_suspending(self) -> None:
+        self.set_status(KernelSyscallStatus.SUSPENDING)
+
+    def mark_suspended(self) -> None:
+        self.set_status(KernelSyscallStatus.SUSPENDED)
+
+    def mark_resuming(self) -> None:
+        self.set_status(KernelSyscallStatus.RESUMING)
+
     def finish(self, response: Any = None, status: str = KernelSyscallStatus.DONE) -> None:
         self.response = response
         self.set_status(status)
@@ -99,6 +112,32 @@ class KernelSyscall:
     def fail(self, error_code: str, response: Any = None) -> None:
         self.error_code = error_code
         self.finish(response=response, status=KernelSyscallStatus.FAILED)
+
+    def timeout(self, response: Any = None) -> None:
+        self.error_code = "KERNEL_SYSCALL_TIMEOUT"
+        self.finish(response=response, status=KernelSyscallStatus.TIMEOUT)
+
+    def cancel(self, reason: str = "") -> None:
+        self.error_code = "KERNEL_SYSCALL_CANCELLED"
+        self.finish(
+            response={"success": False, "error_code": self.error_code, "reason": reason},
+            status=KernelSyscallStatus.CANCELLED,
+        )
+
+    def reject(self, error_code: str, reason: str = "") -> None:
+        self.error_code = error_code
+        self.finish(
+            response={"success": False, "error_code": error_code, "reason": reason},
+            status=KernelSyscallStatus.REJECTED,
+        )
+
+    def is_cancelled(self) -> bool:
+        return self.status == KernelSyscallStatus.CANCELLED
+
+    def is_expired(self, now: float | None = None) -> bool:
+        if self.time_limit_s is None:
+            return False
+        return (now or time.time()) - self.created_time >= self.time_limit_s
 
     def wait(self, timeout_s: float | None = None) -> bool:
         return self.event.wait(timeout=timeout_s)
@@ -165,6 +204,8 @@ class KernelSyscall:
             "params": self.params,
             "syscall_id": self.syscall_id,
             "source": self.source,
+            "aid": self.aid,
+            "agent_id": self.agent_id,
             "priority": self.priority,
             "status": self.status,
             "response": self.response,

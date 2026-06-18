@@ -11,3 +11,9 @@ def test_tool_manager_rejects_robot_tool_backdoor():
     result = ToolManager().call(ToolCall(name="robot.navigate_to", args={"place": "厨房"}))
     assert result.success is False
     assert result.error_code == "TOOL_FORBIDDEN"
+
+
+def test_tool_manager_rejects_cmd_vel_backdoor():
+    result = ToolManager().call(ToolCall(name="/cmd_vel", args={"linear": 1.0}))
+    assert result.success is False
+    assert result.error_code == "TOOL_FORBIDDEN"

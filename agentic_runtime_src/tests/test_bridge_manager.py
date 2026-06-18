@@ -37,6 +37,19 @@ def test_bridge_installer_plan_lists_commands_without_running(tmp_path, monkeypa
     assert "colcon --log-base log/ros2_bridge build" in plan["commands"][2]
 
 
+def test_bridge_installer_lifecycle_methods_are_dry_run_safe(tmp_path, monkeypatch):
+    source, ros_setup = _bridge_workspace(tmp_path)
+    monkeypatch.setattr(installer_module.shutil, "which", lambda name: "/usr/bin/colcon" if name == "colcon" else None)
+    installer = BridgeInstaller(source, tmp_path / "bridges" / "ros2", ros_setup_path=ros_setup)
+
+    assert installer.validate()["success"] is True
+    assert installer.build_workspace(dry_run=True)["status"] == "install_planned"
+    assert installer.activate()["status"] == "active"
+    assert installer.status()["status"] == "active"
+    assert installer.rollback()["status"] == "rolled_back"
+    assert installer.status()["status"] == "rolled_back"
+
+
 def test_bridge_installer_install_dry_run_does_not_subprocess(tmp_path, monkeypatch):
     source, ros_setup = _bridge_workspace(tmp_path)
     monkeypatch.setattr(installer_module.shutil, "which", lambda name: "/usr/bin/colcon" if name == "colcon" else None)
@@ -99,7 +112,22 @@ def test_bridge_manager_install_profile_records_real_metadata(tmp_path, monkeypa
         tmp_path / "profiles",
         installer_kwargs={"ros_setup_path": ros_setup},
     )
-    installed = manager.install_profile(Ros2BridgeProfile(name="ros2_mock", source_workspace=str(source)), dry_run=True)
+    profile = Ros2BridgeProfile(
+        name="ros2_mock",
+        source_workspace=str(source),
+        capabilities=[
+            {
+                "name": "robot.navigate_to",
+                "ros2_interface": {
+                    "kind": "action",
+                    "name": "/navigate_to_pose",
+                    "type": "nav2_msgs/action/NavigateToPose",
+                },
+            }
+        ],
+        safety={"require_estop_released": True, "require_localized": True},
+    )
+    installed = manager.install_profile(profile, dry_run=True)
     status = manager.status()
     profile_path = tmp_path / "profiles" / "ros2_mock.yaml"
     payload = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
@@ -114,6 +142,27 @@ def test_bridge_manager_install_profile_records_real_metadata(tmp_path, monkeypa
     assert status["metadata"]["source_workspace"] == str(source)
     assert payload["status"] == "installed_profile"
     assert payload["installed_root"] == str(tmp_path / "bridges" / "ros2")
+    assert payload["safety"]["require_localized"] is True
+    assert payload["capabilities"][0]["name"] == "robot.navigate_to"
+
+
+def test_bridge_manager_lifecycle_plan_validate_activate_rollback(tmp_path, monkeypatch):
+    source, ros_setup = _bridge_workspace(tmp_path)
+    monkeypatch.setattr(installer_module.shutil, "which", lambda name: "/usr/bin/colcon" if name == "colcon" else None)
+    manager = BridgeManager(
+        tmp_path / "bridges" / "ros2",
+        tmp_path / "profiles",
+        installer_kwargs={"ros_setup_path": ros_setup},
+    )
+    profile = Ros2BridgeProfile(name="ros2_mock", source_workspace=str(source))
+
+    assert manager.plan(profile)["safe_to_run"] is True
+    assert manager.validate(profile)["success"] is True
+    assert manager.build_workspace(profile, dry_run=True)["status"] == "install_planned"
+    assert manager.activate(profile)["status"] == "active"
+    assert manager.status()["metadata"]["status"] == "active"
+    assert manager.rollback(profile)["status"] == "rolled_back"
+    assert manager.status()["metadata"]["status"] == "rolled_back"
 
 
 def test_bridge_transport_request_contract_routes_to_client():

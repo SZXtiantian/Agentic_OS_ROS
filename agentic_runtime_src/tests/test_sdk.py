@@ -4,11 +4,12 @@ from types import SimpleNamespace
 
 import agentic_runtime
 import pytest
-from agentic_os.kernel.system_call import LLMQuery, StorageQuery
+from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, StorageQuery
 from agentic_runtime.app_manager import AppManager
+from agentic_runtime.audit import AuditLogger
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.sdk import AgentContext, KernelAccessDeniedError
+from agentic_runtime.sdk import AgentContext, KernelAccessDeniedError, KernelSDKResult
 from agentic_runtime.types import AppManifest, SkillResult
 
 
@@ -84,6 +85,7 @@ def test_kernel_sdk_llm_uses_kernel_query():
         ctx = AgentContext(FakeExecutor(), app, "sess_kernel")
         result = await ctx.kernel.llm.chat(messages=[{"role": "user", "content": "hello"}], timeout_s=1.5)
         assert result.success is True
+        assert isinstance(result, KernelSDKResult)
 
     asyncio.run(run())
 
@@ -125,6 +127,63 @@ def test_kernel_sdk_storage_uses_storage_query():
     assert captured["timeout_s"] == 2
 
 
+def test_kernel_sdk_memory_search_and_storage_retrieve_use_queries():
+    captured = []
+
+    class FakeService:
+        def execute_request(self, agent_name, query, timeout_s=None):
+            captured.append((agent_name, query, timeout_s))
+            return SimpleNamespace(success=True, response={"ok": True}, error_code="", metadata={})
+
+    class FakeExecutor:
+        kernel_service = FakeService()
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("skill executor should not be used for kernel facade")
+
+    async def run():
+        app = AppManifest("sdk_query_app", "0", "", "main:run", [], [])
+        ctx = AgentContext(FakeExecutor(), app, "sess_query")
+        memory = await ctx.kernel.memory.search("kitchen", limit=3, place_id="kitchen")
+        storage = await ctx.kernel.storage.retrieve("report", collection_name="reports", limit=2)
+        assert memory.success is True
+        assert storage.success is True
+
+    asyncio.run(run())
+
+    assert isinstance(captured[0][1], MemoryQuery)
+    assert captured[0][1].operation_type == "search"
+    assert captured[0][1].params["filters"]["place_id"] == "kitchen"
+    assert isinstance(captured[1][1], StorageQuery)
+    assert captured[1][1].operation_type == "sto_retrieve"
+    assert captured[1][1].params["collection_name"] == "reports"
+
+
+def test_kernel_sdk_result_includes_syscall_and_audit_id(tmp_path):
+    audit = AuditLogger(tmp_path / "audit.jsonl")
+    service = KernelService(
+        config=SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools"),
+        audit_logger=audit,
+    )
+
+    class FakeExecutor:
+        kernel_service = service
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("skill executor should not be used for kernel storage")
+
+    async def run():
+        app = AppManifest("sdk_result_app", "0", "", "main:run", [], [])
+        ctx = AgentContext(FakeExecutor(), app, "sess_result")
+        result = await ctx.kernel.storage.write("reports/result.md", "hello", timeout_s=1)
+        assert result.success is True
+        assert result.syscall_id.startswith("ksc_")
+        assert result.audit_id.startswith("audit_")
+        assert result.metadata["queue_name"] == "storage"
+
+    asyncio.run(run())
+
+
 def test_robot_sdk_does_not_use_tool_manager():
     calls = []
 
@@ -148,6 +207,25 @@ def test_robot_sdk_does_not_use_tool_manager():
     asyncio.run(run())
 
     assert calls == [("robot_sdk_app", "robot.navigate_to", {"place": "kitchen", "timeout_s": 3}, "sess_robot")]
+
+
+def test_kernel_tool_sdk_rejects_robot_capability(tmp_path):
+    service = KernelService(config=SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools"))
+
+    class FakeExecutor:
+        kernel_service = service
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("generic tool SDK must not use skill executor")
+
+    async def run():
+        app = AppManifest("sdk_tool_app", "0", "", "main:run", [], [])
+        ctx = AgentContext(FakeExecutor(), app, "sess_tool")
+        result = await ctx.kernel.tool.call("robot.navigate_to", {"place": "kitchen"}, timeout_s=1)
+        assert result.success is False
+        assert result.error_code == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"
+
+    asyncio.run(run())
 
 
 def test_sdk_access_denied_surfaces_clear_error(tmp_path):

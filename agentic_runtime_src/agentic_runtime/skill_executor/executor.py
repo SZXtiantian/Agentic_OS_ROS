@@ -37,6 +37,7 @@ class SkillExecutor:
         syscall_store=None,
         session_manager=None,
         access_manager: AccessManager | None = None,
+        event_sink=None,
     ) -> None:
         self.registry = registry
         self.permission_manager = permission_manager
@@ -47,6 +48,7 @@ class SkillExecutor:
         self.syscall_store = syscall_store
         self.session_manager = session_manager
         self.access_manager = access_manager
+        self.event_sink = event_sink
 
     async def execute(
         self,
@@ -90,6 +92,14 @@ class SkillExecutor:
 
             if self._requires_safety(skill.safety_constraints):
                 safety_response = await self.dispatcher.bridge_client.check_safety(skill.name, args, app.name)
+                self._emit_event(
+                    "robot.safety_checked",
+                    app_id=app.name,
+                    session_id=session_id,
+                    skill_name=skill.name,
+                    allowed=bool(safety_response.get("allowed", False)),
+                    error_code=str(safety_response.get("error_code", "")),
+                )
                 if not safety_response.get("allowed", False):
                     raise SafetyRejectedError(
                         safety_response.get("error_code", "SAFETY_REJECTED"),
@@ -308,6 +318,10 @@ class SkillExecutor:
                 "result": result or {},
             }
         )
+
+    def _emit_event(self, event_type: str, **metadata: Any) -> None:
+        if self.event_sink is not None:
+            self.event_sink.emit(event_type, **metadata)
 
 
 def raise_for_result(result: SkillResult) -> None:

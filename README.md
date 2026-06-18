@@ -79,6 +79,37 @@ Latest real-hardware validation on this workspace:
 - App output: `/opt/agentic/var/storage/robot_photographer_agent/runs/sess_bbe925939d7a/photos/01_photo.png`
 - Audit IDs: `audit_009543`, `audit_009544`
 
+## Current Kernel Port Status
+
+The AIOS-style kernel port has reached Phase 2 completion in this source tree.
+The current kernel surface includes typed system call lifecycles, FIFO/RR
+scheduler lanes, queue metrics and observability hooks, LLM provider routing
+and batching, two-tier memory shells, LSFS-style storage surfaces, dynamic tool
+loading, MCP lifecycle scaffolding, persistent access control, intervention
+points, and robot-safe runtime bridge integration.
+
+Primary progress docs:
+
+- `agentic_runtime_src/docs/codex_kernel_phase2_progress.md`
+- `agentic_runtime_src/docs/kernel/AIOS_KERNEL_PORTING_MAP.md`
+- `agentic_runtime_src/docs/codex_kernel_port_progress.md`
+
+The boundary remains unchanged: Runtime, kernel, SDK, and Agent Apps must not
+import `rclpy`; ROS2-specific imports belong only in bridge packages under
+`ros2_bridge_src/`.
+
+## Traditional ROS2 App Work
+
+`/home/ubuntu/ros2_ws/src/color_block_grasper` is a traditional ROS2 RGB-D
+color-block grasping application, not an Agent App. It is allowed to import
+`rclpy` because it lives in the robot ROS2 application workspace. The design and
+field notes are tracked here for project continuity:
+
+- `docs/color_block_grasper_ros2_app_development.md`
+
+Do not move this package into `agentic_apps/`, and do not make Agent Apps depend
+on its direct ROS2 topics or servo commands.
+
 ## Common Commands
 
 Install/update the runtime into `/opt/agentic`:

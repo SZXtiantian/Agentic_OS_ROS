@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import yaml
 
 from agentic_os.kernel.capability import CapabilityKind, CapabilityRegistry, CapabilitySpec
@@ -7,11 +5,8 @@ from agentic_runtime.hardware_adapter import Ros2BridgeProfile
 from agentic_runtime.server import RuntimeServer
 
 
-SKILL_ROOT = Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/skills")
-
-
-def test_kernel_capability_registry_loads_task_level_capabilities():
-    registry = CapabilityRegistry().load_skill_manifests(SKILL_ROOT)
+def test_kernel_capability_registry_loads_task_level_capabilities(runtime_src):
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
 
     navigate = registry.get("robot.navigate_to")
     inspect = registry.get("robot.inspect_area")

@@ -1,0 +1,5132 @@
+{
+  "audit_records": [
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "message": "收到任务：准备去厨房检查。"
+      },
+      "audit_id": "audit_000001",
+      "backend": "runtime_internal",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "收到任务：准备去厨房检查。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:13.860071+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "name": "厨房"
+      },
+      "audit_id": "audit_000002",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "place": {
+            "allowed": true,
+            "frame_id": "map",
+            "id": "kitchen",
+            "metadata": {},
+            "name": "厨房",
+            "pose": {
+              "x": 3.2,
+              "y": 1.5,
+              "yaw": 1.57
+            }
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "world.resolve_place",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:13.862669+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {},
+      "audit_id": "audit_000003",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "state": {
+            "active_task_id": "",
+            "battery_percent": 80.0,
+            "battery_state": "normal",
+            "current_place": "",
+            "estop_pressed": false,
+            "is_localized": true,
+            "is_moving": false,
+            "mode": "mock",
+            "pose": {
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0
+            },
+            "robot_id": "mock_robot",
+            "state": {
+              "source": "mock"
+            }
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "robot.get_state",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:13.864918+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "key": "last_requested_place",
+        "value": "厨房"
+      },
+      "audit_id": "audit_000004",
+      "backend": "runtime_internal",
+      "duration_ms": 12,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:13.879017+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "place": "厨房",
+        "timeout_s": 120
+      },
+      "audit_id": "audit_000005",
+      "backend": "ros2_action",
+      "duration_ms": 818,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "reason": "",
+          "result": {
+            "mode": "mock",
+            "place": "厨房"
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "robot.navigate_to",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.699284+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "place": "厨房",
+        "timeout_s": 60
+      },
+      "audit_id": "audit_000006",
+      "backend": "ros2_service",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "anomalies": [],
+          "evidence": {
+            "perception_backend_status": "MOCK",
+            "place": "厨房",
+            "source": "mock_camera_metadata"
+          },
+          "evidence_path": "",
+          "objects": [],
+          "summary": "厨房检查完成，未发现异常。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "robot.inspect_area",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.703348+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "key": "last_inspection",
+        "value": {
+          "anomalies": [],
+          "objects": [],
+          "place": "厨房",
+          "summary": "厨房检查完成，未发现异常。"
+        }
+      },
+      "audit_id": "audit_000007",
+      "backend": "runtime_internal",
+      "duration_ms": 16,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.722065+00:00"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "args": {
+        "message": "厨房检查完成，未发现异常。"
+      },
+      "audit_id": "audit_000008",
+      "backend": "runtime_internal",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "厨房检查完成，未发现异常。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_0df558676da4",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.726320+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "message": "收到任务：准备去客厅检查。"
+      },
+      "audit_id": "audit_000009",
+      "backend": "runtime_internal",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "收到任务：准备去客厅检查。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.755361+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "name": "客厅"
+      },
+      "audit_id": "audit_000010",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "place": {
+            "allowed": true,
+            "frame_id": "map",
+            "id": "living_room",
+            "metadata": {},
+            "name": "客厅",
+            "pose": {
+              "x": 0.8,
+              "y": 2.1,
+              "yaw": 0.0
+            }
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "world.resolve_place",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.758382+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {},
+      "audit_id": "audit_000011",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "state": {
+            "active_task_id": "",
+            "battery_percent": 80.0,
+            "battery_state": "normal",
+            "current_place": "",
+            "estop_pressed": false,
+            "is_localized": true,
+            "is_moving": false,
+            "mode": "mock",
+            "pose": {
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0
+            },
+            "robot_id": "mock_robot",
+            "state": {
+              "source": "mock"
+            }
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "robot.get_state",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.760891+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "key": "last_requested_place",
+        "value": "客厅"
+      },
+      "audit_id": "audit_000012",
+      "backend": "runtime_internal",
+      "duration_ms": 14,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:14.779202+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "place": "客厅",
+        "timeout_s": 120
+      },
+      "audit_id": "audit_000013",
+      "backend": "ros2_action",
+      "duration_ms": 810,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "reason": "",
+          "result": {
+            "mode": "mock",
+            "place": "客厅"
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "robot.navigate_to",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.592122+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "place": "客厅",
+        "timeout_s": 60
+      },
+      "audit_id": "audit_000014",
+      "backend": "ros2_service",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "anomalies": [],
+          "evidence": {
+            "perception_backend_status": "MOCK",
+            "place": "客厅",
+            "source": "mock_camera_metadata"
+          },
+          "evidence_path": "",
+          "objects": [],
+          "summary": "客厅检查完成，未发现异常。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "robot.inspect_area",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.596466+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "key": "last_inspection",
+        "value": {
+          "anomalies": [],
+          "objects": [],
+          "place": "客厅",
+          "summary": "客厅检查完成，未发现异常。"
+        }
+      },
+      "audit_id": "audit_000015",
+      "backend": "runtime_internal",
+      "duration_ms": 13,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.613136+00:00"
+    },
+    {
+      "app_id": "inspection_agent",
+      "args": {
+        "message": "客厅检查完成，未发现异常。"
+      },
+      "audit_id": "audit_000016",
+      "backend": "runtime_internal",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "客厅检查完成，未发现异常。"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_c16631812fa5",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.616217+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {
+        "message": "Starting camera-arm inspection for workspace."
+      },
+      "audit_id": "audit_000017",
+      "backend": "runtime_internal",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "Starting camera-arm inspection for workspace."
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.636840+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {},
+      "audit_id": "audit_000018",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "state": {
+            "active_task_id": "",
+            "battery_percent": 80.0,
+            "battery_state": "normal",
+            "current_place": "",
+            "estop_pressed": false,
+            "is_localized": true,
+            "is_moving": false,
+            "mode": "mock",
+            "pose": {
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0
+            },
+            "robot_id": "mock_robot",
+            "state": {
+              "source": "mock"
+            }
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "robot.get_state",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.639099+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {},
+      "audit_id": "audit_000019",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "state": {
+            "active_action": "",
+            "gripper_ready": true,
+            "is_moving": false,
+            "readiness": "mock_ready",
+            "state": {
+              "source": "mock"
+            },
+            "stop_available": false
+          }
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "arm.get_state",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.641276+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {
+        "target": "workspace",
+        "timeout_s": 5
+      },
+      "audit_id": "audit_000020",
+      "backend": "ros2_service",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "evidence": {
+            "perception_backend_status": "MOCK",
+            "source": "mock_camera_metadata",
+            "target": "workspace"
+          },
+          "evidence_path": "",
+          "objects": [],
+          "summary": "workspace camera metadata observation complete (mock)."
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "perception.observe",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.643554+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {
+        "key": "last_camera_arm_observation",
+        "value": {
+          "error_code": "",
+          "evidence": {
+            "perception_backend_status": "MOCK",
+            "source": "mock_camera_metadata",
+            "target": "workspace"
+          },
+          "evidence_path": "",
+          "objects": [],
+          "reason": "",
+          "success": true,
+          "summary": "workspace camera metadata observation complete (mock)."
+        }
+      },
+      "audit_id": "audit_000021",
+      "backend": "runtime_internal",
+      "duration_ms": 19,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.664274+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {
+        "message": "workspace camera metadata observation complete (mock)."
+      },
+      "audit_id": "audit_000022",
+      "backend": "runtime_internal",
+      "duration_ms": 6,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "workspace camera metadata observation complete (mock)."
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.673244+00:00"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "args": {
+        "message": "Arm motion disabled by policy environment; read-only observation complete."
+      },
+      "audit_id": "audit_000023",
+      "backend": "runtime_internal",
+      "duration_ms": 2,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "Arm motion disabled by policy environment; read-only observation complete."
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_ee3d7b0d7e5d",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:15.677849+00:00"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "args": {
+        "label": "motivation_photo",
+        "target": "workspace",
+        "timeout_s": 5
+      },
+      "audit_id": "audit_000024",
+      "backend": "ros2_service",
+      "duration_ms": 1022,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "locked",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "evidence": {
+            "encoding": "bgr8",
+            "height": 400,
+            "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+            "label": "motivation_photo",
+            "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+            "perception_backend_status": "MOCK",
+            "source": "mock_camera_capture",
+            "target": "workspace",
+            "topic": "mock",
+            "width": 640
+          },
+          "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+          "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "allowed",
+      "session_id": "sess_4f1c9a3cd20e",
+      "skill_name": "perception.capture_photo",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:16.740113+00:00"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "args": {
+        "key": "photo_capture:motivation_photo_001:motivation_photo",
+        "value": {
+          "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+          "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+          "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+          "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+          "audit_id": "audit_000024",
+          "error_code": "",
+          "evidence": {
+            "app_id": "robot_photographer_agent",
+            "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+            "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+            "audit_id": "audit_000024",
+            "encoding": "bgr8",
+            "height": 400,
+            "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+            "kind": "photo",
+            "label": "motivation_photo",
+            "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+            "perception_backend_status": "MOCK",
+            "plan_id": "motivation_photo_001",
+            "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+            "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+            "session_id": "sess_4f1c9a3cd20e",
+            "source": "mock_camera_capture",
+            "target": "workspace",
+            "topic": "mock",
+            "width": 640
+          },
+          "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+          "label": "motivation_photo",
+          "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+          "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+          "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+          "reason": "",
+          "success": true
+        }
+      },
+      "audit_id": "audit_000025",
+      "backend": "runtime_internal",
+      "duration_ms": 13,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_4f1c9a3cd20e",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:16.758458+00:00"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "args": {
+        "key": "last_photo",
+        "value": {
+          "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+          "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+          "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+          "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+          "audit_id": "audit_000024",
+          "audit_ids": [
+            "audit_000024",
+            "audit_000025"
+          ],
+          "error_code": "",
+          "evidence": {
+            "app_id": "robot_photographer_agent",
+            "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+            "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+            "audit_id": "audit_000024",
+            "encoding": "bgr8",
+            "height": 400,
+            "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+            "kind": "photo",
+            "label": "motivation_photo",
+            "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+            "perception_backend_status": "MOCK",
+            "plan_id": "motivation_photo_001",
+            "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+            "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+            "session_id": "sess_4f1c9a3cd20e",
+            "source": "mock_camera_capture",
+            "target": "workspace",
+            "topic": "mock",
+            "width": 640
+          },
+          "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+          "label": "motivation_photo",
+          "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+          "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+          "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+          "reason": "",
+          "success": true,
+          "type": "capture_photo"
+        }
+      },
+      "audit_id": "audit_000026",
+      "backend": "runtime_internal",
+      "duration_ms": 14,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {},
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_4f1c9a3cd20e",
+      "skill_name": "memory.remember",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:16.775999+00:00"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "args": {
+        "message": "motivation experiment photo capture complete"
+      },
+      "audit_id": "audit_000027",
+      "backend": "runtime_internal",
+      "duration_ms": 0,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "motivation experiment photo capture complete"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_4f1c9a3cd20e",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:16.779438+00:00"
+    },
+    {
+      "app_id": "app_template",
+      "args": {
+        "message": "app_template executed"
+      },
+      "audit_id": "audit_000028",
+      "backend": "runtime_internal",
+      "duration_ms": 1,
+      "error_code": "",
+      "permission_result": "allowed",
+      "resource_lock_result": "not_required",
+      "result": {
+        "audit_id": "",
+        "data": {
+          "message": "app_template executed"
+        },
+        "error_code": "",
+        "reason": "",
+        "recoverable": true,
+        "success": true,
+        "suggested_recovery": []
+      },
+      "safety_result": "not_required",
+      "session_id": "sess_084d42c28a8e",
+      "skill_name": "report.say",
+      "status": "succeeded",
+      "timestamp": "2026-06-16T13:04:16.799496+00:00"
+    }
+  ],
+  "derived": {
+    "audit_count": 28,
+    "max_observed_queue_depth": 4,
+    "returns": [
+      {
+        "app_id": "room_inspection_app",
+        "elapsed_ms": 889,
+        "kind": "return",
+        "label": "T1_room_inspection_kitchen",
+        "scheduler": {
+          "active": false,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 4
+        },
+        "session_id": "sess_0df558676da4",
+        "status": "completed",
+        "success": true,
+        "t_ms": 890
+      },
+      {
+        "app_id": "inspection_agent",
+        "elapsed_ms": 1759,
+        "kind": "return",
+        "label": "T2_inspection_living_room",
+        "scheduler": {
+          "active": false,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 3
+        },
+        "session_id": "sess_c16631812fa5",
+        "status": "completed",
+        "success": true,
+        "t_ms": 1778
+      },
+      {
+        "app_id": "camera_arm_inspection_agent",
+        "elapsed_ms": 1821,
+        "kind": "return",
+        "label": "T3_camera_arm_readonly",
+        "scheduler": {
+          "active": false,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 2
+        },
+        "session_id": "sess_ee3d7b0d7e5d",
+        "status": "completed",
+        "success": true,
+        "t_ms": 1840
+      },
+      {
+        "app_id": "robot_photographer_agent",
+        "elapsed_ms": 2923,
+        "kind": "return",
+        "label": "T4_robot_photographer_capture",
+        "scheduler": {
+          "active": false,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 1
+        },
+        "session_id": "sess_4f1c9a3cd20e",
+        "status": "completed",
+        "success": true,
+        "t_ms": 2942
+      },
+      {
+        "app_id": "app_template",
+        "elapsed_ms": 2942,
+        "kind": "return",
+        "label": "T5_template_control",
+        "scheduler": {
+          "active": false,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 0
+        },
+        "session_id": "sess_084d42c28a8e",
+        "status": "completed",
+        "success": true,
+        "t_ms": 2961
+      }
+    ],
+    "saw_scheduler_active_true": true,
+    "session_count": 5,
+    "session_ends": [
+      {
+        "app_id": "room_inspection_app",
+        "kind": "session_runner_end",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 4
+        },
+        "session_id": "sess_0df558676da4",
+        "status": "completed",
+        "success": true,
+        "t_ms": 890
+      },
+      {
+        "app_id": "inspection_agent",
+        "kind": "session_runner_end",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 3
+        },
+        "session_id": "sess_c16631812fa5",
+        "status": "completed",
+        "success": true,
+        "t_ms": 1778
+      },
+      {
+        "app_id": "camera_arm_inspection_agent",
+        "kind": "session_runner_end",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 2
+        },
+        "session_id": "sess_ee3d7b0d7e5d",
+        "status": "completed",
+        "success": true,
+        "t_ms": 1840
+      },
+      {
+        "app_id": "robot_photographer_agent",
+        "kind": "session_runner_end",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 1
+        },
+        "session_id": "sess_4f1c9a3cd20e",
+        "status": "completed",
+        "success": true,
+        "t_ms": 2942
+      },
+      {
+        "app_id": "app_template",
+        "kind": "session_runner_end",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 0
+        },
+        "session_id": "sess_084d42c28a8e",
+        "status": "completed",
+        "success": true,
+        "t_ms": 2961
+      }
+    ],
+    "session_starts": [
+      {
+        "app_id": "room_inspection_app",
+        "kind": "session_runner_start",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_5d54e76da03f4e1f8d57fa392ce62593",
+          "policy": "single_robot_fifo",
+          "queued": 0
+        },
+        "t_ms": 1
+      },
+      {
+        "app_id": "inspection_agent",
+        "kind": "session_runner_start",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 3
+        },
+        "t_ms": 890
+      },
+      {
+        "app_id": "camera_arm_inspection_agent",
+        "kind": "session_runner_start",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 2
+        },
+        "t_ms": 1778
+      },
+      {
+        "app_id": "robot_photographer_agent",
+        "kind": "session_runner_start",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 1
+        },
+        "t_ms": 1840
+      },
+      {
+        "app_id": "app_template",
+        "kind": "session_runner_start",
+        "resources": {},
+        "scheduler": {
+          "active": true,
+          "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+          "policy": "single_robot_fifo",
+          "queued": 0
+        },
+        "t_ms": 2942
+      }
+    ]
+  },
+  "events": [
+    {
+      "kind": "experiment_start",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "selected": [
+        "T1_room_inspection_kitchen",
+        "T2_inspection_living_room",
+        "T3_camera_arm_readonly",
+        "T4_robot_photographer_capture",
+        "T5_template_control"
+      ],
+      "t_ms": 0
+    },
+    {
+      "app_id": "room_inspection_app",
+      "kind": "submit",
+      "kwargs": {
+        "mock": true,
+        "place": "厨房"
+      },
+      "label": "T1_room_inspection_kitchen",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 1
+    },
+    {
+      "app_id": "room_inspection_app",
+      "kind": "session_runner_start",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_5d54e76da03f4e1f8d57fa392ce62593",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 1
+    },
+    {
+      "app_id": "inspection_agent",
+      "kind": "submit",
+      "kwargs": {
+        "mock": true,
+        "place": "客厅"
+      },
+      "label": "T2_inspection_living_room",
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_5d54e76da03f4e1f8d57fa392ce62593",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 19
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "kind": "submit",
+      "kwargs": {
+        "mock": true,
+        "move_arm": false,
+        "place": null,
+        "target": "workspace"
+      },
+      "label": "T3_camera_arm_readonly",
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_74e6647c64b14e399319aa6f0c62cf60",
+        "policy": "single_robot_fifo",
+        "queued": 1
+      },
+      "t_ms": 19
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "kind": "submit",
+      "kwargs": {
+        "mock": true,
+        "place": null,
+        "plan": "<plan>"
+      },
+      "label": "T4_robot_photographer_capture",
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_e15218c69f094e59b098d5ec0ff76da8",
+        "policy": "single_robot_fifo",
+        "queued": 2
+      },
+      "t_ms": 19
+    },
+    {
+      "app_id": "app_template",
+      "kind": "submit",
+      "kwargs": {
+        "mock": true,
+        "place": null
+      },
+      "label": "T5_template_control",
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_3772d16c47984c528021e10ec89fd620",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 19
+    },
+    {
+      "app_id": "room_inspection_app",
+      "kind": "session_runner_end",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "session_id": "sess_0df558676da4",
+      "status": "completed",
+      "success": true,
+      "t_ms": 890
+    },
+    {
+      "app_id": "room_inspection_app",
+      "elapsed_ms": 889,
+      "kind": "return",
+      "label": "T1_room_inspection_kitchen",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "session_id": "sess_0df558676da4",
+      "status": "completed",
+      "success": true,
+      "t_ms": 890
+    },
+    {
+      "app_id": "inspection_agent",
+      "kind": "session_runner_start",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 890
+    },
+    {
+      "app_id": "inspection_agent",
+      "kind": "session_runner_end",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "session_id": "sess_c16631812fa5",
+      "status": "completed",
+      "success": true,
+      "t_ms": 1778
+    },
+    {
+      "app_id": "inspection_agent",
+      "elapsed_ms": 1759,
+      "kind": "return",
+      "label": "T2_inspection_living_room",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "session_id": "sess_c16631812fa5",
+      "status": "completed",
+      "success": true,
+      "t_ms": 1778
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "kind": "session_runner_start",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 2
+      },
+      "t_ms": 1778
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "kind": "session_runner_end",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 2
+      },
+      "session_id": "sess_ee3d7b0d7e5d",
+      "status": "completed",
+      "success": true,
+      "t_ms": 1840
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "elapsed_ms": 1821,
+      "kind": "return",
+      "label": "T3_camera_arm_readonly",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 2
+      },
+      "session_id": "sess_ee3d7b0d7e5d",
+      "status": "completed",
+      "success": true,
+      "t_ms": 1840
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "kind": "session_runner_start",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 1
+      },
+      "t_ms": 1840
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "kind": "session_runner_end",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 1
+      },
+      "session_id": "sess_4f1c9a3cd20e",
+      "status": "completed",
+      "success": true,
+      "t_ms": 2942
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "elapsed_ms": 2923,
+      "kind": "return",
+      "label": "T4_robot_photographer_capture",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 1
+      },
+      "session_id": "sess_4f1c9a3cd20e",
+      "status": "completed",
+      "success": true,
+      "t_ms": 2942
+    },
+    {
+      "app_id": "app_template",
+      "kind": "session_runner_start",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 2942
+    },
+    {
+      "app_id": "app_template",
+      "kind": "session_runner_end",
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "session_id": "sess_084d42c28a8e",
+      "status": "completed",
+      "success": true,
+      "t_ms": 2961
+    },
+    {
+      "app_id": "app_template",
+      "elapsed_ms": 2942,
+      "kind": "return",
+      "label": "T5_template_control",
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "session_id": "sess_084d42c28a8e",
+      "status": "completed",
+      "success": true,
+      "t_ms": 2961
+    },
+    {
+      "kind": "experiment_end",
+      "resources": {},
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 2961
+    }
+  ],
+  "experiment_id": "multi_agent_concurrency_motivation_2026-06-16",
+  "generated_at": "2026-06-16T13:04:16.854795+00:00",
+  "identified_apps": [
+    {
+      "app_id": "app_template",
+      "name": "app_template",
+      "version": "0.1.0"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "name": "camera_arm_inspection_agent",
+      "version": "0.1.0"
+    },
+    {
+      "app_id": "inspection_agent",
+      "name": "inspection_agent",
+      "version": "0.1.0"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "name": "robot_photographer_agent",
+      "version": "0.1.0"
+    },
+    {
+      "app_id": "room_inspection_app",
+      "name": "room_inspection_app",
+      "version": "0.1.0"
+    }
+  ],
+  "mock_backend": true,
+  "mock_navigation_sleep_s": 0.8,
+  "output_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16",
+  "real_robot_motion": false,
+  "repo": "/home/ubuntu/Agentic_OS_ROS_publish",
+  "report_json": "/home/ubuntu/Agentic_OS_ROS_publish/docs/multi_agent_concurrency_motivation_2026-06-16.json",
+  "report_md": "/home/ubuntu/Agentic_OS_ROS_publish/docs/multi_agent_concurrency_motivation_2026-06-16.md",
+  "results": [
+    {
+      "app_id": "room_inspection_app",
+      "elapsed_ms": 889,
+      "ended_ms": 890,
+      "label": "T1_room_inspection_kitchen",
+      "result": {
+        "app_id": "room_inspection_app",
+        "result": {
+          "inspection": {
+            "anomalies": [],
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "place": "厨房",
+              "source": "mock_camera_metadata"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "厨房检查完成，未发现异常。"
+          },
+          "place": "厨房",
+          "success": true
+        },
+        "session_id": "sess_0df558676da4",
+        "status": "completed"
+      },
+      "started_ms": 1
+    },
+    {
+      "app_id": "inspection_agent",
+      "elapsed_ms": 1759,
+      "ended_ms": 1778,
+      "label": "T2_inspection_living_room",
+      "result": {
+        "app_id": "inspection_agent",
+        "result": {
+          "inspection": {
+            "anomalies": [],
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "place": "客厅",
+              "source": "mock_camera_metadata"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "客厅检查完成，未发现异常。"
+          },
+          "place": "客厅",
+          "success": true
+        },
+        "session_id": "sess_c16631812fa5",
+        "status": "completed"
+      },
+      "started_ms": 19
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "elapsed_ms": 1821,
+      "ended_ms": 1840,
+      "label": "T3_camera_arm_readonly",
+      "result": {
+        "app_id": "camera_arm_inspection_agent",
+        "result": {
+          "arm_action": null,
+          "arm_state": {
+            "active_action": "",
+            "gripper_ready": true,
+            "is_moving": false,
+            "readiness": "mock_ready",
+            "state": {
+              "source": "mock"
+            },
+            "stop_available": false
+          },
+          "gripper_action": null,
+          "motion_enabled": false,
+          "observation": {
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "source": "mock_camera_metadata",
+              "target": "workspace"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "workspace camera metadata observation complete (mock)."
+          },
+          "robot_state": {
+            "active_task_id": "",
+            "battery_percent": 80.0,
+            "battery_state": "normal",
+            "current_place": "",
+            "estop_pressed": false,
+            "is_localized": true,
+            "is_moving": false,
+            "mode": "mock",
+            "pose": {
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0
+            },
+            "robot_id": "mock_robot",
+            "state": {
+              "source": "mock"
+            }
+          },
+          "success": true,
+          "target": "workspace"
+        },
+        "session_id": "sess_ee3d7b0d7e5d",
+        "status": "completed"
+      },
+      "started_ms": 19
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "elapsed_ms": 2923,
+      "ended_ms": 2942,
+      "label": "T4_robot_photographer_capture",
+      "result": {
+        "app_id": "robot_photographer_agent",
+        "result": {
+          "audit_ids": [
+            "audit_000024",
+            "audit_000025"
+          ],
+          "error_code": "",
+          "intent": "capture one workspace photo for multi-agent scheduling experiment",
+          "plan_id": "motivation_photo_001",
+          "planner_mode": "fixed_experiment_plan",
+          "reason": "",
+          "risk_class": "read_only_camera",
+          "schema_version": "1.0",
+          "session_id": "sess_4f1c9a3cd20e",
+          "steps": [
+            {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "audit_ids": [
+                "audit_000024",
+                "audit_000025"
+              ],
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true,
+              "type": "capture_photo"
+            }
+          ],
+          "success": true,
+          "user_summary": "motivation experiment photo capture complete"
+        },
+        "session_id": "sess_4f1c9a3cd20e",
+        "status": "completed"
+      },
+      "started_ms": 19
+    },
+    {
+      "app_id": "app_template",
+      "elapsed_ms": 2942,
+      "ended_ms": 2961,
+      "label": "T5_template_control",
+      "result": {
+        "app_id": "app_template",
+        "result": {
+          "success": true
+        },
+        "session_id": "sess_084d42c28a8e",
+        "status": "completed"
+      },
+      "started_ms": 19
+    }
+  ],
+  "runtime_config": "/tmp/multi_agent_concurrency_motivation_2026-06-16/runtime.yaml",
+  "scheduler_policy": "single_robot_fifo",
+  "selected_tasks": [
+    {
+      "app_id": "room_inspection_app",
+      "expected_resources": [
+        "base",
+        "camera",
+        "memory"
+      ],
+      "kwargs": {
+        "mock": true,
+        "place": "厨房"
+      },
+      "label": "T1_room_inspection_kitchen",
+      "why": "navigation + inspection path; exercises base lock and multiple syscalls"
+    },
+    {
+      "app_id": "inspection_agent",
+      "expected_resources": [
+        "base",
+        "camera",
+        "memory"
+      ],
+      "kwargs": {
+        "mock": true,
+        "place": "客厅"
+      },
+      "label": "T2_inspection_living_room",
+      "why": "second navigation app submitted concurrently; should queue behind T1 today"
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "expected_resources": [
+        "camera",
+        "memory"
+      ],
+      "kwargs": {
+        "mock": true,
+        "move_arm": false,
+        "place": null,
+        "target": "workspace"
+      },
+      "label": "T3_camera_arm_readonly",
+      "why": "read-only camera/arm state observation; could run concurrently in future but current app scheduler serializes it"
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "expected_resources": [
+        "camera",
+        "storage",
+        "memory"
+      ],
+      "kwargs": {
+        "mock": true,
+        "place": null,
+        "plan": {
+          "intent": "capture one workspace photo for multi-agent scheduling experiment",
+          "plan_id": "motivation_photo_001",
+          "planner_mode": "fixed_experiment_plan",
+          "requires_motion": false,
+          "risk_class": "read_only_camera",
+          "schema_version": "1.0",
+          "session_id": "sess_4f1c9a3cd20e",
+          "steps": [
+            {
+              "label": "motivation_photo",
+              "target": "workspace",
+              "timeout_s": 5,
+              "type": "capture_photo"
+            }
+          ],
+          "user_summary": "motivation experiment photo capture complete",
+          "validated": true
+        }
+      },
+      "label": "T4_robot_photographer_capture",
+      "why": "photo app with validated plan; exercises capture_photo and app-owned storage projection"
+    },
+    {
+      "app_id": "app_template",
+      "expected_resources": [
+        "report"
+      ],
+      "kwargs": {
+        "mock": true,
+        "place": null
+      },
+      "label": "T5_template_control",
+      "why": "minimal report-only control task; shows whole-app scheduler waits even for cheap work"
+    }
+  ],
+  "sessions": [
+    {
+      "session": {
+        "app_id": "room_inspection_app",
+        "created_at": "2026-06-16T13:04:13.841322+00:00",
+        "current_skill": "",
+        "ended_at": "2026-06-16T13:04:14.727720+00:00",
+        "error_code": "",
+        "mock": true,
+        "result": {
+          "inspection": {
+            "anomalies": [],
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "place": "厨房",
+              "source": "mock_camera_metadata"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "厨房检查完成，未发现异常。"
+          },
+          "place": "厨房",
+          "success": true
+        },
+        "session_id": "sess_0df558676da4",
+        "started_at": "2026-06-16T13:04:13.842818+00:00",
+        "status": "completed",
+        "stop_requested": false,
+        "task": {
+          "place": "厨房"
+        }
+      },
+      "session_id": "sess_0df558676da4",
+      "syscalls": [
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "收到任务：准备去厨房检查。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.857314+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_8fddeba73e28"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "收到任务：准备去厨房检查。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.857314+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:13.859016+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_8fddeba73e28"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "收到任务：准备去厨房检查。"
+          },
+          "audit_id": "audit_000001",
+          "created_at": "2026-06-16T13:04:13.857314+00:00",
+          "ended_at": "2026-06-16T13:04:13.860372+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000001",
+            "data": {
+              "message": "收到任务：准备去厨房检查。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:13.859016+00:00",
+          "status": "done",
+          "syscall_id": "syscall_8fddeba73e28"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "name": "厨房"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.860762+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "world.resolve_place",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_2872deb05b55"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "name": "厨房"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.860762+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "world.resolve_place",
+          "started_at": "2026-06-16T13:04:13.862077+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_2872deb05b55"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "name": "厨房"
+          },
+          "audit_id": "audit_000002",
+          "created_at": "2026-06-16T13:04:13.860762+00:00",
+          "ended_at": "2026-06-16T13:04:13.862928+00:00",
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000002",
+            "data": {
+              "place": {
+                "allowed": true,
+                "frame_id": "map",
+                "id": "kitchen",
+                "metadata": {},
+                "name": "厨房",
+                "pose": {
+                  "x": 3.2,
+                  "y": 1.5,
+                  "yaw": 1.57
+                }
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "world.resolve_place",
+          "started_at": "2026-06-16T13:04:13.862077+00:00",
+          "status": "done",
+          "syscall_id": "syscall_2872deb05b55"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.863354+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.get_state",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_478a4e9581a1"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.863354+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:13.864370+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_478a4e9581a1"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {},
+          "audit_id": "audit_000003",
+          "created_at": "2026-06-16T13:04:13.863354+00:00",
+          "ended_at": "2026-06-16T13:04:13.865204+00:00",
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000003",
+            "data": {
+              "state": {
+                "active_task_id": "",
+                "battery_percent": 80.0,
+                "battery_state": "normal",
+                "current_place": "",
+                "estop_pressed": false,
+                "is_localized": true,
+                "is_moving": false,
+                "mode": "mock",
+                "pose": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "yaw": 0.0
+                },
+                "robot_id": "mock_robot",
+                "state": {
+                  "source": "mock"
+                }
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:13.864370+00:00",
+          "status": "done",
+          "syscall_id": "syscall_478a4e9581a1"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_requested_place",
+            "value": "厨房"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.865638+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_daba6fbe7e89"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_requested_place",
+            "value": "厨房"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.865638+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:13.866701+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_daba6fbe7e89"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_requested_place",
+            "value": "厨房"
+          },
+          "audit_id": "audit_000004",
+          "created_at": "2026-06-16T13:04:13.865638+00:00",
+          "ended_at": "2026-06-16T13:04:13.879434+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000004",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:13.866701+00:00",
+          "status": "done",
+          "syscall_id": "syscall_daba6fbe7e89"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 120
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.879991+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.navigate_to",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_3241be6f6254"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 120
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:13.879991+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.navigate_to",
+          "started_at": "2026-06-16T13:04:13.881678+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_3241be6f6254"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 120
+          },
+          "audit_id": "audit_000005",
+          "created_at": "2026-06-16T13:04:13.879991+00:00",
+          "ended_at": "2026-06-16T13:04:14.699858+00:00",
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000005",
+            "data": {
+              "reason": "",
+              "result": {
+                "mode": "mock",
+                "place": "厨房"
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.navigate_to",
+          "started_at": "2026-06-16T13:04:13.881678+00:00",
+          "status": "done",
+          "syscall_id": "syscall_3241be6f6254"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 60
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.700513+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.inspect_area",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_437a5c08f47e"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 60
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.700513+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.inspect_area",
+          "started_at": "2026-06-16T13:04:14.702387+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_437a5c08f47e"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "place": "厨房",
+            "timeout_s": 60
+          },
+          "audit_id": "audit_000006",
+          "created_at": "2026-06-16T13:04:14.700513+00:00",
+          "ended_at": "2026-06-16T13:04:14.703707+00:00",
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000006",
+            "data": {
+              "anomalies": [],
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "place": "厨房",
+                "source": "mock_camera_metadata"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "summary": "厨房检查完成，未发现异常。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "robot.inspect_area",
+          "started_at": "2026-06-16T13:04:14.702387+00:00",
+          "status": "done",
+          "syscall_id": "syscall_437a5c08f47e"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "厨房",
+              "summary": "厨房检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.704329+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_28f2f309e716"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "厨房",
+              "summary": "厨房检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.704329+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:14.705511+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_28f2f309e716"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "厨房",
+              "summary": "厨房检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "audit_000007",
+          "created_at": "2026-06-16T13:04:14.704329+00:00",
+          "ended_at": "2026-06-16T13:04:14.722606+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000007",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:14.705511+00:00",
+          "status": "done",
+          "syscall_id": "syscall_28f2f309e716"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "厨房检查完成，未发现异常。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.723559+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_83234a2fad6f"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "厨房检查完成，未发现异常。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.723559+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:14.725540+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_83234a2fad6f"
+        },
+        {
+          "app_id": "room_inspection_app",
+          "args": {
+            "message": "厨房检查完成，未发现异常。"
+          },
+          "audit_id": "audit_000008",
+          "created_at": "2026-06-16T13:04:14.723559+00:00",
+          "ended_at": "2026-06-16T13:04:14.726543+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000008",
+            "data": {
+              "message": "厨房检查完成，未发现异常。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_0df558676da4",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:14.725540+00:00",
+          "status": "done",
+          "syscall_id": "syscall_83234a2fad6f"
+        }
+      ]
+    },
+    {
+      "session": {
+        "app_id": "inspection_agent",
+        "created_at": "2026-06-16T13:04:14.730281+00:00",
+        "current_skill": "",
+        "ended_at": "2026-06-16T13:04:15.617520+00:00",
+        "error_code": "",
+        "mock": true,
+        "result": {
+          "inspection": {
+            "anomalies": [],
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "place": "客厅",
+              "source": "mock_camera_metadata"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "客厅检查完成，未发现异常。"
+          },
+          "place": "客厅",
+          "success": true
+        },
+        "session_id": "sess_c16631812fa5",
+        "started_at": "2026-06-16T13:04:14.731696+00:00",
+        "status": "completed",
+        "stop_requested": false,
+        "task": {
+          "place": "客厅"
+        }
+      },
+      "session_id": "sess_c16631812fa5",
+      "syscalls": [
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "收到任务：准备去客厅检查。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.751826+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_ddd98a73e01a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "收到任务：准备去客厅检查。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.751826+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:14.754035+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_ddd98a73e01a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "收到任务：准备去客厅检查。"
+          },
+          "audit_id": "audit_000009",
+          "created_at": "2026-06-16T13:04:14.751826+00:00",
+          "ended_at": "2026-06-16T13:04:14.755646+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000009",
+            "data": {
+              "message": "收到任务：准备去客厅检查。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:14.754035+00:00",
+          "status": "done",
+          "syscall_id": "syscall_ddd98a73e01a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "name": "客厅"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.756118+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "world.resolve_place",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_63e2ef0f6e0a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "name": "客厅"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.756118+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "world.resolve_place",
+          "started_at": "2026-06-16T13:04:14.757722+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_63e2ef0f6e0a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "name": "客厅"
+          },
+          "audit_id": "audit_000010",
+          "created_at": "2026-06-16T13:04:14.756118+00:00",
+          "ended_at": "2026-06-16T13:04:14.758686+00:00",
+          "error_code": "",
+          "name": "world.resolve_place",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000010",
+            "data": {
+              "place": {
+                "allowed": true,
+                "frame_id": "map",
+                "id": "living_room",
+                "metadata": {},
+                "name": "客厅",
+                "pose": {
+                  "x": 0.8,
+                  "y": 2.1,
+                  "yaw": 0.0
+                }
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "world.resolve_place",
+          "started_at": "2026-06-16T13:04:14.757722+00:00",
+          "status": "done",
+          "syscall_id": "syscall_63e2ef0f6e0a"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.759154+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.get_state",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_aa8e59ff9b3e"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.759154+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:14.760327+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_aa8e59ff9b3e"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {},
+          "audit_id": "audit_000011",
+          "created_at": "2026-06-16T13:04:14.759154+00:00",
+          "ended_at": "2026-06-16T13:04:14.761271+00:00",
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000011",
+            "data": {
+              "state": {
+                "active_task_id": "",
+                "battery_percent": 80.0,
+                "battery_state": "normal",
+                "current_place": "",
+                "estop_pressed": false,
+                "is_localized": true,
+                "is_moving": false,
+                "mode": "mock",
+                "pose": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "yaw": 0.0
+                },
+                "robot_id": "mock_robot",
+                "state": {
+                  "source": "mock"
+                }
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:14.760327+00:00",
+          "status": "done",
+          "syscall_id": "syscall_aa8e59ff9b3e"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_requested_place",
+            "value": "客厅"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.761714+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_278bbb1127fb"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_requested_place",
+            "value": "客厅"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.761714+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:14.763440+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_278bbb1127fb"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_requested_place",
+            "value": "客厅"
+          },
+          "audit_id": "audit_000012",
+          "created_at": "2026-06-16T13:04:14.761714+00:00",
+          "ended_at": "2026-06-16T13:04:14.779846+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000012",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:14.763440+00:00",
+          "status": "done",
+          "syscall_id": "syscall_278bbb1127fb"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 120
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.780483+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.navigate_to",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_fd0819200105"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 120
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:14.780483+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.navigate_to",
+          "started_at": "2026-06-16T13:04:14.782385+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_fd0819200105"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 120
+          },
+          "audit_id": "audit_000013",
+          "created_at": "2026-06-16T13:04:14.780483+00:00",
+          "ended_at": "2026-06-16T13:04:15.592746+00:00",
+          "error_code": "",
+          "name": "robot.navigate_to",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000013",
+            "data": {
+              "reason": "",
+              "result": {
+                "mode": "mock",
+                "place": "客厅"
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.navigate_to",
+          "started_at": "2026-06-16T13:04:14.782385+00:00",
+          "status": "done",
+          "syscall_id": "syscall_fd0819200105"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 60
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.593664+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.inspect_area",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_65f069536b26"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 60
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.593664+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.inspect_area",
+          "started_at": "2026-06-16T13:04:15.595653+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_65f069536b26"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "place": "客厅",
+            "timeout_s": 60
+          },
+          "audit_id": "audit_000014",
+          "created_at": "2026-06-16T13:04:15.593664+00:00",
+          "ended_at": "2026-06-16T13:04:15.596785+00:00",
+          "error_code": "",
+          "name": "robot.inspect_area",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000014",
+            "data": {
+              "anomalies": [],
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "place": "客厅",
+                "source": "mock_camera_metadata"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "summary": "客厅检查完成，未发现异常。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "robot.inspect_area",
+          "started_at": "2026-06-16T13:04:15.595653+00:00",
+          "status": "done",
+          "syscall_id": "syscall_65f069536b26"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "客厅",
+              "summary": "客厅检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.598205+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_59f43705b9f0"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "客厅",
+              "summary": "客厅检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.598205+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:15.599792+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_59f43705b9f0"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "key": "last_inspection",
+            "value": {
+              "anomalies": [],
+              "objects": [],
+              "place": "客厅",
+              "summary": "客厅检查完成，未发现异常。"
+            }
+          },
+          "audit_id": "audit_000015",
+          "created_at": "2026-06-16T13:04:15.598205+00:00",
+          "ended_at": "2026-06-16T13:04:15.613510+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000015",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:15.599792+00:00",
+          "status": "done",
+          "syscall_id": "syscall_59f43705b9f0"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "客厅检查完成，未发现异常。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.614124+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_72ea0b197b16"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "客厅检查完成，未发现异常。"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.614124+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.615587+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_72ea0b197b16"
+        },
+        {
+          "app_id": "inspection_agent",
+          "args": {
+            "message": "客厅检查完成，未发现异常。"
+          },
+          "audit_id": "audit_000016",
+          "created_at": "2026-06-16T13:04:15.614124+00:00",
+          "ended_at": "2026-06-16T13:04:15.616419+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000016",
+            "data": {
+              "message": "客厅检查完成，未发现异常。"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_c16631812fa5",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.615587+00:00",
+          "status": "done",
+          "syscall_id": "syscall_72ea0b197b16"
+        }
+      ]
+    },
+    {
+      "session": {
+        "app_id": "camera_arm_inspection_agent",
+        "created_at": "2026-06-16T13:04:15.618835+00:00",
+        "current_skill": "",
+        "ended_at": "2026-06-16T13:04:15.679268+00:00",
+        "error_code": "",
+        "mock": true,
+        "result": {
+          "arm_action": null,
+          "arm_state": {
+            "active_action": "",
+            "gripper_ready": true,
+            "is_moving": false,
+            "readiness": "mock_ready",
+            "state": {
+              "source": "mock"
+            },
+            "stop_available": false
+          },
+          "gripper_action": null,
+          "motion_enabled": false,
+          "observation": {
+            "error_code": "",
+            "evidence": {
+              "perception_backend_status": "MOCK",
+              "source": "mock_camera_metadata",
+              "target": "workspace"
+            },
+            "evidence_path": "",
+            "objects": [],
+            "reason": "",
+            "success": true,
+            "summary": "workspace camera metadata observation complete (mock)."
+          },
+          "robot_state": {
+            "active_task_id": "",
+            "battery_percent": 80.0,
+            "battery_state": "normal",
+            "current_place": "",
+            "estop_pressed": false,
+            "is_localized": true,
+            "is_moving": false,
+            "mode": "mock",
+            "pose": {
+              "x": 0.0,
+              "y": 0.0,
+              "yaw": 0.0
+            },
+            "robot_id": "mock_robot",
+            "state": {
+              "source": "mock"
+            }
+          },
+          "success": true,
+          "target": "workspace"
+        },
+        "session_id": "sess_ee3d7b0d7e5d",
+        "started_at": "2026-06-16T13:04:15.620059+00:00",
+        "status": "completed",
+        "stop_requested": false,
+        "task": {
+          "move_arm": false,
+          "place": null,
+          "target": "workspace"
+        }
+      },
+      "session_id": "sess_ee3d7b0d7e5d",
+      "syscalls": [
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Starting camera-arm inspection for workspace."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.634350+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_f906c2669f78"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Starting camera-arm inspection for workspace."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.634350+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.636117+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_f906c2669f78"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Starting camera-arm inspection for workspace."
+          },
+          "audit_id": "audit_000017",
+          "created_at": "2026-06-16T13:04:15.634350+00:00",
+          "ended_at": "2026-06-16T13:04:15.637092+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000017",
+            "data": {
+              "message": "Starting camera-arm inspection for workspace."
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.636117+00:00",
+          "status": "done",
+          "syscall_id": "syscall_f906c2669f78"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.637482+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "robot.get_state",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_7524f5b60d32"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.637482+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:15.638562+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_7524f5b60d32"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "audit_000018",
+          "created_at": "2026-06-16T13:04:15.637482+00:00",
+          "ended_at": "2026-06-16T13:04:15.639364+00:00",
+          "error_code": "",
+          "name": "robot.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000018",
+            "data": {
+              "state": {
+                "active_task_id": "",
+                "battery_percent": 80.0,
+                "battery_state": "normal",
+                "current_place": "",
+                "estop_pressed": false,
+                "is_localized": true,
+                "is_moving": false,
+                "mode": "mock",
+                "pose": {
+                  "x": 0.0,
+                  "y": 0.0,
+                  "yaw": 0.0
+                },
+                "robot_id": "mock_robot",
+                "state": {
+                  "source": "mock"
+                }
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "robot.get_state",
+          "started_at": "2026-06-16T13:04:15.638562+00:00",
+          "status": "done",
+          "syscall_id": "syscall_7524f5b60d32"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.639789+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "arm.get_state",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "arm.get_state",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_b73865717399"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.639789+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "arm.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "arm.get_state",
+          "started_at": "2026-06-16T13:04:15.640770+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_b73865717399"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {},
+          "audit_id": "audit_000019",
+          "created_at": "2026-06-16T13:04:15.639789+00:00",
+          "ended_at": "2026-06-16T13:04:15.641502+00:00",
+          "error_code": "",
+          "name": "arm.get_state",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000019",
+            "data": {
+              "state": {
+                "active_action": "",
+                "gripper_ready": true,
+                "is_moving": false,
+                "readiness": "mock_ready",
+                "state": {
+                  "source": "mock"
+                },
+                "stop_available": false
+              }
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "arm.get_state",
+          "started_at": "2026-06-16T13:04:15.640770+00:00",
+          "status": "done",
+          "syscall_id": "syscall_b73865717399"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.641883+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "perception.observe",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "perception.observe",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_dd761a447a7e"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.641883+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "perception.observe",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "perception.observe",
+          "started_at": "2026-06-16T13:04:15.642985+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_dd761a447a7e"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "audit_000020",
+          "created_at": "2026-06-16T13:04:15.641883+00:00",
+          "ended_at": "2026-06-16T13:04:15.643756+00:00",
+          "error_code": "",
+          "name": "perception.observe",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000020",
+            "data": {
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "source": "mock_camera_metadata",
+                "target": "workspace"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "summary": "workspace camera metadata observation complete (mock)."
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "perception.observe",
+          "started_at": "2026-06-16T13:04:15.642985+00:00",
+          "status": "done",
+          "syscall_id": "syscall_dd761a447a7e"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "key": "last_camera_arm_observation",
+            "value": {
+              "error_code": "",
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "source": "mock_camera_metadata",
+                "target": "workspace"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "reason": "",
+              "success": true,
+              "summary": "workspace camera metadata observation complete (mock)."
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.644275+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_c142aba40a20"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "key": "last_camera_arm_observation",
+            "value": {
+              "error_code": "",
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "source": "mock_camera_metadata",
+                "target": "workspace"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "reason": "",
+              "success": true,
+              "summary": "workspace camera metadata observation complete (mock)."
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.644275+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:15.645343+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_c142aba40a20"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "key": "last_camera_arm_observation",
+            "value": {
+              "error_code": "",
+              "evidence": {
+                "perception_backend_status": "MOCK",
+                "source": "mock_camera_metadata",
+                "target": "workspace"
+              },
+              "evidence_path": "",
+              "objects": [],
+              "reason": "",
+              "success": true,
+              "summary": "workspace camera metadata observation complete (mock)."
+            }
+          },
+          "audit_id": "audit_000021",
+          "created_at": "2026-06-16T13:04:15.644275+00:00",
+          "ended_at": "2026-06-16T13:04:15.664749+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000021",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:15.645343+00:00",
+          "status": "done",
+          "syscall_id": "syscall_c142aba40a20"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "workspace camera metadata observation complete (mock)."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.665474+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_b70a91644968"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "workspace camera metadata observation complete (mock)."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.665474+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.667106+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_b70a91644968"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "workspace camera metadata observation complete (mock)."
+          },
+          "audit_id": "audit_000022",
+          "created_at": "2026-06-16T13:04:15.665474+00:00",
+          "ended_at": "2026-06-16T13:04:15.673747+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000022",
+            "data": {
+              "message": "workspace camera metadata observation complete (mock)."
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.667106+00:00",
+          "status": "done",
+          "syscall_id": "syscall_b70a91644968"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Arm motion disabled by policy environment; read-only observation complete."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.674320+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_8bcfbd205807"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Arm motion disabled by policy environment; read-only observation complete."
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.674320+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.675905+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_8bcfbd205807"
+        },
+        {
+          "app_id": "camera_arm_inspection_agent",
+          "args": {
+            "message": "Arm motion disabled by policy environment; read-only observation complete."
+          },
+          "audit_id": "audit_000023",
+          "created_at": "2026-06-16T13:04:15.674320+00:00",
+          "ended_at": "2026-06-16T13:04:15.678081+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000023",
+            "data": {
+              "message": "Arm motion disabled by policy environment; read-only observation complete."
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_ee3d7b0d7e5d",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:15.675905+00:00",
+          "status": "done",
+          "syscall_id": "syscall_8bcfbd205807"
+        }
+      ]
+    },
+    {
+      "session": {
+        "app_id": "robot_photographer_agent",
+        "created_at": "2026-06-16T13:04:15.680882+00:00",
+        "current_skill": "",
+        "ended_at": "2026-06-16T13:04:16.780674+00:00",
+        "error_code": "",
+        "mock": true,
+        "result": {
+          "audit_ids": [
+            "audit_000024",
+            "audit_000025"
+          ],
+          "error_code": "",
+          "intent": "capture one workspace photo for multi-agent scheduling experiment",
+          "plan_id": "motivation_photo_001",
+          "planner_mode": "fixed_experiment_plan",
+          "reason": "",
+          "risk_class": "read_only_camera",
+          "schema_version": "1.0",
+          "session_id": "sess_4f1c9a3cd20e",
+          "steps": [
+            {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "audit_ids": [
+                "audit_000024",
+                "audit_000025"
+              ],
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true,
+              "type": "capture_photo"
+            }
+          ],
+          "success": true,
+          "user_summary": "motivation experiment photo capture complete"
+        },
+        "session_id": "sess_4f1c9a3cd20e",
+        "started_at": "2026-06-16T13:04:15.682622+00:00",
+        "status": "completed",
+        "stop_requested": false,
+        "task": {
+          "place": null,
+          "plan": {
+            "intent": "capture one workspace photo for multi-agent scheduling experiment",
+            "plan_id": "motivation_photo_001",
+            "planner_mode": "fixed_experiment_plan",
+            "requires_motion": false,
+            "risk_class": "read_only_camera",
+            "schema_version": "1.0",
+            "session_id": "",
+            "steps": [
+              {
+                "label": "motivation_photo",
+                "target": "workspace",
+                "timeout_s": 5,
+                "type": "capture_photo"
+              }
+            ],
+            "user_summary": "motivation experiment photo capture complete",
+            "validated": true
+          }
+        }
+      },
+      "session_id": "sess_4f1c9a3cd20e",
+      "syscalls": [
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "label": "motivation_photo",
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.715699+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "perception.capture_photo",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "perception.capture_photo",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_3d1d2b599a06"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "label": "motivation_photo",
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:15.715699+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "perception.capture_photo",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": null,
+          "safety_result": "allowed",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "perception.capture_photo",
+          "started_at": "2026-06-16T13:04:15.717705+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_3d1d2b599a06"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "label": "motivation_photo",
+            "target": "workspace",
+            "timeout_s": 5
+          },
+          "audit_id": "audit_000024",
+          "created_at": "2026-06-16T13:04:15.715699+00:00",
+          "ended_at": "2026-06-16T13:04:16.740485+00:00",
+          "error_code": "",
+          "name": "perception.capture_photo",
+          "permission_result": "allowed",
+          "resource_lock_result": "locked",
+          "result": {
+            "audit_id": "audit_000024",
+            "data": {
+              "evidence": {
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "perception_backend_status": "MOCK",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "allowed",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "perception.capture_photo",
+          "started_at": "2026-06-16T13:04:15.717705+00:00",
+          "status": "done",
+          "syscall_id": "syscall_3d1d2b599a06"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "photo_capture:motivation_photo_001:motivation_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.743878+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_55bcf990f9bd"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "photo_capture:motivation_photo_001:motivation_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.743878+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:16.745772+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_55bcf990f9bd"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "photo_capture:motivation_photo_001:motivation_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true
+            }
+          },
+          "audit_id": "audit_000025",
+          "created_at": "2026-06-16T13:04:16.743878+00:00",
+          "ended_at": "2026-06-16T13:04:16.758918+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000025",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:16.745772+00:00",
+          "status": "done",
+          "syscall_id": "syscall_55bcf990f9bd"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "last_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "audit_ids": [
+                "audit_000024",
+                "audit_000025"
+              ],
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true,
+              "type": "capture_photo"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.759669+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_307031bf70b4"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "last_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "audit_ids": [
+                "audit_000024",
+                "audit_000025"
+              ],
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true,
+              "type": "capture_photo"
+            }
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.759669+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:16.761486+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_307031bf70b4"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "key": "last_photo",
+            "value": {
+              "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "app_run_dir": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e",
+              "app_storage_root": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage",
+              "audit_id": "audit_000024",
+              "audit_ids": [
+                "audit_000024",
+                "audit_000025"
+              ],
+              "error_code": "",
+              "evidence": {
+                "app_id": "robot_photographer_agent",
+                "app_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "app_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "audit_id": "audit_000024",
+                "encoding": "bgr8",
+                "height": 400,
+                "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+                "kind": "photo",
+                "label": "motivation_photo",
+                "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+                "perception_backend_status": "MOCK",
+                "plan_id": "motivation_photo_001",
+                "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+                "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+                "session_id": "sess_4f1c9a3cd20e",
+                "source": "mock_camera_capture",
+                "target": "workspace",
+                "topic": "mock",
+                "width": 640
+              },
+              "image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/photos/01_motivation_photo.png",
+              "label": "motivation_photo",
+              "metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/robot_photographer_storage/runs/sess_4f1c9a3cd20e/metadata/01_motivation_photo.json",
+              "raw_evidence_image_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.png",
+              "raw_evidence_metadata_path": "/tmp/multi_agent_concurrency_motivation_2026-06-16/var/evidence/photos/motivation_photo_1781615055.json",
+              "reason": "",
+              "success": true,
+              "type": "capture_photo"
+            }
+          },
+          "audit_id": "audit_000026",
+          "created_at": "2026-06-16T13:04:16.759669+00:00",
+          "ended_at": "2026-06-16T13:04:16.776532+00:00",
+          "error_code": "",
+          "name": "memory.remember",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000026",
+            "data": {},
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "memory.remember",
+          "started_at": "2026-06-16T13:04:16.761486+00:00",
+          "status": "done",
+          "syscall_id": "syscall_307031bf70b4"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "message": "motivation experiment photo capture complete"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.777347+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_54e4e882045a"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "message": "motivation experiment photo capture complete"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.777347+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:16.778856+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_54e4e882045a"
+        },
+        {
+          "app_id": "robot_photographer_agent",
+          "args": {
+            "message": "motivation experiment photo capture complete"
+          },
+          "audit_id": "audit_000027",
+          "created_at": "2026-06-16T13:04:16.777347+00:00",
+          "ended_at": "2026-06-16T13:04:16.779624+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000027",
+            "data": {
+              "message": "motivation experiment photo capture complete"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_4f1c9a3cd20e",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:16.778856+00:00",
+          "status": "done",
+          "syscall_id": "syscall_54e4e882045a"
+        }
+      ]
+    },
+    {
+      "session": {
+        "app_id": "app_template",
+        "created_at": "2026-06-16T13:04:16.782532+00:00",
+        "current_skill": "",
+        "ended_at": "2026-06-16T13:04:16.800583+00:00",
+        "error_code": "",
+        "mock": true,
+        "result": {
+          "success": true
+        },
+        "session_id": "sess_084d42c28a8e",
+        "started_at": "2026-06-16T13:04:16.783580+00:00",
+        "status": "completed",
+        "stop_requested": false,
+        "task": {
+          "place": null
+        }
+      },
+      "session_id": "sess_084d42c28a8e",
+      "syscalls": [
+        {
+          "app_id": "app_template",
+          "args": {
+            "message": "app_template executed"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.796954+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "not_checked",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_084d42c28a8e",
+          "skill_name": "report.say",
+          "started_at": null,
+          "status": "queued",
+          "syscall_id": "syscall_dcae578288e4"
+        },
+        {
+          "app_id": "app_template",
+          "args": {
+            "message": "app_template executed"
+          },
+          "audit_id": "",
+          "created_at": "2026-06-16T13:04:16.796954+00:00",
+          "ended_at": null,
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": null,
+          "safety_result": "not_required",
+          "session_id": "sess_084d42c28a8e",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:16.798724+00:00",
+          "status": "executing",
+          "syscall_id": "syscall_dcae578288e4"
+        },
+        {
+          "app_id": "app_template",
+          "args": {
+            "message": "app_template executed"
+          },
+          "audit_id": "audit_000028",
+          "created_at": "2026-06-16T13:04:16.796954+00:00",
+          "ended_at": "2026-06-16T13:04:16.799703+00:00",
+          "error_code": "",
+          "name": "report.say",
+          "permission_result": "allowed",
+          "resource_lock_result": "not_required",
+          "result": {
+            "audit_id": "audit_000028",
+            "data": {
+              "message": "app_template executed"
+            },
+            "error_code": "",
+            "reason": "",
+            "recoverable": true,
+            "success": true,
+            "suggested_recovery": []
+          },
+          "safety_result": "not_required",
+          "session_id": "sess_084d42c28a8e",
+          "skill_name": "report.say",
+          "started_at": "2026-06-16T13:04:16.798724+00:00",
+          "status": "done",
+          "syscall_id": "syscall_dcae578288e4"
+        }
+      ]
+    }
+  ],
+  "status_samples": [
+    {
+      "resources": {},
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 0
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 52
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 103
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 157
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 209
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 260
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 314
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 364
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 415
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 466
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 517
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 568
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 619
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 670
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 721
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 772
+    },
+    {
+      "resources": {
+        "base": "sess_0df558676da4:call_0b39dcc66fb6"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 823
+    },
+    {
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 4
+      },
+      "t_ms": 886
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 942
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 993
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1044
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1094
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1145
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1195
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1246
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1296
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1347
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1398
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1448
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1499
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1549
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1600
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1650
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1701
+    },
+    {
+      "resources": {
+        "base": "sess_c16631812fa5:call_3bb7be383e28"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 3
+      },
+      "t_ms": 1751
+    },
+    {
+      "resources": {
+        "camera": "sess_ee3d7b0d7e5d:call_ca265e0dc8e4"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 2
+      },
+      "t_ms": 1803
+    },
+    {
+      "resources": {
+        "camera": "sess_4f1c9a3cd20e:call_ff466528c413"
+      },
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 1
+      },
+      "t_ms": 2899
+    },
+    {
+      "resources": {},
+      "scheduler": {
+        "active": true,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 2959
+    },
+    {
+      "resources": {},
+      "scheduler": {
+        "active": false,
+        "last_kernel_syscall_id": "ksc_bd2170a6d27548999b7c2c1b289a03a3",
+        "policy": "single_robot_fifo",
+        "queued": 0
+      },
+      "t_ms": 3009
+    }
+  ],
+  "validation": [
+    {
+      "app_id": "room_inspection_app",
+      "permissions": [
+        "robot.state.read",
+        "robot.move",
+        "robot.stop",
+        "world.read",
+        "perception.inspect",
+        "memory.read",
+        "memory.write",
+        "human.ask",
+        "report.say"
+      ],
+      "required_capabilities": [
+        "robot.get_state",
+        "robot.navigate_to",
+        "robot.inspect_area",
+        "robot.stop",
+        "world.resolve_place",
+        "memory.remember",
+        "memory.recall",
+        "human.ask",
+        "report.say"
+      ],
+      "valid": true
+    },
+    {
+      "app_id": "inspection_agent",
+      "permissions": [
+        "robot.state.read",
+        "robot.move",
+        "robot.stop",
+        "world.read",
+        "perception.inspect",
+        "memory.read",
+        "memory.write",
+        "human.ask",
+        "report.say"
+      ],
+      "required_capabilities": [
+        "robot.get_state",
+        "robot.navigate_to",
+        "robot.inspect_area",
+        "robot.stop",
+        "world.resolve_place",
+        "memory.remember",
+        "memory.recall",
+        "human.ask",
+        "report.say"
+      ],
+      "valid": true
+    },
+    {
+      "app_id": "camera_arm_inspection_agent",
+      "permissions": [
+        "robot.state.read",
+        "robot.stop",
+        "perception.observe",
+        "arm.state.read",
+        "arm.move.named",
+        "gripper.control",
+        "memory.read",
+        "memory.write",
+        "report.say"
+      ],
+      "required_capabilities": [
+        "robot.get_state",
+        "robot.stop",
+        "perception.observe",
+        "arm.get_state",
+        "arm.move_named",
+        "gripper.set",
+        "memory.remember",
+        "memory.recall",
+        "report.say"
+      ],
+      "valid": true
+    },
+    {
+      "app_id": "robot_photographer_agent",
+      "permissions": [
+        "robot.state.read",
+        "robot.stop",
+        "perception.capture",
+        "arm.state.read",
+        "arm.move.named",
+        "storage.read",
+        "memory.read",
+        "memory.write",
+        "report.say",
+        "llm.chat"
+      ],
+      "required_capabilities": [
+        "llm.chat",
+        "robot.get_state",
+        "robot.stop",
+        "perception.capture_photo",
+        "arm.get_state",
+        "arm.move_named",
+        "storage.list_recent_photos",
+        "memory.remember",
+        "memory.recall",
+        "report.say"
+      ],
+      "valid": true
+    },
+    {
+      "app_id": "app_template",
+      "permissions": [
+        "report.say"
+      ],
+      "required_capabilities": [
+        "report.say"
+      ],
+      "valid": true
+    }
+  ]
+}

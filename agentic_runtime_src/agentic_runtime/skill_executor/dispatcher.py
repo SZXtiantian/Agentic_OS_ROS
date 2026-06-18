@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.config import find_repo_root
 from agentic_runtime.ros_bridge_client.types import RosBridgeClient
 
 
@@ -92,10 +93,11 @@ class SkillDispatcher:
     def _app_photo_index(self, app_id: str) -> Path | None:
         if app_id != "robot_photographer_agent":
             return None
+        app_root = Path(os.environ.get("AGENTIC_APP_ROOT", find_repo_root().parent / "agentic_apps")).expanduser()
         storage_root = Path(
             os.environ.get(
                 "AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT",
-                "/home/ubuntu/agentic_ws/src/robot_photographer_agent/storage",
+                str(app_root / "robot_photographer_agent" / "storage"),
             )
         ).expanduser()
         return storage_root / "indexes" / "photos.jsonl"

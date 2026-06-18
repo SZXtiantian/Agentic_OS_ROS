@@ -1,5 +1,7 @@
 from agentic_os.kernel.hooks import (
+    InMemoryKernelEventSink,
     KernelQueueName,
+    KernelQueuePolicy,
     KernelQueueStore,
     get_global_queue_store,
     global_queue_add_message,
@@ -14,7 +16,8 @@ def make_syscall(agent_name: str, value: int, target: str = KernelQueueName.LLM)
 
 
 def test_queue_add_get_fifo_order():
-    store = KernelQueueStore()
+    sink = InMemoryKernelEventSink()
+    store = KernelQueueStore(event_sink=sink)
     first = make_syscall("agent_a", 1)
     second = make_syscall("agent_a", 2)
 
@@ -23,6 +26,12 @@ def test_queue_add_get_fifo_order():
 
     assert store.get(KernelQueueName.LLM, timeout_s=0.01) is first
     assert store.get(KernelQueueName.LLM, timeout_s=0.01) is second
+    assert [event["event_type"] for event in sink.recent()] == [
+        "queue.added",
+        "queue.added",
+        "queue.dequeued",
+        "queue.dequeued",
+    ]
 
 
 def test_queue_get_timeout_returns_none():
@@ -38,9 +47,11 @@ def test_queue_snapshot_counts_by_lane():
 
     snapshot = store.snapshot()
 
-    assert snapshot[KernelQueueName.LLM] == 1
-    assert snapshot[KernelQueueName.ROBOT_MOTION] == 1
-    assert snapshot[KernelQueueName.TOOL] == 0
+    assert snapshot[KernelQueueName.LLM]["size"] == 1
+    assert snapshot[KernelQueueName.LLM]["added_count"] == 1
+    assert snapshot[KernelQueueName.ROBOT_MOTION]["size"] == 1
+    assert snapshot[KernelQueueName.TOOL]["size"] == 0
+    assert "avg_wait_ms" in snapshot[KernelQueueName.LLM]
 
 
 def test_global_queue_reset_for_tests():
@@ -64,3 +75,51 @@ def test_robot_motion_queue_is_distinct_from_tool_queue():
 
     assert store.get(KernelQueueName.TOOL, timeout_s=0.01) is tool
     assert store.get(KernelQueueName.ROBOT_MOTION, timeout_s=0.01) is motion
+
+
+def test_queue_peek_drain_and_remove_cancel_unexecuted_syscall():
+    store = KernelQueueStore()
+    first = make_syscall("agent_a", 1, KernelQueueName.MEMORY)
+    second = make_syscall("agent_a", 2, KernelQueueName.MEMORY)
+
+    store.add(KernelQueueName.MEMORY, first)
+    store.add(KernelQueueName.MEMORY, second)
+
+    assert store.peek(KernelQueueName.MEMORY) is first
+    removed = store.remove(first.syscall_id)
+    assert removed is first
+    assert removed.status == "cancelled"
+    assert store.peek(KernelQueueName.MEMORY) is second
+    assert store.drain(KernelQueueName.MEMORY) == [second]
+    assert store.size(KernelQueueName.MEMORY) == 0
+
+
+def test_full_queue_reject_policy_is_deterministic():
+    store = KernelQueueStore(
+        policies={KernelQueueName.MEMORY: KernelQueuePolicy(max_size=1, on_full="reject")}
+    )
+    first = make_syscall("agent_a", 1, KernelQueueName.MEMORY)
+    second = make_syscall("agent_a", 2, KernelQueueName.MEMORY)
+
+    assert store.add(KernelQueueName.MEMORY, first) is True
+    assert store.add(KernelQueueName.MEMORY, second) is False
+
+    snapshot = store.snapshot()[KernelQueueName.MEMORY]
+    assert snapshot["size"] == 1
+    assert snapshot["rejected_count"] == 1
+    assert second.status == "rejected"
+    assert second.error_code == "KERNEL_QUEUE_FULL"
+
+
+def test_emergency_stop_gets_priority_over_robot_motion_backlog():
+    store = KernelQueueStore(
+        policies={KernelQueueName.ROBOT_MOTION: KernelQueuePolicy(max_size=1, on_full="reject")}
+    )
+    navigate = make_syscall("agent_a", 1, KernelQueueName.ROBOT_MOTION)
+    stop = KernelSyscall.create("agent_b", KernelQueueName.ROBOT_MOTION, "stop", {"skill_name": "robot.stop"})
+
+    assert store.add(KernelQueueName.ROBOT_MOTION, navigate) is True
+    assert store.add(KernelQueueName.ROBOT_MOTION, stop) is True
+
+    assert store.get(KernelQueueName.ROBOT_MOTION, timeout_s=0.01) is stop
+    assert store.get(KernelQueueName.ROBOT_MOTION, timeout_s=0.01) is navigate

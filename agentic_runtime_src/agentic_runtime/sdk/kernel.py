@@ -1,8 +1,41 @@
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
 from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, StorageQuery, ToolQuery
 
 from .access import KernelAccessAPI
+
+
+@dataclass
+class KernelSDKResult:
+    success: bool
+    response: Any = None
+    error_code: str = ""
+    syscall_id: str = ""
+    audit_id: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    raw: Any = None
+
+    @classmethod
+    def from_execution_result(cls, result) -> "KernelSDKResult":
+        metadata = dict(getattr(result, "metadata", {}) or {})
+        syscall = getattr(result, "syscall", None)
+        syscall_id = str(getattr(syscall, "syscall_id", "") or metadata.get("syscall_id", ""))
+        audit_id = str(metadata.get("audit_id", ""))
+        return cls(
+            success=bool(getattr(result, "success", False)),
+            response=getattr(result, "response", None),
+            error_code=str(getattr(result, "error_code", "")),
+            syscall_id=syscall_id,
+            audit_id=audit_id,
+            metadata=metadata,
+            raw=result,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 class KernelAPI:
@@ -29,7 +62,9 @@ class _KernelBaseAPI:
         service = self.ctx.kernel_service
         if service is None:
             raise RuntimeError("kernel service is not available on this AgentContext")
-        return service.execute_request(self.ctx.app_manifest.name, query, timeout_s=timeout_s)
+        return KernelSDKResult.from_execution_result(
+            service.execute_request(self.ctx.app_manifest.name, query, timeout_s=timeout_s)
+        )
 
 
 class KernelLLMAPI(_KernelBaseAPI):
@@ -53,11 +88,25 @@ class KernelMemoryAPI(_KernelBaseAPI):
         )
         return self._execute(query, timeout_s=metadata.get("timeout_s"))
 
+    async def search(self, query: str, limit: int = 5, **filters):
+        params = {"query": query, "limit": int(limit)}
+        if filters:
+            params["filters"] = filters
+        return self._execute(MemoryQuery(operation_type="search", params=params), timeout_s=filters.get("timeout_s"))
+
 
 class KernelStorageAPI(_KernelBaseAPI):
     async def write(self, path: str, content, **metadata):
         query = StorageQuery(operation_type="sto_write", params={"path": path, "content": content, "metadata": metadata})
         return self._execute(query, timeout_s=metadata.get("timeout_s"))
+
+    async def retrieve(self, query: str, collection_name: str = "", limit: int = 5):
+        return self._execute(
+            StorageQuery(
+                operation_type="sto_retrieve",
+                params={"query": query, "collection_name": collection_name, "limit": int(limit)},
+            )
+        )
 
 
 class KernelToolAPI(_KernelBaseAPI):

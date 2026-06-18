@@ -113,4 +113,8 @@ class RuntimeServer:
         server.kernel_service = KernelService(server)
         server.executor.kernel_service = server.kernel_service
         server.executor.access_manager = server.kernel_service.access_manager
+        server.executor.event_sink = server.kernel_service.event_sink
         return server
+
+    def shutdown(self) -> None:
+        self.kernel_service.stop()

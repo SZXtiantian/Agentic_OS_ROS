@@ -1,19 +1,41 @@
 runtime:
-  audit_log_path: /opt/agentic/var/audit/audit.jsonl
-  memory_db_path: /opt/agentic/var/memory/memory.sqlite3
+  audit_log_path: var/audit/audit.jsonl
+  memory_db_path: var/memory/memory.sqlite3
   default_skill_timeout_s: 60
   allow_mock_backends: true
-  app_root: /home/ubuntu/agentic_ws/src
-  skill_root: /home/ubuntu/agentic_ws/src/agentic_runtime_src/skills
+  app_root: ../agentic_apps
+  skill_root: skills
   ros_bridge_mode: mock
   daemon_host: 127.0.0.1
   daemon_port: 8765
-  session_root: /opt/agentic/var/sessions
-  storage_root: /opt/agentic/var/storage
-  context_root: /opt/agentic/var/context
+  session_root: var/sessions
+  storage_root: var/storage
+  context_root: var/context
   scheduler_policy: single_robot_fifo
   memory_provider: sqlite
-  tool_root: /opt/agentic/tools
-  bridge_root: /opt/agentic/bridges/ros2
-  bridge_profile_root: /opt/agentic/etc/bridge_profiles
+  tool_root: var/tools
+  bridge_root: var/bridges/ros2
+  bridge_profile_root: etc/bridge_profiles
   enable_daemon_api: true
+kernel:
+  scheduler_policy: fifo
+  llm:
+    routing_strategy: sequential
+    configs:
+      - name: mock-kernel
+        backend: mock
+        enabled: true
+        capabilities: [chat, json, tool]
+  memory:
+    provider: in_memory
+    max_notes: 1000
+    two_tier_enabled: false
+  storage:
+    filesystem_type: safe_semantic
+    lsfs_enabled: false
+  tool:
+    tool_root: var/tools
+    mcp_enabled: false
+  access:
+    policy: default
+    intervention_provider: deny_by_default

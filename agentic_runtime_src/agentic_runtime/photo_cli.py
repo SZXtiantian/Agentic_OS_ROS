@@ -11,11 +11,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
 
 
-APP_DIR = Path("/home/ubuntu/agentic_ws/src/robot_photographer_agent")
-BRIDGE_SCRIPT = Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh")
+_RUNTIME_SRC = find_repo_root()
+APP_DIR = Path(os.environ.get("AGENTIC_APP_ROOT", _RUNTIME_SRC.parent / "agentic_apps")) / "robot_photographer_agent"
+BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", _RUNTIME_SRC / "scripts" / "run_robot_bridge.sh"))
 BRIDGE_LOG = Path("/tmp/agentic_photo_bridge.log")
 REQUIRED_BRIDGE_SERVICES = {
     "/agentic/robot/get_state",

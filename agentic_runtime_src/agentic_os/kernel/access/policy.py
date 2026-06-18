@@ -1,10 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
+from uuid import uuid4
 
 
-HIGH_RISK_ACTIONS = {"delete", "overwrite", "share", "privilege_change"}
+HIGH_RISK_ACTIONS = {"delete", "overwrite", "rollback", "share", "privilege_change"}
+HIGH_RISK_OPERATIONS = {
+    "storage.delete",
+    "storage.rollback",
+    "storage.share",
+    "storage.overwrite",
+    "storage.overwrite_protected",
+    "access.privilege_change",
+    "tool.install",
+    "tool.execute_admin",
+    "bridge.install_profile",
+    "bridge.rollback_profile",
+    "robot_motion.real_hardware",
+}
 SHARED_READ_LABELS = {"shared", "app_shared", "operator_shared"}
 ROBOT_MOTION_PREFIXES = ("robot.", "arm.", "gripper.", "nav2.", "moveit.", "cmd_vel")
 
@@ -44,7 +58,8 @@ class AccessDecision:
     reason: str = ""
     requires_intervention: bool = False
     intervention_id: str = ""
-    metadata: dict[str, str] = field(default_factory=dict)
+    decision_id: str = field(default_factory=lambda: f"acd_{uuid4().hex[:16]}")
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class AccessPolicy(Protocol):
@@ -177,5 +192,25 @@ class DefaultAccessPolicy:
         )
 
 
+def operation_key(request: AccessRequest) -> str:
+    resource_type = request.resource.resource_type.lower()
+    action = request.action.lower()
+    resource_id = request.resource.resource_id.lower()
+    if resource_type == "robot_motion" and resource_id == "real_hardware":
+        return "robot_motion.real_hardware"
+    return f"{resource_type}.{action}"
+
+
 def requires_intervention(request: AccessRequest) -> bool:
-    return request.irreversible or request.action.lower() in HIGH_RISK_ACTIONS
+    if request.irreversible:
+        return True
+    action = request.action.lower()
+    resource_type = request.resource.resource_type.lower()
+    resource_id = request.resource.resource_id.lower()
+    candidates = {
+        action,
+        f"{resource_type}.{action}",
+        f"{resource_type}.{resource_id}",
+        operation_key(request),
+    }
+    return bool((candidates & HIGH_RISK_OPERATIONS) or action in HIGH_RISK_ACTIONS)

@@ -10,7 +10,11 @@ class Ros2BridgeProfile:
     bridge_type: str = "ros2"
     source_workspace: str = "/home/ubuntu/agentic_ws/ros2_bridge_src"
     installed_root: str = "/opt/agentic/bridges/ros2"
-    capabilities: list[str] = field(default_factory=list)
+    workspace_root: str = ""
+    packages: list[str] = field(default_factory=list)
+    launch: dict[str, Any] = field(default_factory=dict)
+    capabilities: list[Any] = field(default_factory=list)
+    safety: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

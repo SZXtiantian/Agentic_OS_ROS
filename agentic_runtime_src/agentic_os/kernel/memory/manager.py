@@ -7,6 +7,9 @@ from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResourc
 from agentic_os.kernel.system_call import KernelSyscall
 
 from .base import MemoryProvider
+from .block import CompressedMemoryBlock
+from .compression import compress_notes, estimate_tokens
+from .eviction import choose_notes_for_eviction
 from .note import MemoryNote
 from .providers import InMemoryMemoryProvider
 
@@ -20,11 +23,22 @@ class MemoryManager:
         persistent_provider: MemoryProvider | None = None,
         access_manager: AccessManager | None = None,
         max_notes_per_agent: int = 100,
+        max_blocks_per_agent: int = 100,
+        max_ram_tokens_per_agent: int | None = None,
+        eviction_policy: str = "oldest",
+        two_tier_enabled: bool = False,
+        storage_manager: Any | None = None,
     ) -> None:
         self.provider = provider or InMemoryMemoryProvider()
         self.persistent_provider = persistent_provider
         self.access_manager = access_manager
         self.max_notes_per_agent = max_notes_per_agent
+        self.max_blocks_per_agent = max_blocks_per_agent
+        self.max_ram_tokens_per_agent = max_ram_tokens_per_agent
+        self.eviction_policy = eviction_policy
+        self.two_tier_enabled = two_tier_enabled
+        self.storage_manager = storage_manager
+        self.compressed_blocks: dict[str, list[CompressedMemoryBlock]] = {}
 
     def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
         operation = syscall.operation_type
@@ -66,9 +80,21 @@ class MemoryManager:
     def retrieve(self, agent_name: str, query: str, limit: int = 5, user_id: str = "") -> dict[str, Any]:
         result = self.provider.retrieve_memory(query, agent_name, limit, user_id)
         memories = list(result.get("memories") or [])
+        memories.extend(self._retrieve_compressed_blocks(agent_name, query, limit - len(memories)))
         if self.persistent_provider is not None and len(memories) < limit:
             persistent = self.persistent_provider.retrieve_memory(query, agent_name, limit - len(memories), user_id)
             memories.extend(persistent.get("memories") or [])
+        if self.two_tier_enabled and self.storage_manager is not None and len(memories) < limit:
+            storage_matches = self.storage_manager.retrieve(query, collection_name="memory_blocks", limit=limit - len(memories))
+            for match in storage_matches.get("matches", []):
+                memories.append(
+                    {
+                        "id": match.get("relative_path", ""),
+                        "content": match.get("content", ""),
+                        "owner_agent": agent_name,
+                        "metadata": {"source": "storage_memory_block"},
+                    }
+                )
         return {"success": True, "memories": memories[:limit]}
 
     def update(self, note: MemoryNote, subject_agent: str | None = None) -> dict[str, Any]:
@@ -130,10 +156,51 @@ class MemoryManager:
         return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
 
     def _evict_if_needed(self, owner_agent: str) -> None:
-        if self.persistent_provider is None or not hasattr(self.provider, "list_notes"):
+        if not hasattr(self.provider, "list_notes"):
             return
         notes = self.provider.list_notes(owner_agent)  # type: ignore[attr-defined]
         overflow = max(0, len(notes) - self.max_notes_per_agent)
-        for note in notes[:overflow]:
-            self.persistent_provider.add_memory(note)
+        if self.max_ram_tokens_per_agent is not None:
+            total_tokens = sum(estimate_tokens(str(note.content)) for note in notes)
+            while overflow < len(notes) and total_tokens > self.max_ram_tokens_per_agent:
+                total_tokens -= estimate_tokens(str(notes[overflow].content))
+                overflow += 1
+        evicted = choose_notes_for_eviction(notes, overflow, self.eviction_policy)
+        if evicted:
+            self._compress_evicted_notes(owner_agent, evicted)
+        for note in evicted:
+            if self.persistent_provider is not None:
+                self.persistent_provider.add_memory(note)
             self.provider.remove_memory(note.id, owner_agent)
+
+    def _compress_evicted_notes(self, owner_agent: str, notes: list[MemoryNote]) -> None:
+        block = compress_notes(owner_agent, notes, session_id=str(notes[0].metadata.get("session_id", "")) if notes else "")
+        blocks = self.compressed_blocks.setdefault(owner_agent, [])
+        blocks.append(block)
+        if len(blocks) > self.max_blocks_per_agent:
+            del blocks[: len(blocks) - self.max_blocks_per_agent]
+        if self.two_tier_enabled and self.storage_manager is not None:
+            relative_path = f"memory_blocks/{owner_agent}/{block.block_id}.json"
+            result = self.storage_manager.write(relative_path, block.to_dict())
+            if result.get("success"):
+                block.storage_ref = relative_path
+
+    def _retrieve_compressed_blocks(self, agent_name: str, query: str, limit: int) -> list[dict[str, Any]]:
+        if limit <= 0:
+            return []
+        query_text = query.lower()
+        matches: list[dict[str, Any]] = []
+        for block in self.compressed_blocks.get(agent_name, []):
+            haystack = f"{block.summary} {' '.join(block.notes)}".lower()
+            if not query_text or query_text in haystack:
+                matches.append(
+                    {
+                        "id": block.block_id,
+                        "content": block.summary,
+                        "owner_agent": agent_name,
+                        "metadata": {"compressed_block": block.to_dict()},
+                    }
+                )
+            if len(matches) >= limit:
+                break
+        return matches

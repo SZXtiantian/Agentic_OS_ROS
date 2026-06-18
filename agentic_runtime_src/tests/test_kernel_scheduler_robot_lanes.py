@@ -4,7 +4,7 @@ import threading
 import time
 
 from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
-from agentic_os.kernel.scheduler import FIFOKernelScheduler, RoundRobinKernelScheduler, SchedulerLaneSpec
+from agentic_os.kernel.scheduler import DEFAULT_SCHEDULER_LANES, FIFOKernelScheduler, RoundRobinKernelScheduler, SchedulerLaneSpec
 from agentic_os.kernel.system_call import (
     KernelSyscallStatus,
     RobotCapabilityQuery,
@@ -105,6 +105,16 @@ def test_rr_scheduler_does_not_preempt_robot_motion():
     scheduler = RoundRobinKernelScheduler(KernelQueueStore(), managers={})
 
     assert scheduler.can_preempt_lane(KernelQueueName.ROBOT_MOTION) is False
+
+
+def test_default_robot_motion_lane_is_single_worker_and_llm_batchable():
+    lanes = {lane.queue_name: lane for lane in DEFAULT_SCHEDULER_LANES}
+
+    assert lanes[KernelQueueName.ROBOT_MOTION].max_workers == 1
+    assert lanes[KernelQueueName.ROBOT_MOTION].concurrent is False
+    assert lanes[KernelQueueName.ROBOT_MOTION].preemptible is False
+    assert lanes[KernelQueueName.LLM].batchable is True
+    assert lanes[KernelQueueName.LLM].max_batch_size > 1
 
 
 def test_tool_syscall_stays_on_tool_lane_not_robot_motion():

@@ -1,6 +1,33 @@
-from agentic_os.kernel.context import SessionContextManager, SimpleGenerationContextManager
+from agentic_os.kernel.context import GenerationSnapshot, SessionContextManager, SimpleGenerationContextManager
 from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
-from agentic_os.kernel.scheduler import RoundRobinKernelScheduler
+from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
+from agentic_os.kernel.scheduler import RoundRobinKernelScheduler, SchedulerLaneSpec
+from agentic_os.kernel.system_call import KernelResponse, LLMQuery, RobotCapabilityQuery, SyscallExecutor
+
+
+class FakeStreamingProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, query):
+        return KernelResponse.ok({"text": "non-streaming"})
+
+    def complete_with_time_slice(self, query, time_slice_s, snapshot=None):
+        self.calls += 1
+        if snapshot is None:
+            return (
+                KernelResponse.ok({"partial_text": "hel"}, metadata={"suspended": True}),
+                GenerationSnapshot(
+                    generation_id="",
+                    syscall_id="",
+                    prompt_hash="",
+                    partial_response="hel",
+                    partial_text="hel",
+                    model="stream",
+                    status="suspended",
+                ),
+            )
+        return KernelResponse.ok({"text": snapshot.partial_text + "lo"}), None
 
 
 def test_session_context_snapshot_recover_still_works(tmp_path):
@@ -47,3 +74,88 @@ def test_rr_scheduler_does_not_preempt_robot_motion():
 
     assert scheduler.can_preempt_lane(KernelQueueName.ROBOT_MOTION) is False
     assert scheduler.can_preempt_lane(KernelQueueName.LLM) is True
+
+
+def test_rr_scheduler_suspends_requeues_and_resumes_fake_streaming_llm():
+    store = KernelQueueStore()
+    provider = FakeStreamingProvider()
+    manager = LLMAdapter([LLMConfig(name="stream", backend="mock")], providers={"stream": provider})
+    lane = SchedulerLaneSpec(
+        "llm",
+        KernelQueueName.LLM,
+        concurrent=True,
+        manager_key="llm",
+        preemptible=True,
+        batchable=False,
+    )
+    context = SimpleGenerationContextManager()
+    scheduler = RoundRobinKernelScheduler(
+        store,
+        managers={"llm": manager},
+        lanes=(lane,),
+        time_slice_s=0.001,
+        generation_context=context,
+    )
+    executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)
+
+    scheduler.start()
+    try:
+        result = executor.execute_request(
+            "agent_a",
+            LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hello"}]),
+            timeout_s=1.0,
+        )
+    finally:
+        scheduler.stop()
+
+    snapshot = context.restore(result.syscall.syscall_id)
+    assert provider.calls == 2
+    assert result.success is True
+    assert result.response.response_message == {"text": "hello"}
+    assert result.syscall.status == "done"
+    assert result.syscall.params["partial_text"] == "hel"
+    assert snapshot is not None
+    assert snapshot.partial_text == "hello"
+    assert snapshot.status == "done"
+
+
+def test_llm_adapter_time_slice_marks_non_preemptible_provider():
+    adapter = LLMAdapter([LLMConfig(name="mock", backend="mock")])
+
+    response, snapshot = adapter.complete_with_time_slice(LLMQuery(operation_type="chat"), time_slice_s=0.001)
+
+    assert response.success is True
+    assert response.metadata["non_preemptible_llm_call"] is True
+    assert snapshot is None
+
+
+def test_rr_scheduler_does_not_put_robot_motion_through_generation_context():
+    class RobotManager:
+        def address_request(self, syscall):
+            return {"success": True}
+
+    store = KernelQueueStore()
+    lane = SchedulerLaneSpec(
+        "robot_motion",
+        KernelQueueName.ROBOT_MOTION,
+        concurrent=False,
+        manager_key="robot_motion",
+        preemptible=False,
+    )
+    context = SimpleGenerationContextManager()
+    scheduler = RoundRobinKernelScheduler(store, managers={"robot_motion": RobotManager()}, lanes=(lane,), generation_context=context)
+    executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)
+
+    scheduler.start()
+    try:
+        result = executor.execute_request(
+            "agent_a",
+            RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.navigate_to"),
+            timeout_s=1.0,
+        )
+    finally:
+        scheduler.stop()
+
+    assert result.success is True
+    assert result.syscall.status == "done"
+    assert context.restore(result.syscall.syscall_id) is None

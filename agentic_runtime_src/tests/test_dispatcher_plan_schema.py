@@ -5,11 +5,11 @@ from agentic_runtime.dispatcher.planner import DispatcherPlanner
 from agentic_runtime.nl_gateway import GatewayFlags
 
 
-def test_dispatcher_rule_plan_matches_schema():
+def test_dispatcher_rule_plan_matches_schema(app_root):
     planner = DispatcherPlanner()
     plan = planner.plan(
         "拍一张照片",
-        AppIndex.load("/home/ubuntu/agentic_ws/src"),
+        AppIndex.load(app_root),
         GatewayFlags(mock=True),
         task_id="task_test",
         route_plan_id="plan_route_test",

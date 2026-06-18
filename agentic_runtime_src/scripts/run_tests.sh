@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 
 export PYTHONDONTWRITEBYTECODE=1
 
+PYTEST_MARK_EXPR="${PYTEST_MARK_EXPR:-not ros2 and not hardware}"
+
 python scripts/check_forbidden_imports.py
 python scripts/check_filesystem_layout.py
 
@@ -13,6 +15,6 @@ test -f docs/architecture.md
 test -f configs/places.yaml
 test -d agentic_runtime
 
-pytest -q
+pytest -m "$PYTEST_MARK_EXPR" -q
 
 echo "Agentic OS MVP checks passed."

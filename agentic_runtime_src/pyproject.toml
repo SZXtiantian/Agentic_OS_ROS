@@ -19,9 +19,15 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["agentic_runtime*"]
+include = ["agentic_runtime*", "agentic_os*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["-p", "no:cacheprovider"]
+markers = [
+  "portable: no network, no ROS2, no hardware",
+  "integration: local integration with fake services",
+  "ros2: requires ROS2 environment",
+  "hardware: requires real robot hardware",
+]

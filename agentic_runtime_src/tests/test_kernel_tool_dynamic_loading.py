@@ -6,7 +6,7 @@ import time
 import pytest
 
 from agentic_os.kernel.system_call import KernelSyscall
-from agentic_os.kernel.tool import MCPToolServer, ToolManager
+from agentic_os.kernel.tool import MCPToolServer, ToolManager, ToolSandboxPolicy
 
 
 def test_dynamic_tool_loads_from_tool_root(tmp_path):
@@ -27,8 +27,11 @@ permissions:
 conflicts:
   - calculator.add
 sandbox:
+  mode: in_process
   network: false
   filesystem: false
+mcp:
+  enabled: false
 """,
         encoding="utf-8",
     )
@@ -41,6 +44,9 @@ sandbox:
 
     assert result["success"] is True
     assert result["result"] == {"sum": 3}
+    assert loaded.version == "0"
+    assert loaded.mcp == {"enabled": False}
+    assert manager.status()["recent_events"][-1]["event_type"] == "tool.done"
 
 
 def test_tool_conflict_map_blocks_same_tool_concurrent_execution():
@@ -87,6 +93,17 @@ def test_robot_tool_prefix_forbidden():
     assert result["error_code"] == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"
 
 
+def test_cmd_vel_path_prefix_forbidden():
+    manager = ToolManager()
+
+    result = manager.address_request(
+        KernelSyscall.create("agent_a", "tool", "/cmd_vel", {"name": "/cmd_vel"})
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"
+
+
 def test_tool_outside_tool_root_rejected(tmp_path):
     tool_root = tmp_path / "tools"
     outside = tmp_path / "outside"
@@ -103,4 +120,58 @@ def test_tool_outside_tool_root_rejected(tmp_path):
 def test_mcp_disabled_by_default(monkeypatch):
     monkeypatch.delenv("AGENTIC_ENABLE_MCP_TOOLS", raising=False)
 
-    assert MCPToolServer().status() == {"enabled": False, "implemented": False}
+    server = MCPToolServer()
+
+    assert server.status() == {"enabled": False, "implemented": True, "running": False, "tool_count": 0}
+    assert server.start()["error_code"] == "TOOL_MCP_DISABLED"
+    assert server.list_tools()["error_code"] == "TOOL_MCP_DISABLED"
+
+
+def test_mcp_enabled_lifecycle_and_call():
+    server = MCPToolServer(enabled=True)
+    server.register_tool("echo", lambda args: {"message": args["message"]})
+
+    assert server.list_tools()["error_code"] == "TOOL_MCP_NOT_RUNNING"
+    assert server.start() == {"success": True, "status": "running"}
+    assert server.list_tools() == {"success": True, "tools": ["echo"]}
+    assert server.call_tool("echo", {"message": "hi"})["result"] == {"message": "hi"}
+    assert server.stop() == {"success": True, "status": "stopped"}
+
+
+def test_sandbox_rejects_network_and_disabled_modes(tmp_path):
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    manager = ToolManager(tool_root=tool_root)
+
+    assert manager.sandbox_policy.validate({"mode": "subprocess"})["error_code"] == "TOOL_SANDBOX_MODE_DISABLED"
+    assert manager.sandbox_policy.validate({"network": True})["error_code"] == "TOOL_SANDBOX_NETWORK_DISABLED"
+
+
+def test_manifest_network_sandbox_rejected(tmp_path):
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    (tool_root / "calculator.py").write_text("def add(args):\n    return {'ok': True}\n", encoding="utf-8")
+    manifest = tool_root / "calculator.add.yaml"
+    manifest.write_text(
+        """
+name: calculator.add
+entrypoint: calculator:add
+sandbox:
+  mode: in_process
+  network: true
+""",
+        encoding="utf-8",
+    )
+    manager = ToolManager(tool_root=tool_root)
+
+    with pytest.raises(ValueError, match="TOOL_SANDBOX_NETWORK_DISABLED"):
+        manager.load_manifest(manifest)
+
+
+def test_sandbox_policy_allows_workspace_write_under_tool_root(tmp_path):
+    policy = ToolSandboxPolicy(workspace_root=tmp_path)
+
+    result = policy.validate({"filesystem": "workspace_write", "workspace": "workspace"})
+
+    assert result["success"] is True
+    assert result["sandbox"]["filesystem"] == "workspace_write"

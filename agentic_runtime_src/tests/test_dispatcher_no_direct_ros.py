@@ -1,8 +1,5 @@
-from pathlib import Path
-
-
-def test_dispatcher_source_has_no_direct_ros_imports_or_calls():
-    root = Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/agentic_runtime/dispatcher")
+def test_dispatcher_source_has_no_direct_ros_imports_or_calls(runtime_src):
+    root = runtime_src / "agentic_runtime" / "dispatcher"
     forbidden = [
         "import " + "rclpy",
         "from " + "rclpy",

@@ -52,6 +52,19 @@ class KernelResponse:
     error_code: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @classmethod
+    def ok(cls, response_message: Any = None, metadata: dict[str, Any] | None = None) -> "KernelResponse":
+        return cls(True, response_message=response_message, metadata=dict(metadata or {}))
+
+    @classmethod
+    def error(
+        cls,
+        error_code: str,
+        response_message: Any = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> "KernelResponse":
+        return cls(False, response_message=response_message, error_code=error_code, metadata=dict(metadata or {}))
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,

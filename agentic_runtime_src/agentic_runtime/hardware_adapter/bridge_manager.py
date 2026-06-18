@@ -35,14 +35,29 @@ class BridgeManager:
             "metadata": metadata,
         }
 
+    def plan(self, profile: Ros2BridgeProfile) -> dict:
+        installer = self._installer(profile)
+        return installer.plan()
+
+    def validate(self, profile: Ros2BridgeProfile) -> dict:
+        return self._installer(profile).validate()
+
+    def build_workspace(self, profile: Ros2BridgeProfile, *, dry_run: bool = True) -> dict:
+        return self._installer(profile).build_workspace(dry_run=dry_run)
+
+    def activate(self, profile: Ros2BridgeProfile) -> dict:
+        result = self._installer(profile).activate()
+        self._write_lifecycle_status(profile, "active", result)
+        return result
+
+    def rollback(self, profile: Ros2BridgeProfile) -> dict:
+        result = self._installer(profile).rollback()
+        self._write_lifecycle_status(profile, "rolled_back", result)
+        return result
+
     def install_profile(self, profile: Ros2BridgeProfile, *, dry_run: bool = True) -> dict:
         self.bridge_root.mkdir(parents=True, exist_ok=True)
-        installer = BridgeInstaller(
-            Path(profile.source_workspace),
-            self.bridge_root,
-            profile_root=self.profile_root,
-            **self.installer_kwargs,
-        )
+        installer = self._installer(profile)
         install_result = installer.install(dry_run=dry_run)
         if not install_result.get("success", False):
             return install_result
@@ -54,6 +69,9 @@ class BridgeManager:
             "source_workspace": plan["source_workspace"],
             "installed_root": str(self.bridge_root),
             "capabilities": profile.capabilities or self._capability_names(),
+            "packages": profile.packages or plan["required_packages"],
+            "launch": profile.launch,
+            "safety": profile.safety,
             "status": "installed_profile",
             "dry_run": dry_run,
             "build_timestamp": _utc_now(),
@@ -70,6 +88,29 @@ class BridgeManager:
         )
         return status
 
+    def _installer(self, profile: Ros2BridgeProfile) -> BridgeInstaller:
+        return BridgeInstaller(
+            Path(profile.source_workspace),
+            self.bridge_root,
+            profile_root=self.profile_root,
+            required_packages=list(profile.packages or []) or None,
+            **self.installer_kwargs,
+        )
+
+    def _write_lifecycle_status(self, profile: Ros2BridgeProfile, lifecycle_status: str, result: dict[str, Any]) -> None:
+        status = {
+            "success": bool(result.get("success", False)),
+            "profile": profile.name,
+            "bridge_type": profile.bridge_type,
+            "source_workspace": profile.source_workspace,
+            "installed_root": str(self.bridge_root),
+            "status": lifecycle_status,
+            "updated_at": _utc_now(),
+            "result": result,
+        }
+        self.bridge_root.mkdir(parents=True, exist_ok=True)
+        (self.bridge_root / "status.json").write_text(json.dumps(status, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
     def _capability_names(self) -> list[str]:
         if self.capability_registry is None:
             return []
@@ -82,6 +123,9 @@ class BridgeManager:
         return {
             **profile.to_dict(),
             "capabilities": status["capabilities"],
+            "packages": status.get("packages", profile.packages),
+            "launch": status.get("launch", profile.launch),
+            "safety": status.get("safety", profile.safety),
             "capability_specs": capabilities,
             "status": status["status"],
             "dry_run": status["dry_run"],

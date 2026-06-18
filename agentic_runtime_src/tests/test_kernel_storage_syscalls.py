@@ -94,5 +94,42 @@ def test_sto_share_updates_policy_only_after_confirmation(tmp_path):
     assert allowed["sharing_policy"]["metadata"] == {"scope": "operator"}
 
 
-def test_lsfs_adapter_disabled_shell():
-    assert LSFSAdapter().status() == {"enabled": False, "implemented": False}
+def test_lsfs_adapter_status_implemented_true_when_enabled(tmp_path):
+    adapter = LSFSAdapter(tmp_path / "lsfs")
+
+    status = adapter.status()
+
+    assert status["enabled"] is True
+    assert status["implemented"] is True
+    assert status["root"] == str(tmp_path / "lsfs")
+
+
+def test_lsfs_adapter_mount_write_retrieve_and_version(tmp_path):
+    adapter = LSFSAdapter(tmp_path / "lsfs")
+
+    mounted = adapter.mount("workspace")
+    first = adapter.write("workspace/reports/x.md", "old kitchen semantic note")
+    second = adapter.write("workspace/reports/x.md", "new kitchen semantic note", metadata={"kind": "report"})
+    retrieved = adapter.retrieve("kitchen", collection_name="workspace", limit=5)
+
+    assert mounted["success"] is True
+    assert (tmp_path / "lsfs" / "workspace").is_dir()
+    assert first["version"] == ""
+    assert second["version"].endswith(".bak")
+    assert second["metadata"] == {"kind": "report"}
+    assert retrieved["matches"][0]["relative_path"] == "workspace/reports/x.md"
+    assert "snippet" in retrieved["matches"][0]
+
+
+def test_sto_rejects_bridge_profile_path(tmp_path):
+    storage = StorageManager(tmp_path / "storage")
+
+    with pytest.raises(ValueError, match="unsafe storage path"):
+        storage.address_request(
+            KernelSyscall.create(
+                "agent_a",
+                "storage",
+                "sto_write",
+                {"path": "bridge_profiles/robot.yaml", "content": "bad"},
+            )
+        )

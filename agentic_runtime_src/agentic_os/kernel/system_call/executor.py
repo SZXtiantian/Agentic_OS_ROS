@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any, Callable
 
-from agentic_os.kernel.hooks import KernelQueueStore
+from agentic_os.kernel.hooks import KernelEventSink, KernelQueueStore
 
 from .factory import create_syscall as create_typed_syscall
 from .models import KernelSyscall, KernelSyscallStatus
@@ -49,13 +49,19 @@ class SyscallExecutor:
     separation while letting runtime code register explicit handlers.
     """
 
-    def __init__(self, queue_store: KernelQueueStore | None = None, default_timeout_s: float = 60.0) -> None:
+    def __init__(
+        self,
+        queue_store: KernelQueueStore | None = None,
+        default_timeout_s: float = 60.0,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self._handlers: dict[str, SyscallHandler] = {}
         self._lock = Lock()
         self._pid_lock = Lock()
         self._next_pid_value = 0
         self.queue_store = queue_store or KernelQueueStore()
         self.default_timeout_s = default_timeout_s
+        self.event_sink = event_sink
 
     def register(self, target: str, handler: SyscallHandler) -> None:
         with self._lock:
@@ -85,17 +91,19 @@ class SyscallExecutor:
         syscall.mark_active()
         syscall.set_pid(self._next_pid())
         syscall.set_created_time(time.time())
+        self._emit("syscall.created", syscall, queue_name=getattr(syscall, "queue_name", syscall.target))
         syscall.mark_queued()
         queue_name = getattr(syscall, "queue_name", syscall.target)
         self.queue_store.add(queue_name, syscall)
 
         wait_timeout = self.default_timeout_s if timeout_s is None else timeout_s
+        syscall.time_limit_s = wait_timeout
         completed = syscall.wait(wait_timeout)
         ended = time.monotonic()
         if not completed:
-            response = KernelResponse(False, error_code="KERNEL_SYSCALL_TIMEOUT")
-            syscall.error_code = response.error_code
-            syscall.finish(response=response, status=KernelSyscallStatus.TIMEOUT)
+            response = KernelResponse.error("KERNEL_SYSCALL_TIMEOUT")
+            syscall.timeout(response=response)
+            self._emit("syscall.timeout", syscall, queue_name=queue_name, error_code=response.error_code)
             return SyscallExecutionResult(
                 syscall=syscall,
                 response=response,
@@ -123,9 +131,7 @@ class SyscallExecutor:
         with self._lock:
             handler = self._handlers.get(syscall.target)
         if handler is None:
-            syscall.status = KernelSyscallStatus.REJECTED
-            syscall.error_code = "KERNEL_SYSCALL_TARGET_NOT_FOUND"
-            syscall.ended_at = syscall.ended_at or syscall.created_at
+            syscall.reject("KERNEL_SYSCALL_TARGET_NOT_FOUND", f"target not found: {syscall.target}")
             return SyscallExecutionResult(syscall=syscall, success=False, error_code=syscall.error_code)
 
         started = time.monotonic()
@@ -140,8 +146,7 @@ class SyscallExecutor:
                 ended_monotonic=time.monotonic(),
             )
         except TimeoutError as exc:
-            syscall.finish(response={"reason": str(exc)}, status=KernelSyscallStatus.TIMEOUT)
-            syscall.error_code = "KERNEL_SYSCALL_TIMEOUT"
+            syscall.timeout(response={"success": False, "error_code": "KERNEL_SYSCALL_TIMEOUT", "reason": str(exc)})
             return SyscallExecutionResult(
                 syscall=syscall,
                 response=syscall.response,
@@ -179,3 +184,14 @@ class SyscallExecutor:
         if isinstance(response, dict):
             return str(response.get("error_code", syscall.error_code))
         return syscall.error_code
+
+    def _emit(self, event_type: str, syscall: KernelSyscall, **metadata: Any) -> None:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                event_type,
+                syscall_id=syscall.syscall_id,
+                agent_name=syscall.agent_name,
+                operation_type=syscall.operation_type,
+                status=syscall.status,
+                **metadata,
+            )

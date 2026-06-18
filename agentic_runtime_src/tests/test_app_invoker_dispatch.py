@@ -5,13 +5,13 @@ from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
 from agentic_runtime.server import RuntimeServer
 
 
-def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch):
+def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch, app_root):
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "raw"))
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
 
     async def run():
         server = RuntimeServer.create(mock=True)
-        invoker = AppInvoker(server, AppIndex.load("/home/ubuntu/agentic_ws/src"))
+        invoker = AppInvoker(server, AppIndex.load(app_root))
         result = await invoker.run_app(
             "robot_photographer_agent",
             {"text": "拍一张照片", "mock": True},

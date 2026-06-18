@@ -1,9 +1,16 @@
 from agentic_os.kernel.access import (
+    AccessDecision,
+    AccessDecisionLog,
     AccessManager,
     AccessRequest,
     AccessResource,
+    AccessRule,
     AccessSubject,
     AlwaysAllowTestInterventionProvider,
+    FileQueueInterventionProvider,
+    InMemoryAccessDecisionLog,
+    InMemoryAccessStore,
+    JsonFileAccessStore,
 )
 
 
@@ -112,3 +119,142 @@ def test_robot_motion_requires_robot_operator_group():
     assert denied.allowed is False
     assert denied.error_code == "ACCESS_ROBOT_OPERATOR_REQUIRED"
     assert allowed.allowed is True
+
+
+def test_dynamic_acl_can_allow_private_resource():
+    store = InMemoryAccessStore(
+        [
+            AccessRule(
+                subject_agent="agent_b",
+                action="read",
+                resource_type="memory",
+                resource_id_pattern="note_*",
+                effect="allow",
+                reason="shared for review",
+            )
+        ]
+    )
+    manager = AccessManager(access_store=store)
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_b"),
+            action="read",
+            resource=AccessResource("memory", "note_1", owner_agent="agent_a"),
+        )
+    )
+
+    assert decision.allowed is True
+    assert decision.decision_id.startswith("acd_")
+    assert decision.metadata["access_rule_effect"] == "allow"
+
+
+def test_dynamic_acl_deny_overrides_owner_allow():
+    store = InMemoryAccessStore(
+        [
+            AccessRule(
+                subject_agent="agent_a",
+                action="read",
+                resource_type="memory",
+                resource_id_pattern="note_secret",
+                effect="deny",
+                reason="sealed by operator",
+            )
+        ]
+    )
+    manager = AccessManager(access_store=store)
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a"),
+            action="read",
+            resource=AccessResource("memory", "note_secret", owner_agent="agent_a"),
+        )
+    )
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACCESS_DYNAMIC_DENY"
+    assert decision.reason == "sealed by operator"
+
+
+def test_dynamic_acl_can_require_intervention():
+    store = InMemoryAccessStore(
+        [
+            AccessRule(
+                subject_group="operators",
+                action="read",
+                resource_type="storage",
+                resource_id_pattern="reports/*",
+                effect="require_intervention",
+                reason="operator approval required",
+            )
+        ]
+    )
+    manager = AccessManager(access_store=store, intervention_provider=AlwaysAllowTestInterventionProvider())
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", groups=("operators",)),
+            action="read",
+            resource=AccessResource("storage", "reports/today.md", owner_agent="agent_a"),
+        )
+    )
+
+    assert decision.allowed is True
+    assert decision.requires_intervention is True
+    assert decision.metadata["access_rule_effect"] == "require_intervention"
+
+
+def test_json_access_store_round_trips_rules(tmp_path):
+    path = tmp_path / "acl.json"
+    store = JsonFileAccessStore(path)
+    store.add_rule(AccessRule(subject_agent="agent_b", action="read", resource_type="memory", effect="allow"))
+
+    reloaded = JsonFileAccessStore(path)
+    request = AccessRequest(
+        subject=AccessSubject(agent_name="agent_b"),
+        action="read",
+        resource=AccessResource("memory", "note_1", owner_agent="agent_a"),
+    )
+
+    assert len(reloaded.list_rules()) == 1
+    assert reloaded.matching_rules(request)[0].effect == "allow"
+
+
+def test_decision_log_records_sanitized_metadata():
+    class MetadataPolicy:
+        def evaluate(self, request):
+            return AccessDecision(allowed=True, reason="ok", metadata={"api_token": "secret", "safe": "ok"})
+
+    decision_log = InMemoryAccessDecisionLog()
+    manager = AccessManager(policy=MetadataPolicy(), decision_log=decision_log)
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a"),
+            action="read",
+            resource=AccessResource("memory", "note_1", owner_agent="agent_a"),
+        )
+    )
+
+    assert decision.allowed is True
+    assert decision_log.records[0]["decision_id"] == decision.decision_id
+    assert decision_log.records[0]["metadata"] == {"api_token": "[REDACTED]", "safe": "ok"}
+
+
+def test_file_queue_intervention_provider_writes_pending_request(tmp_path):
+    queue_path = tmp_path / "interventions.jsonl"
+    manager = AccessManager(intervention_provider=FileQueueInterventionProvider(queue_path))
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a"),
+            action="delete",
+            resource=AccessResource("memory", "note_1", owner_agent="agent_a"),
+        )
+    )
+
+    assert decision.allowed is False
+    assert decision.requires_intervention is True
+    assert decision.intervention_id.startswith("ivn_")
+    assert '"ACCESS_INTERVENTION_REQUIRED"' in queue_path.read_text(encoding="utf-8")

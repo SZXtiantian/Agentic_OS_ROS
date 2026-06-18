@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
 
 
@@ -34,7 +35,7 @@ For real robot commands, this CLI starts the AgenticOS ROS bridge automatically
 when the bridge services are not already running.
 """
 
-BRIDGE_SCRIPT = Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh")
+BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_bridge.sh"))
 BRIDGE_LOG = Path("/tmp/agentic_chat_bridge.log")
 REQUIRED_BRIDGE_SERVICES = {
     "/agentic/robot/get_state",

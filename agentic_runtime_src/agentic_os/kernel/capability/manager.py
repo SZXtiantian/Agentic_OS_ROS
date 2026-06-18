@@ -1,8 +1,13 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from agentic_os.kernel.system_call import KernelSyscall
+
+
+class RobotCapabilityBackend(Protocol):
+    def execute_capability(self, syscall: KernelSyscall) -> dict[str, Any]:
+        ...
 
 
 class RobotCapabilityManager:
@@ -13,8 +18,8 @@ class RobotCapabilityManager:
     Resource -> Safety -> Audit -> Bridge chain.
     """
 
-    def __init__(self, skill_adapter: Any | None = None) -> None:
-        self.skill_adapter = skill_adapter
+    def __init__(self, backend: RobotCapabilityBackend | Any | None = None, skill_adapter: Any | None = None) -> None:
+        self.skill_adapter = backend if backend is not None else skill_adapter
 
     def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
         if self.skill_adapter is None:
@@ -23,6 +28,8 @@ class RobotCapabilityManager:
                 "error_code": "ROBOT_MANAGER_NOT_WIRED",
                 "skill_name": self._skill_name(syscall),
             }
+        if hasattr(self.skill_adapter, "execute_capability"):
+            return self.skill_adapter.execute_capability(syscall)
         if hasattr(self.skill_adapter, "address_request"):
             return self.skill_adapter.address_request(syscall)
         if hasattr(self.skill_adapter, "execute_syscall"):

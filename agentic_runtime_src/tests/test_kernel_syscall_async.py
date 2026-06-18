@@ -13,6 +13,29 @@ from agentic_os.kernel.system_call import (
 )
 
 
+def test_syscall_transition_helpers_and_agent_aliases():
+    syscall = KernelSyscall.create("agent_a", "memory", "remember", {"key": "x"})
+    syscall.aid = "aid-1"
+    syscall.agent_id = "agent-id-1"
+
+    syscall.mark_active()
+    assert syscall.status == KernelSyscallStatus.ACTIVE
+    syscall.mark_queued()
+    assert syscall.status == KernelSyscallStatus.QUEUED
+    syscall.mark_started()
+    assert syscall.status == KernelSyscallStatus.EXECUTING
+    syscall.mark_suspending()
+    assert syscall.status == KernelSyscallStatus.SUSPENDING
+    syscall.mark_suspended()
+    assert syscall.status == KernelSyscallStatus.SUSPENDED
+    syscall.mark_resuming()
+    assert syscall.status == KernelSyscallStatus.RESUMING
+
+    payload = syscall.to_dict()
+    assert payload["aid"] == "aid-1"
+    assert payload["agent_id"] == "agent-id-1"
+
+
 def test_syscall_has_event_and_wait():
     syscall = KernelSyscall.create("agent_a", "memory", "remember", {"key": "x"})
 
@@ -74,3 +97,41 @@ def test_execute_request_timeout_sets_timeout_status():
     assert result.error_code == "KERNEL_SYSCALL_TIMEOUT"
     assert result.syscall.status == KernelSyscallStatus.TIMEOUT
     assert result.syscall.wait(timeout_s=0.01) is True
+    assert result.syscall.time_limit_s == 0.01
+
+
+def test_cancel_reject_and_response_helpers_set_event():
+    cancelled = KernelSyscall.create("agent_a", "memory", "recall")
+    cancelled.cancel("user requested")
+
+    assert cancelled.status == KernelSyscallStatus.CANCELLED
+    assert cancelled.error_code == "KERNEL_SYSCALL_CANCELLED"
+    assert cancelled.wait(timeout_s=0.01) is True
+
+    rejected = KernelSyscall.create("agent_a", "missing", "noop")
+    rejected.reject("KERNEL_SYSCALL_TARGET_NOT_FOUND", "missing manager")
+
+    assert rejected.status == KernelSyscallStatus.REJECTED
+    assert rejected.response["error_code"] == "KERNEL_SYSCALL_TARGET_NOT_FOUND"
+    assert rejected.wait(timeout_s=0.01) is True
+
+    ok = KernelResponse.ok({"value": 1}, metadata={"queue": "memory"})
+    err = KernelResponse.error("NOPE", metadata={"reason": "test"})
+
+    assert ok.success is True
+    assert ok.response_message == {"value": 1}
+    assert ok.metadata["queue"] == "memory"
+    assert err.success is False
+    assert err.error_code == "NOPE"
+
+
+def test_execute_missing_target_rejects_with_structured_error():
+    executor = SyscallExecutor()
+    syscall = KernelSyscall.create("agent_a", "missing", "noop")
+
+    result = executor.execute(syscall)
+
+    assert result.success is False
+    assert result.error_code == "KERNEL_SYSCALL_TARGET_NOT_FOUND"
+    assert syscall.status == KernelSyscallStatus.REJECTED
+    assert syscall.wait(timeout_s=0.01) is True

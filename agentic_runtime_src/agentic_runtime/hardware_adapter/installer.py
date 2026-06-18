@@ -100,6 +100,64 @@ class BridgeInstaller:
             "warnings": warnings,
         }
 
+    def validate(self) -> dict:
+        plan = self.plan()
+        if plan["missing_packages"]:
+            return {
+                "success": False,
+                "error_code": "BRIDGE_REQUIRED_PACKAGES_MISSING",
+                "reason": "; ".join(plan["missing_packages"]),
+                "plan": plan,
+            }
+        if not self.source_workspace.exists():
+            return {
+                "success": False,
+                "error_code": "BRIDGE_SOURCE_WORKSPACE_MISSING",
+                "reason": "source workspace does not exist",
+                "plan": plan,
+            }
+        return {"success": True, "plan": plan}
+
+    def build_workspace(self, dry_run: bool = True) -> dict:
+        return self.install(dry_run=dry_run)
+
+    def activate(self) -> dict:
+        self.install_root.mkdir(parents=True, exist_ok=True)
+        status = self.status()
+        metadata = {
+            **dict(status.get("metadata") or {}),
+            "success": True,
+            "status": "active",
+            "activated_at": _utc_now(),
+        }
+        self._write_status(metadata)
+        return metadata
+
+    def rollback(self) -> dict:
+        self.install_root.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            "success": True,
+            "status": "rolled_back",
+            "rolled_back_at": _utc_now(),
+            "installed": False,
+        }
+        self._write_status(metadata)
+        return metadata
+
+    def status(self) -> dict:
+        status_path = self.install_root / "status.json"
+        metadata = {}
+        if status_path.exists():
+            metadata = json.loads(status_path.read_text(encoding="utf-8"))
+        return {
+            "success": True,
+            "install_root": str(self.install_root),
+            "source_workspace": str(self.source_workspace),
+            "status": metadata.get("status", "not_installed"),
+            "installed": bool(metadata.get("installed", False) or metadata.get("status") in {"installed", "active"}),
+            "metadata": metadata,
+        }
+
     def install(self, dry_run: bool = True) -> dict:
         plan = self.plan()
         if dry_run:

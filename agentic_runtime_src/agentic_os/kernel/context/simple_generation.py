@@ -22,12 +22,26 @@ class SimpleGenerationContextManager:
         prompt: Any,
         partial_response: str,
         metadata: dict[str, Any] | None = None,
+        *,
+        agent_name: str = "",
+        model: str = "",
+        status: str = "running",
+        tool_state: dict[str, Any] | None = None,
+        json_state: dict[str, Any] | None = None,
     ) -> GenerationSnapshot:
+        normalized_prompt = list(prompt) if isinstance(prompt, list) else []
         snapshot = GenerationSnapshot(
             generation_id=generation_id,
             syscall_id=syscall_id,
             prompt_hash=self.prompt_hash(prompt),
             partial_response=partial_response,
+            agent_name=agent_name,
+            model=model,
+            messages=normalized_prompt,
+            partial_text=partial_response,
+            tool_state=dict(tool_state or {}),
+            json_state=dict(json_state or {}),
+            status=status,
             metadata=dict(metadata or {}),
         )
         with self._lock:

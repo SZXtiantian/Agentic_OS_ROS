@@ -11,20 +11,24 @@ import yaml
 class ToolManifest:
     name: str
     entrypoint: str
+    version: str = "0"
     description: str = ""
     permissions: tuple[str, ...] = ()
     conflicts: tuple[str, ...] = ()
     sandbox: dict[str, Any] = field(default_factory=dict)
+    mcp: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ToolManifest":
         return cls(
             name=str(data["name"]),
             entrypoint=str(data["entrypoint"]),
+            version=str(data.get("version", "0")),
             description=str(data.get("description", "")),
             permissions=tuple(data.get("permissions") or ()),
             conflicts=tuple(data.get("conflicts") or ()),
             sandbox=dict(data.get("sandbox") or {}),
+            mcp=dict(data.get("mcp") or {}),
         )
 
     @classmethod

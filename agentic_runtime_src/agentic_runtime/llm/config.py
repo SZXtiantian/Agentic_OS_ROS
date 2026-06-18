@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from agentic_runtime.config import find_repo_root
+
 from .errors import LLMError
 
 
@@ -80,8 +82,7 @@ def _candidate_model_paths(config_path: str | Path | None) -> list[Path]:
         paths.append(Path(os.environ["AGENTIC_MODELS_CONFIG"]).expanduser())
     etc_root = Path(os.environ.get("AGENTIC_ETC", "/opt/agentic/etc")).expanduser()
     paths.append(etc_root / "models.yaml")
-    paths.append(Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/configs/models.yaml"))
-    paths.append(Path("/home/ubuntu/staging_opt_agentic/etc/models.yaml"))
+    paths.append(find_repo_root() / "configs" / "models.yaml")
     return paths
 
 

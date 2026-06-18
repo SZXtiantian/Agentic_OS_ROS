@@ -14,7 +14,17 @@ from agentic_os.kernel.system_call import KernelSyscall
 class StorageManager:
     """Safe file/artifact manager ported from AIOS storage responsibilities."""
 
-    FORBIDDEN_ROOT_PARTS = {"audit", "bridges", "ros2_ws", "ros2_bridge_src", "driver_config"}
+    FORBIDDEN_ROOT_PARTS = {
+        "audit",
+        "task_logs",
+        "config",
+        "configs",
+        "bridge_profiles",
+        "bridges",
+        "ros2_ws",
+        "ros2_bridge_src",
+        "driver_config",
+    }
 
     def __init__(self, root: str | Path, access_manager: AccessManager | None = None) -> None:
         self.root = Path(root)
@@ -53,18 +63,19 @@ class StorageManager:
 
     def write(self, relative_path: str, content: Any) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
+        version = ""
         if path.exists():
             decision = self._check_access("overwrite", relative_path, irreversible=True)
             if not decision.get("success", True):
                 return decision
-            self._save_version(path, relative_path)
+            version = self._save_version(path, relative_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, (dict, list)):
             payload = json.dumps(content, ensure_ascii=False, indent=2, sort_keys=True)
         else:
             payload = str(content)
         path.write_text(payload, encoding="utf-8")
-        return {"success": True, "path": str(path), "size_bytes": path.stat().st_size}
+        return {"success": True, "path": str(path), "size_bytes": path.stat().st_size, "version": version}
 
     def read(self, relative_path: str) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -116,7 +127,16 @@ class StorageManager:
             relative = path.relative_to(self.root)
             content = path.read_text(encoding="utf-8", errors="ignore")
             if not query_text or query_text in content.lower() or query_text in str(relative).lower():
-                matches.append({"path": str(path), "relative_path": str(relative), "content": content})
+                matches.append(
+                    {
+                        "path": str(path),
+                        "relative_path": str(relative),
+                        "content": content,
+                        "snippet": content[:200],
+                        "score": 1.0 if query_text and query_text in content.lower() else 0.5,
+                        "metadata": {"collection_name": collection_name},
+                    }
+                )
             if len(matches) >= limit:
                 break
         return {"success": True, "matches": matches}
@@ -178,11 +198,13 @@ class StorageManager:
             "requires_intervention": decision.requires_intervention,
         }
 
-    def _save_version(self, path: Path, relative_path: str) -> None:
+    def _save_version(self, path: Path, relative_path: str) -> str:
         version_dir = self._version_dir(relative_path)
         version_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
-        shutil.copy2(path, version_dir / f"{timestamp}.bak")
+        version_name = f"{timestamp}.bak"
+        shutil.copy2(path, version_dir / version_name)
+        return version_name
 
     def _version_dir(self, relative_path: str) -> Path:
         digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()

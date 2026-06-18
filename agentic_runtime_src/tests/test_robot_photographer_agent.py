@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest
 
 
-APP_DIR = Path("/home/ubuntu/agentic_ws/src/robot_photographer_agent")
+APP_DIR = Path(os.environ["AGENTIC_APP_ROOT"]) / "robot_photographer_agent"
 
 
 def _load_entry():
@@ -215,7 +216,7 @@ def test_skill_registry_includes_capture_and_recent_photos():
 
 
 def test_tool_wrapper_does_not_import_ros():
-    path = Path("/home/ubuntu/agentic_ws/src/agentic_runtime_src/agentic_runtime/agenticos_tools.py")
+    path = Path(os.environ["AGENTIC_RUNTIME_SRC"]) / "agentic_runtime" / "agenticos_tools.py"
     text = path.read_text(encoding="utf-8")
     forbidden = ["import rclpy", "from rclpy", "/servo_controller", "/depth_cam", "ActionClient"]
     for pattern in forbidden:
