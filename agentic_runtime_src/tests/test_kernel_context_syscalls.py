@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from agentic_os.kernel.context import ContextManager
 from agentic_os.kernel.context.providers import SQLiteContextProvider
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.system_call import ContextQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.sdk import AgentContext
@@ -104,6 +105,7 @@ def test_context_snapshot_recover_and_compact(tmp_path):
             ContextQuery(operation_type="ctx_compact", params={"max_tokens": 8}, session_id="sess_2"),
             timeout_s=1.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
@@ -112,6 +114,41 @@ def test_context_snapshot_recover_and_compact(tmp_path):
     assert recover.response.data["state"] == {"plan": ["inspect", "report"]}
     assert compact.success is True
     assert "compacted" in compact.response.data
+    assert status["context"]["compact_policy"]["mode"] == "structural_truncation"
+    assert status["context"]["compact_policy"]["semantic_summary"] is False
+    compact_audits = [
+        event
+        for event in status["events"]["recent"]
+        if event["event_type"] == "context.audit" and event["metadata"]["operation_type"] == "ctx_compact"
+    ]
+    assert compact_audits
+    assert compact_audits[-1]["metadata"]["compact_mode"] == "structural_truncation"
+
+
+def test_context_audit_does_not_leak_values(tmp_path):
+    sink = InMemoryKernelEventSink()
+    manager = ContextManager(tmp_path / "ctx", event_sink=sink)
+
+    put = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_put",
+            params={"session_id": "sess_1", "key": "secret.key", "value": "secret context value"},
+        )
+    )
+    delete = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_delete",
+            params={"session_id": "sess_1", "key": "secret.key"},
+        )
+    )
+
+    assert put.success is True
+    assert delete.success is True
+    events = [event for event in sink.recent(limit=10) if event["event_type"] == "context.audit"]
+    assert [event["metadata"]["operation_type"] for event in events] == ["ctx_put", "ctx_delete"]
+    assert "secret context value" not in str(events)
 
 
 def test_context_sdk_facade_uses_kernel_service(tmp_path):

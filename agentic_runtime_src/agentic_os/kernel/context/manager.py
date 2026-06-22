@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import ContextQuery, KernelResponse, KernelSyscall
 
 from .providers import ContextProvider, SQLiteContextProvider
@@ -41,10 +42,12 @@ class ContextManager:
         provider: ContextProvider | None = None,
         *,
         default_session_id: str = "default",
+        event_sink: KernelEventSink | None = None,
     ) -> None:
         self.root = Path(root or "/tmp/agentic_kernel_context")
         self.provider = provider or SQLiteContextProvider(self.root / "context.sqlite3")
         self.default_session_id = default_session_id
+        self.event_sink = event_sink
         self._events: list[dict[str, Any]] = []
 
     def address_request(self, syscall: KernelSyscall) -> KernelResponse:
@@ -90,6 +93,7 @@ class ContextManager:
                 metadata={"reason": str(exc), "provider_status": self.provider.status()},
             )
         self._record_event(owner, op, response)
+        self._audit_event(owner, session_id, namespace, op, response)
         return response
 
     def snapshot(self, session_id: str, agent_name: str, **state: Any) -> ContextSnapshot:
@@ -115,6 +119,11 @@ class ContextManager:
     def status(self) -> dict[str, Any]:
         return {
             **self.provider.status(),
+            "compact_policy": {
+                "mode": "structural_truncation",
+                "semantic_summary": False,
+                "llm_required": False,
+            },
             "recent_events": list(self._events[-20:]),
         }
 
@@ -219,6 +228,29 @@ class ContextManager:
             }
         )
         self._events = self._events[-100:]
+
+    def _audit_event(
+        self,
+        owner: str,
+        session_id: str,
+        namespace: str,
+        operation_type: str,
+        response: KernelResponse,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        self.event_sink.emit(
+            "context.audit",
+            owner_agent=owner,
+            session_id=session_id,
+            namespace=namespace,
+            operation_type=operation_type,
+            success=response.success,
+            error_code=response.error_code,
+            provider=self.provider.__class__.__name__,
+            compact_mode="structural_truncation" if operation_type == "ctx_compact" else "",
+            semantic_summary=False if operation_type == "ctx_compact" else "",
+        )
 
     def _latest_owner_for_session(self, session_id: str) -> str:
         status = self.provider.status()

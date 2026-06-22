@@ -160,7 +160,7 @@ class KernelService:
 
     def _build_context_manager(self) -> ContextManager:
         context_config = dict(self.kernel_config.get("context") or {})
-        manager = ContextManager(root=self._context_root())
+        manager = ContextManager(root=self._context_root(), event_sink=self.event_sink)
         provider_status = manager.status()
         fail_fast = bool(context_config.get("fail_fast", False))
         if fail_fast and provider_status.get("state") != "ready":
