@@ -38,9 +38,9 @@ class KernelService:
         self.tool = self._build_tool_manager()
         robot_backend = RuntimeRobotCapabilityBackend(runtime_server) if runtime_server is not None else None
         skill_backend = RuntimeSkillBackend(runtime_server) if runtime_server is not None else None
-        self.robot_motion = RobotCapabilityManager(robot_backend)
-        self.robot_sensor = RobotCapabilityManager(robot_backend)
-        self.skill = SkillManager(skill_backend)
+        self.robot_motion = RobotCapabilityManager(robot_backend, event_sink=self.event_sink)
+        self.robot_sensor = RobotCapabilityManager(robot_backend, event_sink=self.event_sink)
+        self.skill = SkillManager(skill_backend, event_sink=self.event_sink)
         self.human = HumanInteractionManager(
             RuntimeHumanBackend(runtime_server) if runtime_server is not None else None,
             event_sink=self.event_sink,

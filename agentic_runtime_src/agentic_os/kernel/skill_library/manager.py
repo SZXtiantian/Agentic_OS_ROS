@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
 from .backend import RuntimeSkillBackend
 
 
 class SkillManager:
-    def __init__(self, backend: RuntimeSkillBackend | Any | None = None) -> None:
+    def __init__(self, backend: RuntimeSkillBackend | Any | None = None, event_sink: KernelEventSink | None = None) -> None:
         self.backend = backend
+        self.event_sink = event_sink
         self._events: list[dict[str, Any]] = []
 
     def address_request(self, syscall: KernelSyscall) -> KernelResponse:
@@ -37,10 +39,11 @@ class SkillManager:
             elif operation == "skill_cancel":
                 response = self.cancel(session_id, call_id=str(params.get("call_id") or getattr(query, "call_id", "")))
             else:
-                return KernelResponse.error("SKILL_OPERATION_UNSUPPORTED", metadata={"operation": operation})
+                response = {"success": False, "error_code": "SKILL_OPERATION_UNSUPPORTED", "operation": operation}
         except Exception as exc:
             response = {"success": False, "error_code": "SKILL_BACKEND_UNAVAILABLE", "reason": str(exc)}
         self._record(operation, skill_name, response)
+        self._audit_result(operation, skill_name, session_id, response)
         return self._kernel_response(response)
 
     def call(
@@ -98,6 +101,18 @@ class SkillManager:
             }
         )
         self._events = self._events[-100:]
+
+    def _audit_result(self, operation: str, skill_name: str, session_id: str, response: dict[str, Any]) -> None:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "skill.audit",
+                operation_type=operation,
+                skill_name=skill_name,
+                session_id=session_id,
+                success=bool(response.get("success", False)),
+                error_code=str(response.get("error_code") or ""),
+                backend=self.backend.__class__.__name__ if self.backend is not None else "",
+            )
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
         if result.get("success", False):

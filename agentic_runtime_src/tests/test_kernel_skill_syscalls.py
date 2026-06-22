@@ -86,13 +86,18 @@ def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):
             SkillQuery(operation_type="skill_call", skill_name="report.say", params={"args": {"message": "hi"}}),
             timeout_s=1.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
     assert result.success is False
     assert result.error_code == "SKILL_BACKEND_UNAVAILABLE"
     assert result.metadata["queue_name"] == "skill"
-    assert service.status()["skill"]["error_code"] == "SKILL_BACKEND_UNAVAILABLE"
+    assert status["skill"]["error_code"] == "SKILL_BACKEND_UNAVAILABLE"
+    assert any(
+        event["event_type"] == "skill.audit" and event["metadata"]["error_code"] == "SKILL_BACKEND_UNAVAILABLE"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_kernel_skill_robot_motion_routes_to_robot_lane_and_fails_without_backend(tmp_path):
@@ -104,12 +109,17 @@ def test_kernel_skill_robot_motion_routes_to_robot_lane_and_fails_without_backen
             SkillQuery(operation_type="skill_call", skill_name="robot.navigate_to", params={"args": {"place": "kitchen"}}),
             timeout_s=1.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
     assert result.success is False
     assert result.error_code == "SKILL_BACKEND_UNAVAILABLE"
     assert result.metadata["queue_name"] == "robot_motion"
+    assert any(
+        event["event_type"] == "robot.audit" and event["metadata"]["error_code"] == "SKILL_BACKEND_UNAVAILABLE"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_kernel_skill_sdk_facade_uses_kernel_service(tmp_path):

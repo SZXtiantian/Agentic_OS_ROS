@@ -180,6 +180,7 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
             ),
             timeout_s=3.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
@@ -191,6 +192,10 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
         and record["session_id"] == "sess_kernel_robot"
         and record["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         for record in server.audit_logger.recent(limit=20)
+    )
+    assert any(
+        event["event_type"] == "robot.audit" and event["metadata"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        for event in status["events"]["recent"]
     )
 
 
@@ -211,9 +216,14 @@ def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monk
             ),
             timeout_s=3.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
     assert result.success is False
     assert result.error_code == "PERMISSION_DENIED"
     assert bridge_calls == []
+    assert any(
+        event["event_type"] == "robot.audit" and event["metadata"]["error_code"] == "PERMISSION_DENIED"
+        for event in status["events"]["recent"]
+    )
