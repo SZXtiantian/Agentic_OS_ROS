@@ -20,6 +20,7 @@ class SkillManager:
         query = getattr(syscall, "query", None)
         skill_name = str(getattr(query, "skill_name", "") or params.get("skill_name") or params.get("name") or operation)
         session_id = str(getattr(query, "session_id", "") or params.pop("session_id", "") or "kernel")
+        call_id = str(getattr(query, "call_id", "") or params.get("call_id") or "")
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()) or ())
         try:
             if operation in {"skill_call", "call_skill", "execute_skill"} or "." in operation:
@@ -29,6 +30,7 @@ class SkillManager:
                     app_id=str(getattr(query, "app_id", "") or syscall.agent_name),
                     session_id=session_id,
                     permissions=permissions,
+                    call_id=call_id,
                 )
             elif operation == "skill_list":
                 response = self.list()
@@ -37,7 +39,7 @@ class SkillManager:
             elif operation == "skill_status":
                 response = self.status(call_id=str(params.get("call_id") or getattr(query, "call_id", "")))
             elif operation == "skill_cancel":
-                response = self.cancel(session_id, call_id=str(params.get("call_id") or getattr(query, "call_id", "")))
+                response = self.cancel(session_id, call_id=call_id)
             else:
                 response = {"success": False, "error_code": "SKILL_OPERATION_UNSUPPORTED", "operation": operation}
         except Exception as exc:
@@ -54,10 +56,11 @@ class SkillManager:
         app_id: str,
         session_id: str,
         permissions: tuple[str, ...] = (),
+        call_id: str = "",
     ) -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable(skill_name, "runtime skill backend not configured")
-        return self.backend.call(skill_name, args, app_id=app_id, session_id=session_id, permissions=permissions)
+        return self.backend.call(skill_name, args, app_id=app_id, session_id=session_id, permissions=permissions, call_id=call_id)
 
     def list(self) -> dict[str, Any]:
         if self.backend is None:

@@ -20,6 +20,7 @@ class RuntimeSkillBackend:
         app_id: str,
         session_id: str,
         permissions: tuple[str, ...] = (),
+        call_id: str = "",
     ) -> dict[str, Any]:
         if self.runtime_server is None or not hasattr(self.runtime_server, "executor"):
             return self._unavailable("runtime executor not configured")
@@ -32,7 +33,10 @@ class RuntimeSkillBackend:
             required_capabilities=[],
         )
         try:
-            result = self._run(self.runtime_server.executor.execute(app, skill_name, args, session_id))
+            if call_id:
+                result = self._run(self.runtime_server.executor.execute(app, skill_name, args, session_id, call_id=call_id))
+            else:
+                result = self._run(self.runtime_server.executor.execute(app, skill_name, args, session_id))
         except KeyError as exc:
             return {"success": False, "error_code": "SKILL_NOT_FOUND", "reason": str(exc), "skill_name": skill_name}
         except Exception as exc:
@@ -41,6 +45,7 @@ class RuntimeSkillBackend:
         return {
             "success": result.success,
             "skill_name": skill_name,
+            "call_id": call_id,
             "result": payload,
             "error_code": result.error_code,
             "reason": result.reason,
@@ -90,7 +95,16 @@ class RuntimeSkillBackend:
         missing = [name for name in ("executor", "registry") if not hasattr(self.runtime_server, name)]
         if missing:
             return self._unavailable(f"runtime missing {', '.join(missing)}")
-        return {"success": True, "state": "ready", "backend": "runtime_skill_executor"}
+        cancellation_manager = getattr(self.runtime_server.executor, "cancellation_manager", None)
+        active_calls = []
+        if cancellation_manager is not None and hasattr(cancellation_manager, "active_calls"):
+            active_calls = cancellation_manager.active_calls()
+        return {
+            "success": True,
+            "state": "ready",
+            "backend": "runtime_skill_executor",
+            "active_calls": active_calls,
+        }
 
     def cancel(self, session_id: str, call_id: str = "") -> dict[str, Any]:
         if self.runtime_server is None or not hasattr(self.runtime_server, "executor"):
@@ -98,6 +112,17 @@ class RuntimeSkillBackend:
         cancellation_manager = getattr(self.runtime_server.executor, "cancellation_manager", None)
         if cancellation_manager is None:
             return {"success": False, "error_code": "SKILL_BACKEND_UNAVAILABLE", "reason": "cancellation manager not configured"}
+        if call_id:
+            if not hasattr(cancellation_manager, "cancel_call"):
+                return {
+                    "success": False,
+                    "error_code": "SKILL_BACKEND_UNAVAILABLE",
+                    "reason": "call cancellation is not configured",
+                    "call_id": call_id,
+                }
+            if not cancellation_manager.cancel_call(session_id, call_id):
+                return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "session_id": session_id, "call_id": call_id}
+            return {"success": True, "session_id": session_id, "call_id": call_id, "status": "cancel_requested"}
         cancellation_manager.cancel_session(session_id)
         return {"success": True, "session_id": session_id, "call_id": call_id, "status": "cancel_requested"}
 

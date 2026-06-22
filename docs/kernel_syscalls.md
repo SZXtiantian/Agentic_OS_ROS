@@ -39,6 +39,10 @@ Human requests are durable JSONL queue records under the runtime human channel r
 
 LLM status exposes provider configuration state and active `call_id`s. Cancelling an unknown LLM call returns `SYSCALL_NOT_FOUND`; cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
+Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.cancel(call_id)` cancels only the matching active runtime call in the current session; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
+
+Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. `human.cancel` forwards the same `call_id`/`correlation_id` to the runtime cancellation manager; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
+
 ## Permissions And Intervention
 
 High-risk operations go through access/intervention/audit:
@@ -101,7 +105,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 373 passed
+# 376 passed
 scripts/run_tests.sh
-# 373 passed; Agentic OS MVP checks passed.
+# 376 passed; Agentic OS MVP checks passed.
 ```

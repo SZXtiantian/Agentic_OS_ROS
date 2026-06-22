@@ -16,7 +16,12 @@ def make_config(tmp_path):
 
 class RuntimeCompatibleExecutor:
     def __init__(self) -> None:
-        self.cancellation_manager = SimpleNamespace(cancel_session=lambda session_id: None)
+        self.cancelled_sessions: list[str] = []
+        self.cancelled_calls: list[tuple[str, str]] = []
+        self.cancellation_manager = SimpleNamespace(
+            cancel_session=lambda session_id: self.cancelled_sessions.append(session_id),
+            cancel_call=lambda session_id, call_id: self.cancelled_calls.append((session_id, call_id)) or call_id == "call_1",
+        )
         self.calls: list[tuple[str, dict, str]] = []
 
     async def execute(self, app, skill_name, args, session_id):
@@ -68,6 +73,7 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     described = manager.describe("report.say")
     status = manager.status(call_id="call_1")
     cancelled = manager.cancel("sess_1", call_id="call_1")
+    missing_cancel = manager.cancel("sess_1", call_id="missing")
 
     assert called["success"] is True
     assert called["result"]["data"]["skill"] == "report.say"
@@ -75,6 +81,10 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     assert described["skill"]["name"] == "report.say"
     assert status["state"] == "ready"
     assert cancelled["success"] is True
+    assert missing_cancel["success"] is False
+    assert missing_cancel["error_code"] == "SYSCALL_NOT_FOUND"
+    assert executor.cancelled_calls == [("sess_1", "call_1"), ("sess_1", "missing")]
+    assert executor.cancelled_sessions == []
 
 
 def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):

@@ -367,12 +367,14 @@ class KernelSkillAPI(_KernelBaseAPI):
     async def call(self, name: str, args: dict | None = None, **kwargs):
         timeout_s = kwargs.pop("timeout_s", None)
         permissions = tuple(kwargs.pop("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ()))))
+        call_id = str(kwargs.pop("call_id", ""))
         query = SkillQuery(
             operation_type="skill_call",
             skill_name=name,
+            call_id=call_id,
             app_id=self.ctx.app_manifest.name,
             session_id=self.ctx.session_id,
-            params={"args": dict(args or {}), "permissions": permissions, **kwargs},
+            params={"args": dict(args or {}), "permissions": permissions, "call_id": call_id, **kwargs},
         )
         return self._execute(query, timeout_s=timeout_s)
 

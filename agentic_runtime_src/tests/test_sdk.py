@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import agentic_runtime
 import pytest
-from agentic_os.kernel.system_call import KernelResponse, LLMQuery, MemoryQuery, StorageQuery
+from agentic_os.kernel.system_call import KernelResponse, LLMQuery, MemoryQuery, SkillQuery, StorageQuery
 from agentic_runtime.app_manager import AppManager
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.errors import AgenticRuntimeError
@@ -158,6 +158,38 @@ def test_kernel_sdk_memory_search_and_storage_retrieve_use_queries():
     assert isinstance(captured[1][1], StorageQuery)
     assert captured[1][1].operation_type == "sto_retrieve"
     assert captured[1][1].params["collection_name"] == "reports"
+
+
+def test_kernel_sdk_skill_call_preserves_call_id():
+    captured = {}
+
+    class FakeService:
+        def execute_request(self, agent_name, query, timeout_s=None):
+            captured["agent_name"] = agent_name
+            captured["query"] = query
+            captured["timeout_s"] = timeout_s
+            return SimpleNamespace(success=True, response={"ok": True}, error_code="", metadata={})
+
+    class FakeExecutor:
+        kernel_service = FakeService()
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("kernel skill facade must use KernelService")
+
+    async def run():
+        app = AppManifest("sdk_skill_app", "0", "", "main:run", ["report.say"], [])
+        ctx = AgentContext(FakeExecutor(), app, "sess_skill")
+        result = await ctx.kernel.skill.call("report.say", {"message": "done"}, call_id="skill_call_1", timeout_s=2)
+        assert result.success is True
+
+    asyncio.run(run())
+
+    query = captured["query"]
+    assert captured["agent_name"] == "sdk_skill_app"
+    assert captured["timeout_s"] == 2
+    assert isinstance(query, SkillQuery)
+    assert query.call_id == "skill_call_1"
+    assert query.params["call_id"] == "skill_call_1"
 
 
 def test_kernel_sdk_cancel_uses_kernel_service_cancel_request():

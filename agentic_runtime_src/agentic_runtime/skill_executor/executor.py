@@ -56,10 +56,12 @@ class SkillExecutor:
         skill_name: str,
         args: dict[str, Any] | None = None,
         session_id: str = "default",
+        *,
+        call_id: str = "",
     ) -> SkillResult:
         args = dict(args or {})
         skill = self.registry.get_skill(skill_name)
-        call = SkillCall(skill.name, args, app.name, session_id)
+        call = SkillCall(skill.name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill.name, args, app.name, session_id)
         syscall = SkillSyscall.create(app.name, session_id, skill.name, args)
         self._record_syscall(syscall)
         self._set_current_skill(session_id, skill.name)
@@ -117,7 +119,10 @@ class SkillExecutor:
 
             operation_timeout_s = int(args.get("timeout_s") or skill.timeout_s)
             timeout_s = operation_timeout_s + int(skill.safety_constraints.get("runtime_timeout_margin_s", 0))
-            cancel_event = self.cancellation_manager.event_for(session_id)
+            try:
+                cancel_event = self.cancellation_manager.event_for(session_id, call.call_id)
+            except TypeError:
+                cancel_event = self.cancellation_manager.event_for(session_id)
             syscall.mark_started(SyscallStatus.EXECUTING)
             self._record_syscall(syscall)
             raw = await run_with_timeout(
@@ -220,6 +225,8 @@ class SkillExecutor:
         finally:
             for resource in acquired:
                 self.resource_manager.release(resource, session_id, call.call_id)
+            if hasattr(self.cancellation_manager, "clear_call"):
+                self.cancellation_manager.clear_call(session_id, call.call_id)
 
     def _requires_safety(self, constraints: dict[str, Any]) -> bool:
         return bool(

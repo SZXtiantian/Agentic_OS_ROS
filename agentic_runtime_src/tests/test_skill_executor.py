@@ -104,6 +104,22 @@ def test_cancellation_manager_sets_session_event_without_robot_backend():
     asyncio.run(run())
 
 
+def test_cancellation_manager_tracks_precise_active_calls():
+    async def run():
+        manager = CancellationManager()
+        combined = manager.event_for("sess", "call_1")
+
+        assert manager.active_calls() == [{"session_id": "sess", "call_id": "call_1"}]
+        assert combined.is_set() is False
+        assert manager.cancel_call("sess", "missing") is False
+        assert manager.cancel_call("sess", "call_1") is True
+        assert combined.is_set() is True
+        manager.clear_call("sess", "call_1")
+        assert manager.active_calls() == []
+
+    asyncio.run(run())
+
+
 def test_stop_robot_not_blocked_by_base_lock(tmp_path):
     async def run():
         executor, bridge_calls, resources, _ = make_executor(tmp_path)

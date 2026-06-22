@@ -18,8 +18,12 @@ def make_config(tmp_path):
 
 class RuntimeCompatibleExecutor:
     def __init__(self) -> None:
-        self.cancelled: list[str] = []
-        self.cancellation_manager = SimpleNamespace(cancel_session=lambda session_id: self.cancelled.append(session_id))
+        self.cancelled_sessions: list[str] = []
+        self.cancelled_calls: list[tuple[str, str]] = []
+        self.cancellation_manager = SimpleNamespace(
+            cancel_session=lambda session_id: self.cancelled_sessions.append(session_id),
+            cancel_call=lambda session_id, call_id: self.cancelled_calls.append((session_id, call_id)) or call_id == "call_1",
+        )
 
     async def execute(self, app, skill_name, args, session_id):
         assert skill_name == "human.ask"
@@ -106,11 +110,15 @@ def test_runtime_human_backend_uses_skill_executor_contract():
         )
     )
     cancel = backend.cancel("sess_human", call_id="call_1")
+    missing_cancel = backend.cancel("sess_human", call_id="missing")
 
     assert result["success"] is True
     assert result["result"]["data"]["answer"] == "yes"
     assert cancel["success"] is True
-    assert executor.cancelled == ["sess_human"]
+    assert missing_cancel["success"] is False
+    assert missing_cancel["error_code"] == "SYSCALL_NOT_FOUND"
+    assert executor.cancelled_calls == [("sess_human", "call_1"), ("sess_human", "missing")]
+    assert executor.cancelled_sessions == []
 
 
 def test_runtime_human_backend_does_not_inject_default_permission(tmp_path, monkeypatch):

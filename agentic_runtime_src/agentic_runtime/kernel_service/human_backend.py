@@ -19,11 +19,13 @@ class RuntimeHumanBackend:
         session_id = str(getattr(query, "session_id", "") or params.pop("session_id", "") or "kernel")
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
         skill_name = str(getattr(query, "skill_name", "") or params.pop("skill_name", "") or "human.ask")
+        call_id = str(getattr(query, "call_id", "") or params.get("call_id") or params.get("correlation_id") or "")
         if syscall.operation_type in {"human.status", "human_status"}:
             return self.status()
         if syscall.operation_type in {"human.cancel", "human_cancel"}:
-            return self.cancel(session_id, call_id=str(params.get("call_id") or ""))
+            return self.cancel(session_id, call_id=call_id)
         args = dict(params.get("args") or params)
+        call_id = call_id or str(args.get("call_id") or args.get("correlation_id") or "")
         if "timeout_s" not in args:
             args["timeout_s"] = 60
         return self.skill_backend.call(
@@ -32,6 +34,7 @@ class RuntimeHumanBackend:
             app_id=str(getattr(query, "app_id", "") or syscall.agent_name),
             session_id=session_id,
             permissions=permissions,
+            call_id=call_id,
         )
 
     def status(self) -> dict[str, Any]:
