@@ -92,6 +92,7 @@ class KernelService:
             "events": {"count": self.event_sink.count(), "recent": self.event_sink.recent(limit=25)},
             "llm": self._llm_status(),
             "context": self.context.status(),
+            "memory": self.memory.status(),
             "storage": self._storage_status(),
             "tool": self.tool.status(),
             "recent_syscalls": self.recent_syscalls(),
@@ -146,9 +147,11 @@ class KernelService:
 
     def _build_memory_manager(self) -> MemoryManager:
         memory_config = dict(self.kernel_config.get("memory") or {})
+        db_path = memory_config.get("db_path") or (self._storage_root() / ".kernel_memory" / "memory.sqlite3")
         return MemoryManager(
             access_manager=self.access_manager,
             max_notes_per_agent=int(memory_config.get("max_notes", 100)),
+            db_path=db_path,
         )
 
     def _build_tool_manager(self) -> ToolManager:

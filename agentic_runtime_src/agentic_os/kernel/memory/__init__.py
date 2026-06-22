@@ -6,7 +6,7 @@ from .block import CompressedMemoryBlock
 from .embeddings import EmbeddingProvider, HashEmbeddingProvider
 from .manager import MemoryManager
 from .note import MemoryNote, RobotMemoryMetadata
-from .providers import ChromaMemoryProvider, InMemoryMemoryProvider
+from .providers import ChromaMemoryProvider, InMemoryMemoryProvider, SQLiteMemoryProvider
 from .retrievers import HybridMemoryRetriever, LexicalMemoryRetriever
 
 __all__ = [
@@ -22,4 +22,5 @@ __all__ = [
     "MemoryManager",
     "MemoryNote",
     "RobotMemoryMetadata",
+    "SQLiteMemoryProvider",
 ]

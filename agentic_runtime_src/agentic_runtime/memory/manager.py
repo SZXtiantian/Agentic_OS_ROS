@@ -73,14 +73,18 @@ class MemoryManager:
         )
 
     def recall(self, app_id: str, key: str) -> Any:
-        result = self.kernel.address_request(KernelSyscall.create(app_id, "memory", "recall", {"memory_id": key}))
+        result = self._response_dict(
+            self.kernel.address_request(KernelSyscall.create(app_id, "memory", "recall", {"memory_id": key}))
+        )
         if not result.get("success"):
             return None
         return (result.get("memory") or {}).get("content")
 
     def search(self, app_id: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
-        result = self.kernel.address_request(
-            KernelSyscall.create(app_id, "memory", "search", {"query": query, "limit": limit})
+        result = self._response_dict(
+            self.kernel.address_request(
+                KernelSyscall.create(app_id, "memory", "search", {"query": query, "limit": limit})
+            )
         )
         rows = []
         for memory in result.get("memories", []):
@@ -94,5 +98,16 @@ class MemoryManager:
         return rows
 
     def delete(self, app_id: str, key: str) -> bool:
-        result = self.kernel.address_request(KernelSyscall.create(app_id, "memory", "delete", {"memory_id": key}))
+        result = self._response_dict(
+            self.kernel.address_request(KernelSyscall.create(app_id, "memory", "delete", {"memory_id": key}))
+        )
         return bool(result.get("success"))
+
+    def _response_dict(self, response: Any) -> dict[str, Any]:
+        if hasattr(response, "data") and isinstance(response.data, dict):
+            return dict(response.data)
+        if hasattr(response, "response_message") and isinstance(response.response_message, dict):
+            return dict(response.response_message)
+        if isinstance(response, dict):
+            return dict(response)
+        return {"success": False, "error_code": "MEMORY_RESPONSE_INVALID"}

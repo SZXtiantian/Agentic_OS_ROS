@@ -161,18 +161,51 @@ class KernelContextAPI(_KernelBaseAPI):
 
 
 class KernelMemoryAPI(_KernelBaseAPI):
+    async def remember(self, content, key: str = "", **metadata):
+        return await self.add(content, key=key, **metadata)
+
     async def add(self, content, key: str = "", **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
         query = MemoryQuery(
-            operation_type="remember",
+            operation_type="mem_remember",
             params={"memory_id": key, "content": content, "metadata": metadata},
         )
-        return self._execute(query, timeout_s=metadata.get("timeout_s"))
+        return self._execute(query, timeout_s=timeout_s)
 
     async def search(self, query: str, limit: int = 5, **filters):
+        timeout_s = filters.pop("timeout_s", None)
         params = {"query": query, "limit": int(limit)}
         if filters:
             params["filters"] = filters
-        return self._execute(MemoryQuery(operation_type="search", params=params), timeout_s=filters.get("timeout_s"))
+        return self._execute(MemoryQuery(operation_type="mem_search", params=params), timeout_s=timeout_s)
+
+    async def get(self, key: str, **kwargs):
+        query = MemoryQuery(operation_type="mem_get", params={"memory_id": key})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def update(self, key: str, content, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
+        query = MemoryQuery(
+            operation_type="mem_update",
+            params={"memory_id": key, "content": content, "metadata": metadata},
+        )
+        return self._execute(query, timeout_s=timeout_s)
+
+    async def delete(self, key: str, **kwargs):
+        query = MemoryQuery(operation_type="mem_delete", params={"memory_id": key})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def list(self, limit: int = 100, **kwargs):
+        query = MemoryQuery(operation_type="mem_list", params={"limit": int(limit)})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def export(self, path: str, **kwargs):
+        query = MemoryQuery(operation_type="mem_export", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def import_(self, path: str, **kwargs):
+        query = MemoryQuery(operation_type="mem_import", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
 
 class KernelStorageAPI(_KernelBaseAPI):

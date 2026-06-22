@@ -1,0 +1,179 @@
+from __future__ import annotations
+
+import asyncio
+from types import SimpleNamespace
+
+from agentic_os.kernel.memory import MemoryManager, MemoryNote, SQLiteMemoryProvider
+from agentic_os.kernel.system_call import MemoryQuery
+from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.sdk import AgentContext
+from agentic_runtime.types import AppManifest
+
+
+def make_config(tmp_path):
+    return SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools")
+
+
+def make_app() -> AppManifest:
+    return AppManifest("memory_test_app", "0", "", "main:run", [], [])
+
+
+def test_sqlite_memory_provider_persists_and_searches_with_fts(tmp_path):
+    db_path = tmp_path / "memory.sqlite3"
+    provider = SQLiteMemoryProvider(db_path)
+    provider.add_memory(MemoryNote(id="m1", content="kitchen inspection complete", owner_agent="agent_a"))
+
+    reopened = SQLiteMemoryProvider(db_path)
+    fetched = reopened.get_memory("m1", "agent_a")
+    searched = reopened.retrieve_memory("kitchen", "agent_a", limit=5)
+
+    assert fetched["success"] is True
+    assert fetched["memory"]["content"] == "kitchen inspection complete"
+    assert searched["success"] is True
+    assert searched["memories"][0]["id"] == "m1"
+    assert reopened.status()["index"]["state"] == "ready"
+
+
+def test_memory_manager_default_is_sqlite_not_in_memory():
+    manager = MemoryManager()
+
+    assert manager.status()["provider"] == "sqlite"
+    assert manager.status()["path"].endswith(".sqlite3")
+
+
+def test_memory_syscall_roundtrip_uses_kernel_queue(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    service.start()
+    try:
+        remembered = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_remember", params={"memory_id": "m1", "content": "red block on table"}),
+            timeout_s=1.0,
+        )
+        got = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_get", params={"memory_id": "m1"}),
+            timeout_s=1.0,
+        )
+        searched = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_search", params={"query": "red", "limit": 5}),
+            timeout_s=1.0,
+        )
+        listed = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_list", params={"limit": 5}),
+            timeout_s=1.0,
+        )
+    finally:
+        service.stop()
+
+    assert remembered.success is True
+    assert got.response.data["memory"]["content"] == "red block on table"
+    assert searched.response.data["memories"][0]["id"] == "m1"
+    assert listed.response.data["memories"][0]["id"] == "m1"
+    assert remembered.metadata["queue_name"] == "memory"
+    assert service.status()["memory"]["provider"] == "sqlite"
+    assert service.status()["queues"]["memory"]["added_count"] >= 4
+
+
+def test_memory_update_and_delete_permission_denied_is_stable(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    service.start()
+    try:
+        service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_remember", params={"memory_id": "m1", "content": "original"}),
+            timeout_s=1.0,
+        )
+        updated = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_update", params={"memory_id": "m1", "content": "changed"}),
+            timeout_s=1.0,
+        )
+        deleted = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_delete", params={"memory_id": "m1"}),
+            timeout_s=1.0,
+        )
+    finally:
+        service.stop()
+
+    assert updated.success is True
+    assert deleted.success is False
+    assert deleted.error_code == "ACCESS_INTERVENTION_REQUIRED"
+
+
+def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_path):
+    export_path = tmp_path / "export.jsonl"
+    source = MemoryManager(db_path=tmp_path / "source.sqlite3", access_manager=None)
+    target = MemoryManager(db_path=tmp_path / "target.sqlite3", access_manager=None)
+    source.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
+
+    exported = source.export("agent_a", str(export_path))
+    imported = target.import_("agent_a", str(export_path))
+    fetched = target.get("m1", "agent_a")
+
+    assert exported == {"success": True, "path": str(export_path), "count": 1}
+    assert imported == {"success": True, "path": str(export_path), "count": 1}
+    assert fetched["memory"]["content"] == "report ready"
+
+
+def test_memory_export_syscall_permission_denied_is_auditable(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    service.start()
+    try:
+        result = service.execute_request(
+            "agent_a",
+            MemoryQuery(operation_type="mem_export", params={"path": str(tmp_path / "memory.jsonl")}),
+            timeout_s=1.0,
+        )
+        status = service.status()
+    finally:
+        service.stop()
+
+    assert result.success is False
+    assert result.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert any(event["event_type"] == "access.checked" for event in status["events"]["recent"])
+
+
+def test_memory_sdk_facade_uses_kernel_service(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+
+    class Executor:
+        kernel_service = service
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("memory SDK must use kernel service")
+
+    async def run():
+        service.start()
+        try:
+            ctx = AgentContext(Executor(), make_app(), "sess_mem")
+            remembered = await ctx.kernel.memory.remember("blue cube on bench", key="m1", timeout_s=1.0)
+            got = await ctx.kernel.memory.get("m1", timeout_s=1.0)
+            searched = await ctx.kernel.memory.search("blue", timeout_s=1.0)
+            assert remembered.success is True
+            assert got.response.data["memory"]["content"] == "blue cube on bench"
+            assert searched.response.data["memories"][0]["id"] == "m1"
+        finally:
+            service.stop()
+
+    asyncio.run(run())
+
+
+def test_memory_provider_unavailable_status_and_error(tmp_path):
+    blocking_file = tmp_path / "not_a_dir"
+    blocking_file.write_text("x", encoding="utf-8")
+    manager = MemoryManager(provider=SQLiteMemoryProvider(blocking_file / "memory.sqlite3"))
+    response = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="mem_get",
+            params={"memory_id": "m1"},
+        )
+    )
+
+    assert response.success is False
+    assert response.error_code == "MEMORY_PROVIDER_UNAVAILABLE"
+    assert manager.status()["state"] == "unavailable"

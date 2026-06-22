@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
-from agentic_os.kernel.system_call import KernelSyscall
+from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
 from .base import MemoryProvider
 from .block import CompressedMemoryBlock
 from .compression import compress_notes, estimate_tokens
 from .eviction import choose_notes_for_eviction
 from .note import MemoryNote
-from .providers import InMemoryMemoryProvider
+from .providers import SQLiteMemoryProvider
 
 
 class MemoryManager:
@@ -28,8 +30,9 @@ class MemoryManager:
         eviction_policy: str = "oldest",
         two_tier_enabled: bool = False,
         storage_manager: Any | None = None,
+        db_path: str | Path | None = None,
     ) -> None:
-        self.provider = provider or InMemoryMemoryProvider()
+        self.provider = provider or SQLiteMemoryProvider(db_path or self._default_db_path())
         self.persistent_provider = persistent_provider
         self.access_manager = access_manager
         self.max_notes_per_agent = max_notes_per_agent
@@ -40,27 +43,44 @@ class MemoryManager:
         self.storage_manager = storage_manager
         self.compressed_blocks: dict[str, list[CompressedMemoryBlock]] = {}
 
-    def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
+    def address_request(self, syscall: KernelSyscall) -> KernelResponse:
         operation = syscall.operation_type
         params = syscall.params
-        if operation in {"add_memory", "remember"}:
-            note = self._note_from_params(syscall.agent_name, params)
-            return self.add(note, subject_agent=syscall.agent_name)
-        if operation in {"remove_memory", "delete"}:
-            return self.remove(str(params["memory_id"]), syscall.agent_name)
-        if operation == "update_memory":
-            note = self._note_from_params(syscall.agent_name, params)
-            return self.update(note, subject_agent=syscall.agent_name)
-        if operation in {"get_memory", "recall"}:
-            return self.get(str(params["memory_id"]), syscall.agent_name)
-        if operation in {"retrieve_memory", "search"}:
-            return self.retrieve(
-                syscall.agent_name,
-                str(params.get("query") or params.get("content") or ""),
-                limit=int(params.get("limit", params.get("k", 5))),
-                user_id=str(params.get("user_id", "")),
+        try:
+            if operation in {"mem_add", "mem_remember", "add_memory", "remember"}:
+                note = self._note_from_params(syscall.agent_name, params)
+                return self._kernel_response(self.add(note, subject_agent=syscall.agent_name))
+            if operation in {"mem_delete", "remove_memory", "delete"}:
+                result = self.remove(self._memory_id_from_params(params), syscall.agent_name)
+                return self._kernel_response(result)
+            if operation in {"mem_update", "update_memory"}:
+                note = self._note_from_params(syscall.agent_name, params)
+                return self._kernel_response(self.update(note, subject_agent=syscall.agent_name))
+            if operation in {"mem_get", "get_memory", "recall"}:
+                return self._kernel_response(self.get(self._memory_id_from_params(params), syscall.agent_name))
+            if operation in {"mem_search", "retrieve_memory", "search"}:
+                return self._kernel_response(
+                    self.retrieve(
+                        syscall.agent_name,
+                        str(params.get("query") or params.get("content") or ""),
+                        limit=int(params.get("limit", params.get("k", 5))),
+                        user_id=str(params.get("user_id", "")),
+                    )
+                )
+            if operation == "mem_list":
+                return self._kernel_response(
+                    self.list(syscall.agent_name, limit=int(params.get("limit", 100)))
+                )
+            if operation == "mem_export":
+                return self._kernel_response(self.export(syscall.agent_name, str(params.get("path") or "")))
+            if operation == "mem_import":
+                return self._kernel_response(self.import_(syscall.agent_name, str(params.get("path") or "")))
+            return KernelResponse.error("MEMORY_OPERATION_UNSUPPORTED", metadata={"operation": operation})
+        except Exception as exc:
+            return KernelResponse.error(
+                "MEMORY_PROVIDER_UNAVAILABLE",
+                metadata={"reason": str(exc), "provider_status": self.status()},
             )
-        return {"success": False, "error_code": "MEMORY_OPERATION_UNSUPPORTED", "operation": operation}
 
     def add(self, note: MemoryNote, subject_agent: str | None = None) -> dict[str, Any]:
         decision = self._check_access(subject_agent or note.owner_agent, "write", note)
@@ -79,6 +99,8 @@ class MemoryManager:
 
     def retrieve(self, agent_name: str, query: str, limit: int = 5, user_id: str = "") -> dict[str, Any]:
         result = self.provider.retrieve_memory(query, agent_name, limit, user_id)
+        if not result.get("success", False):
+            return result
         memories = list(result.get("memories") or [])
         memories.extend(self._retrieve_compressed_blocks(agent_name, query, limit - len(memories)))
         if self.persistent_provider is not None and len(memories) < limit:
@@ -116,6 +138,40 @@ class MemoryManager:
                 return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
         return self.provider.remove_memory(memory_id, agent_name)
 
+    def list(self, agent_name: str, limit: int = 100) -> dict[str, Any]:
+        if not hasattr(self.provider, "list_notes"):
+            return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+        try:
+            notes = self.provider.list_notes(agent_name, limit=limit)  # type: ignore[attr-defined]
+        except TypeError:
+            notes = self.provider.list_notes(agent_name)[:limit]  # type: ignore[attr-defined]
+        return {"success": True, "memories": [note.to_dict() for note in notes]}
+
+    def export(self, agent_name: str, path: str) -> dict[str, Any]:
+        decision = self._check_dangerous_access(agent_name, "export", path)
+        if not decision.get("success", True):
+            return decision
+        if not path:
+            return {"success": False, "error_code": "MEMORY_EXPORT_PATH_REQUIRED"}
+        if hasattr(self.provider, "export_memories"):
+            return self.provider.export_memories(agent_name, path)  # type: ignore[attr-defined]
+        return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+
+    def import_(self, agent_name: str, path: str) -> dict[str, Any]:
+        decision = self._check_dangerous_access(agent_name, "import", path)
+        if not decision.get("success", True):
+            return decision
+        if not path:
+            return {"success": False, "error_code": "MEMORY_IMPORT_PATH_REQUIRED"}
+        if hasattr(self.provider, "import_memories"):
+            return self.provider.import_memories(agent_name, path)  # type: ignore[attr-defined]
+        return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+
+    def status(self) -> dict[str, Any]:
+        if hasattr(self.provider, "status"):
+            return self.provider.status()  # type: ignore[attr-defined]
+        return {"state": "ready", "provider": self.provider.__class__.__name__}
+
     def _note_from_params(self, agent_name: str, params: dict[str, Any]) -> MemoryNote:
         metadata = dict(params.get("metadata") or {})
         robot_metadata = dict(metadata.get("robot") or params.get("robot_metadata") or {})
@@ -134,6 +190,9 @@ class MemoryManager:
             memory_type=str(metadata.get("memory_type") or params.get("memory_type") or "episodic"),
             metadata=metadata,
         )
+
+    def _memory_id_from_params(self, params: dict[str, Any]) -> str:
+        return str(params.get("memory_id") or params.get("id") or params.get("key") or "")
 
     def _check_access(self, subject_agent: str, action: str, note: MemoryNote) -> dict[str, Any]:
         if self.access_manager is None:
@@ -154,6 +213,26 @@ class MemoryManager:
         if decision.allowed:
             return {"success": True}
         return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
+
+    def _check_dangerous_access(self, agent_name: str, action: str, memory_id: str) -> dict[str, Any]:
+        if self.access_manager is None:
+            return {"success": True}
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(agent_name=agent_name),
+                action=action,
+                resource=AccessResource("memory", memory_id, owner_agent=agent_name),
+                irreversible=action in {"export", "import"},
+            )
+        )
+        if decision.allowed:
+            return {"success": True}
+        return {
+            "success": False,
+            "error_code": decision.error_code,
+            "reason": decision.reason,
+            "requires_intervention": decision.requires_intervention,
+        }
 
     def _evict_if_needed(self, owner_agent: str) -> None:
         if not hasattr(self.provider, "list_notes"):
@@ -204,3 +283,11 @@ class MemoryManager:
             if len(matches) >= limit:
                 break
         return matches
+
+    def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
+        if result.get("success", False):
+            return KernelResponse.ok(result, data=result)
+        return KernelResponse.error(str(result.get("error_code") or "MEMORY_PROVIDER_UNAVAILABLE"), metadata=result)
+
+    def _default_db_path(self) -> Path:
+        return Path(tempfile.gettempdir()) / f"agentic_kernel_memory_{uuid4().hex}.sqlite3"
