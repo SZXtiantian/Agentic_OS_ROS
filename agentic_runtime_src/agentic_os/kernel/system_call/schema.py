@@ -97,3 +97,22 @@ class KernelResponse:
             "error_code": self.error_code,
             "metadata": self.metadata,
         }
+
+    def as_mapping(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if isinstance(self.data, dict):
+            payload.update(self.data)
+        elif isinstance(self.response_message, dict):
+            payload.update(self.response_message)
+        payload.update(self.metadata)
+        payload.update(self.to_dict())
+        return payload
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.as_mapping().get(key, default)
+
+    def __getitem__(self, key: str) -> Any:
+        return self.as_mapping()[key]
+
+    def __contains__(self, key: object) -> bool:
+        return key in self.as_mapping()

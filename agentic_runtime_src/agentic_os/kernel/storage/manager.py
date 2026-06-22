@@ -3,12 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
-from agentic_os.kernel.system_call import KernelSyscall
+from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
 
 class StorageManager:
@@ -31,37 +32,74 @@ class StorageManager:
         self.root.mkdir(parents=True, exist_ok=True)
         self.access_manager = access_manager
         self._shares: dict[str, dict[str, Any]] = {}
+        self.index_path = self.root / ".storage_index.sqlite3"
+        self._index_available = True
+        self._index_error = ""
+        self._initialize_index()
 
-    def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
+    def address_request(self, syscall: KernelSyscall) -> KernelResponse:
         operation = syscall.operation_type
         params = syscall.params
-        if operation in {"write", "write_artifact", "sto_write"}:
-            return self.write(str(params.get("path") or params.get("file_path")), params.get("content", params.get("data", "")))
-        if operation in {"read", "read_artifact", "sto_read"}:
-            return self.read(str(params.get("path") or params.get("file_path")))
-        if operation in {"list", "list_artifacts"}:
-            return self.list(str(params.get("path", ".")))
-        if operation in {"delete", "delete_artifact"}:
-            return self.delete(str(params["path"]))
-        if operation == "sto_mount":
-            return self.mount(str(params.get("collection_name") or params.get("path") or "default"))
-        if operation == "sto_create_file":
-            return self.create_file(str(params.get("file_path") or params.get("path") or params.get("file_name")))
-        if operation == "sto_create_directory":
-            return self.create_directory(str(params.get("file_path") or params.get("path") or params.get("dir_path")))
-        if operation == "sto_retrieve":
-            return self.retrieve(
-                query=str(params.get("query") or params.get("query_text") or ""),
-                collection_name=str(params.get("collection_name") or ""),
-                limit=int(params.get("limit", params.get("k", 5))),
+        try:
+            if operation in {"write", "write_artifact", "sto_write"}:
+                return self._kernel_response(
+                    self.write(
+                        str(params.get("path") or params.get("file_path")),
+                        params.get("content", params.get("data", "")),
+                        metadata=dict(params.get("metadata") or {}),
+                    )
+                )
+            if operation in {"read", "read_artifact", "sto_read"}:
+                return self._kernel_response(self.read(str(params.get("path") or params.get("file_path"))))
+            if operation in {"list", "list_artifacts", "sto_list"}:
+                return self._kernel_response(self.list(str(params.get("path", "."))))
+            if operation in {"delete", "delete_artifact", "sto_delete"}:
+                return self._kernel_response(self.delete(str(params["path"])))
+            if operation == "sto_mount":
+                return self._kernel_response(self.mount(str(params.get("collection_name") or params.get("path") or "default")))
+            if operation == "sto_create_file":
+                return self._kernel_response(
+                    self.create_file(str(params.get("file_path") or params.get("path") or params.get("file_name")))
+                )
+            if operation in {"sto_create_directory", "sto_mkdir"}:
+                return self._kernel_response(
+                    self.create_directory(str(params.get("file_path") or params.get("path") or params.get("dir_path")))
+                )
+            if operation == "sto_stat":
+                return self._kernel_response(self.stat(str(params.get("file_path") or params.get("path"))))
+            if operation == "sto_history":
+                return self._kernel_response(self.history(str(params.get("file_path") or params.get("path"))))
+            if operation == "sto_index":
+                return self._kernel_response(self.index(str(params.get("collection_name") or params.get("path") or "")))
+            if operation == "sto_retrieve":
+                return self._kernel_response(
+                    self.retrieve(
+                        query=str(params.get("query") or params.get("query_text") or ""),
+                        collection_name=str(params.get("collection_name") or ""),
+                        limit=int(params.get("limit", params.get("k", 5))),
+                    )
+                )
+            if operation == "sto_rollback":
+                return self._kernel_response(
+                    self.rollback(
+                        str(params.get("file_path") or params.get("path")),
+                        version=str(params.get("version") or ""),
+                    )
+                )
+            if operation == "sto_share":
+                return self._kernel_response(
+                    self.share(str(params.get("file_path") or params.get("path")), dict(params.get("metadata") or {}))
+                )
+            return KernelResponse.error("STORAGE_OPERATION_UNSUPPORTED", metadata={"operation": operation})
+        except ValueError:
+            raise
+        except Exception as exc:
+            return KernelResponse.error(
+                "STORAGE_PROVIDER_UNAVAILABLE",
+                metadata={"reason": str(exc), "provider_status": self.status()},
             )
-        if operation == "sto_rollback":
-            return self.rollback(str(params.get("file_path") or params.get("path")))
-        if operation == "sto_share":
-            return self.share(str(params.get("file_path") or params.get("path")), dict(params.get("metadata") or {}))
-        return {"success": False, "error_code": "STORAGE_OPERATION_UNSUPPORTED", "operation": operation}
 
-    def write(self, relative_path: str, content: Any) -> dict[str, Any]:
+    def write(self, relative_path: str, content: Any, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         version = ""
         if path.exists():
@@ -75,6 +113,7 @@ class StorageManager:
         else:
             payload = str(content)
         path.write_text(payload, encoding="utf-8")
+        self._index_file(relative_path, metadata=dict(metadata or {}))
         return {"success": True, "path": str(path), "size_bytes": path.stat().st_size, "version": version}
 
     def read(self, relative_path: str) -> dict[str, Any]:
@@ -87,7 +126,7 @@ class StorageManager:
         path = self._safe_path(relative_path, allow_root=True)
         if not path.exists() or not path.is_dir():
             return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
-        return {"success": True, "entries": sorted(child.name for child in path.iterdir())}
+        return {"success": True, "entries": sorted(child.name for child in path.iterdir() if not self._is_internal_path(child))}
 
     def delete(self, relative_path: str) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -97,6 +136,7 @@ class StorageManager:
         if not path.exists() or not path.is_file():
             return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
         path.unlink()
+        self._remove_index(relative_path)
         return {"success": True, "path": str(path)}
 
     def mount(self, collection_name: str) -> dict[str, Any]:
@@ -108,6 +148,7 @@ class StorageManager:
         path = self._safe_path(relative_path, allow_root=False)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(exist_ok=False)
+        self._index_file(relative_path, metadata={})
         return {"success": True, "path": str(path), "size_bytes": 0}
 
     def create_directory(self, relative_path: str) -> dict[str, Any]:
@@ -119,29 +160,16 @@ class StorageManager:
         root = self._safe_path(collection_name or ".", allow_root=True)
         if not root.exists() or not root.is_dir():
             return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)}
-        query_text = query.lower()
-        matches: list[dict[str, Any]] = []
-        for path in sorted(root.rglob("*")):
-            if not path.is_file() or ".storage_versions" in path.parts:
-                continue
-            relative = path.relative_to(self.root)
-            content = path.read_text(encoding="utf-8", errors="ignore")
-            if not query_text or query_text in content.lower() or query_text in str(relative).lower():
-                matches.append(
-                    {
-                        "path": str(path),
-                        "relative_path": str(relative),
-                        "content": content,
-                        "snippet": content[:200],
-                        "score": 1.0 if query_text and query_text in content.lower() else 0.5,
-                        "metadata": {"collection_name": collection_name},
-                    }
-                )
-            if len(matches) >= limit:
-                break
+        if not self._index_available:
+            return {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error}
+        if not self._has_indexed_files(collection_name):
+            indexed = self.index(collection_name)
+            if not indexed.get("success", False):
+                return indexed
+        matches = self._search_index(query, collection_name, limit)
         return {"success": True, "matches": matches}
 
-    def rollback(self, relative_path: str) -> dict[str, Any]:
+    def rollback(self, relative_path: str, version: str = "") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("rollback", relative_path, irreversible=True)
         if not decision.get("success", True):
@@ -149,10 +177,62 @@ class StorageManager:
         versions = sorted(self._version_dir(relative_path).glob("*.bak"))
         if not versions:
             return {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path)}
-        latest = versions[-1]
+        latest = self._version_dir(relative_path) / version if version else versions[-1]
+        if latest not in versions:
+            return {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path), "version": version}
         path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(latest, path)
+        self._index_file(relative_path, metadata={"rollback_version": latest.name})
         return {"success": True, "path": str(path), "version": latest.name}
+
+    def stat(self, relative_path: str) -> dict[str, Any]:
+        path = self._safe_path(relative_path, allow_root=False)
+        if not path.exists():
+            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
+        stat = path.stat()
+        digest = ""
+        if path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        return {
+            "success": True,
+            "path": str(path),
+            "relative_path": str(Path(relative_path)),
+            "is_file": path.is_file(),
+            "is_dir": path.is_dir(),
+            "size_bytes": int(stat.st_size),
+            "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            "sha256": digest,
+        }
+
+    def history(self, relative_path: str) -> dict[str, Any]:
+        self._safe_path(relative_path, allow_root=False)
+        versions = []
+        for version_path in sorted(self._version_dir(relative_path).glob("*.bak")):
+            stat = version_path.stat()
+            versions.append(
+                {
+                    "version": version_path.name,
+                    "path": str(version_path),
+                    "size_bytes": int(stat.st_size),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                    "sha256": hashlib.sha256(version_path.read_bytes()).hexdigest(),
+                }
+            )
+        return {"success": True, "path": relative_path, "versions": versions}
+
+    def index(self, collection_name: str = "") -> dict[str, Any]:
+        root = self._safe_path(collection_name or ".", allow_root=True)
+        if not root.exists() or not root.is_dir():
+            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)}
+        if not self._index_available:
+            return {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error}
+        count = 0
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or self._is_internal_path(path):
+                continue
+            self._index_file(str(path.relative_to(self.root)), metadata={})
+            count += 1
+        return {"success": True, "collection_name": collection_name, "indexed_count": count, "index_path": str(self.index_path)}
 
     def share(self, relative_path: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -163,6 +243,39 @@ class StorageManager:
             return decision
         self._shares[relative_path] = {"labels": ["shared"], "metadata": dict(metadata or {})}
         return {"success": True, "path": str(path), "sharing_policy": self._shares[relative_path]}
+
+    def status(self) -> dict[str, Any]:
+        if not self._index_available:
+            index = {
+                "type": "sqlite_fts5",
+                "state": "unavailable",
+                "error_code": "STORAGE_INDEX_UNAVAILABLE",
+                "reason": self._index_error,
+                "path": str(self.index_path),
+            }
+        else:
+            try:
+                with self._connect_index() as conn:
+                    indexed_count = conn.execute("SELECT COUNT(*) AS count FROM storage_files").fetchone()["count"]
+            except Exception as exc:
+                indexed_count = 0
+                index = {
+                    "type": "sqlite_fts5",
+                    "state": "unavailable",
+                    "error_code": "STORAGE_INDEX_UNAVAILABLE",
+                    "reason": str(exc),
+                    "path": str(self.index_path),
+                }
+            else:
+                index = {
+                    "type": "sqlite_fts5",
+                    "state": "ready",
+                    "error_code": "",
+                    "reason": "",
+                    "path": str(self.index_path),
+                    "indexed_count": int(indexed_count),
+                }
+        return {"state": "ready", "provider": "local_fs", "root": str(self.root), "index": index}
 
     def _safe_path(self, relative_path: str, *, allow_root: bool = False) -> Path:
         path = Path(relative_path or ".")
@@ -209,3 +322,154 @@ class StorageManager:
     def _version_dir(self, relative_path: str) -> Path:
         digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()
         return self.root / ".storage_versions" / digest
+
+    def _initialize_index(self) -> None:
+        try:
+            with self._connect_index() as conn:
+                conn.executescript(
+                    """
+                    CREATE TABLE IF NOT EXISTS storage_files (
+                        relative_path TEXT PRIMARY KEY,
+                        collection_name TEXT NOT NULL,
+                        content_hash TEXT NOT NULL,
+                        size_bytes INTEGER NOT NULL,
+                        metadata_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE VIRTUAL TABLE IF NOT EXISTS storage_files_fts
+                    USING fts5(relative_path UNINDEXED, collection_name UNINDEXED, content, metadata);
+                    """
+                )
+        except Exception as exc:
+            self._index_available = False
+            self._index_error = str(exc)
+
+    def _connect_index(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.index_path), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _index_file(self, relative_path: str, metadata: dict[str, Any]) -> None:
+        if not self._index_available:
+            return
+        path = self._safe_path(relative_path, allow_root=False)
+        if not path.exists() or not path.is_file() or self._is_internal_path(path):
+            return
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        stat = path.stat()
+        relative = str(path.relative_to(self.root))
+        collection = Path(relative).parts[0] if Path(relative).parts else ""
+        content_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        updated_at = datetime.now(timezone.utc).isoformat()
+        metadata_json = json.dumps(metadata, ensure_ascii=False, sort_keys=True)
+        with self._connect_index() as conn:
+            conn.execute(
+                """
+                INSERT INTO storage_files(relative_path, collection_name, content_hash, size_bytes, metadata_json, updated_at)
+                VALUES(?, ?, ?, ?, ?, ?)
+                ON CONFLICT(relative_path) DO UPDATE SET
+                    collection_name=excluded.collection_name,
+                    content_hash=excluded.content_hash,
+                    size_bytes=excluded.size_bytes,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (relative, collection, content_hash, int(stat.st_size), metadata_json, updated_at),
+            )
+            conn.execute("DELETE FROM storage_files_fts WHERE relative_path=?", (relative,))
+            conn.execute(
+                """
+                INSERT INTO storage_files_fts(relative_path, collection_name, content, metadata)
+                VALUES(?, ?, ?, ?)
+                """,
+                (relative, collection, content, metadata_json),
+            )
+
+    def _remove_index(self, relative_path: str) -> None:
+        if not self._index_available:
+            return
+        relative = str(Path(relative_path))
+        with self._connect_index() as conn:
+            conn.execute("DELETE FROM storage_files WHERE relative_path=?", (relative,))
+            conn.execute("DELETE FROM storage_files_fts WHERE relative_path=?", (relative,))
+
+    def _has_indexed_files(self, collection_name: str = "") -> bool:
+        if not self._index_available:
+            return False
+        if collection_name:
+            sql = "SELECT COUNT(*) AS count FROM storage_files WHERE relative_path=? OR relative_path LIKE ?"
+            params: tuple[Any, ...] = (collection_name, f"{collection_name.rstrip('/')}/%")
+        else:
+            sql = "SELECT COUNT(*) AS count FROM storage_files"
+            params = ()
+        with self._connect_index() as conn:
+            row = conn.execute(sql, params).fetchone()
+        return int(row["count"]) > 0
+
+    def _search_index(self, query: str, collection_name: str, limit: int) -> list[dict[str, Any]]:
+        query_text = self._fts_query(query)
+        collection_prefix = collection_name.rstrip("/")
+        matches: list[dict[str, Any]] = []
+        with self._connect_index() as conn:
+            if query_text:
+                rows = conn.execute(
+                    """
+                    SELECT f.relative_path, f.content, s.metadata_json, s.size_bytes
+                    FROM storage_files_fts f
+                    JOIN storage_files s ON s.relative_path = f.relative_path
+                    WHERE storage_files_fts MATCH ?
+                    ORDER BY bm25(storage_files_fts)
+                    LIMIT ?
+                    """,
+                    (query_text, max(1, int(limit) * 4)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT f.relative_path, f.content, s.metadata_json, s.size_bytes
+                    FROM storage_files_fts f
+                    JOIN storage_files s ON s.relative_path = f.relative_path
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?
+                    """,
+                    (max(1, int(limit) * 4),),
+                ).fetchall()
+        for row in rows:
+            relative = str(row["relative_path"])
+            if collection_prefix and relative != collection_prefix and not relative.startswith(f"{collection_prefix}/"):
+                continue
+            content = str(row["content"])
+            path = self.root / relative
+            matches.append(
+                {
+                    "path": str(path),
+                    "relative_path": relative,
+                    "content": content,
+                    "snippet": content[:200],
+                    "score": 1.0,
+                    "metadata": {
+                        "collection_name": collection_name,
+                        "size_bytes": int(row["size_bytes"]),
+                        **dict(json.loads(row["metadata_json"] or "{}")),
+                    },
+                }
+            )
+            if len(matches) >= limit:
+                break
+        return matches
+
+    def _fts_query(self, query: str) -> str:
+        tokens = [token.replace('"', "") for token in str(query).split() if token.strip()]
+        return " OR ".join(f'"{token}"' for token in tokens)
+
+    def _is_internal_path(self, path: Path) -> bool:
+        try:
+            relative = path.relative_to(self.root)
+        except ValueError:
+            return True
+        return any(part.startswith(".storage_") for part in relative.parts)
+
+    def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
+        if result.get("success", False):
+            return KernelResponse.ok(result, data=result)
+        return KernelResponse.error(str(result.get("error_code") or "STORAGE_PROVIDER_UNAVAILABLE"), metadata=result)

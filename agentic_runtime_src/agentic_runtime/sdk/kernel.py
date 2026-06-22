@@ -209,9 +209,55 @@ class KernelMemoryAPI(_KernelBaseAPI):
 
 
 class KernelStorageAPI(_KernelBaseAPI):
+    async def mount(self, collection_name: str = "default", **kwargs):
+        query = StorageQuery(operation_type="sto_mount", params={"collection_name": collection_name})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def mkdir(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_mkdir", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def create_file(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_create_file", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
     async def write(self, path: str, content, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
         query = StorageQuery(operation_type="sto_write", params={"path": path, "content": content, "metadata": metadata})
-        return self._execute(query, timeout_s=metadata.get("timeout_s"))
+        return self._execute(query, timeout_s=timeout_s)
+
+    async def read(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_read", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def list(self, path: str = ".", **kwargs):
+        query = StorageQuery(operation_type="sto_list", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def delete(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_delete", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def stat(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_stat", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def history(self, path: str, **kwargs):
+        query = StorageQuery(operation_type="sto_history", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def rollback(self, path: str, version: str = "", **kwargs):
+        query = StorageQuery(operation_type="sto_rollback", params={"path": path, "version": version})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def share(self, path: str, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
+        query = StorageQuery(operation_type="sto_share", params={"path": path, "metadata": metadata})
+        return self._execute(query, timeout_s=timeout_s)
+
+    async def index(self, collection_name: str = "", **kwargs):
+        query = StorageQuery(operation_type="sto_index", params={"collection_name": collection_name})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
     async def retrieve(self, query: str, collection_name: str = "", limit: int = 5):
         return self._execute(

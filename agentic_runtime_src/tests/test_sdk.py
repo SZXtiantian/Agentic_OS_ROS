@@ -152,7 +152,7 @@ def test_kernel_sdk_memory_search_and_storage_retrieve_use_queries():
     asyncio.run(run())
 
     assert isinstance(captured[0][1], MemoryQuery)
-    assert captured[0][1].operation_type == "search"
+    assert captured[0][1].operation_type == "mem_search"
     assert captured[0][1].params["filters"]["place_id"] == "kitchen"
     assert isinstance(captured[1][1], StorageQuery)
     assert captured[1][1].operation_type == "sto_retrieve"

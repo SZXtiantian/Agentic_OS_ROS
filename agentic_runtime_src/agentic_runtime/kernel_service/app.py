@@ -93,7 +93,7 @@ class KernelService:
             "llm": self._llm_status(),
             "context": self.context.status(),
             "memory": self.memory.status(),
-            "storage": self._storage_status(),
+            "storage": self.storage.status(),
             "tool": self.tool.status(),
             "recent_syscalls": self.recent_syscalls(),
         }
