@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 export PYTHONDONTWRITEBYTECODE=1
 
-PYTEST_MARK_EXPR="${PYTEST_MARK_EXPR:-not ros2 and not hardware}"
+PYTEST_MARK_EXPR="${PYTEST_MARK_EXPR:-not integration and not ros2 and not hardware}"
 
 python scripts/check_forbidden_imports.py
 python scripts/check_filesystem_layout.py

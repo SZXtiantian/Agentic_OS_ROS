@@ -100,16 +100,23 @@ pytest -q tests/test_kernel_llm_core.py tests/test_kernel_e2e_syscall_flow.py
 pytest -q tests/test_human_queue_channel.py tests/test_kernel_human_backend.py
 pytest -q tests/test_kernel_syscall_async.py tests/test_robot_safety_regression.py
 pytest -q tests/test_no_simulated_production_paths.py tests/test_runtime_real_defaults.py
+pytest -q tests/test_real_integration_contracts.py -rs
 python scripts/check_no_runtime_rclpy_imports.py
 scripts/run_tests.sh
 ```
+
+Real integration contracts are opt-in and never substitute fake success. Without the required environment they skip as `UNVERIFIED_*`:
+
+- `AGENTIC_VERIFY_REAL_ROS2=1` verifies a real ROS2 bridge through `Ros2CliBridgeClient`.
+- `AGENTIC_VERIFY_REAL_LLM=1` plus `AGENTIC_REAL_LLM_BASE_URL`, `AGENTIC_REAL_LLM_API_KEY`, and `AGENTIC_REAL_LLM_MODEL` verifies a real OpenAI-compatible provider.
+- `AGENTIC_VERIFY_REAL_HUMAN_QUEUE=1` verifies a real file-backed human queue with an external operator/service response.
 
 Latest full local verification for this document update baseline:
 
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 381 passed
+# 381 passed, 3 skipped
 scripts/run_tests.sh
-# 381 passed; Agentic OS MVP checks passed.
+# 381 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
