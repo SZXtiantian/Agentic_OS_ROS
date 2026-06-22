@@ -116,3 +116,15 @@ class KernelResponse:
 
     def __contains__(self, key: object) -> bool:
         return key in self.as_mapping()
+
+    def keys(self):
+        return self.as_mapping().keys()
+
+    def items(self):
+        return self.as_mapping().items()
+
+    def values(self):
+        return self.as_mapping().values()
+
+    def __iter__(self):
+        return iter(self.as_mapping())

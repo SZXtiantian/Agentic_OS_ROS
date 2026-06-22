@@ -270,5 +270,38 @@ class KernelStorageAPI(_KernelBaseAPI):
 
 class KernelToolAPI(_KernelBaseAPI):
     async def call(self, name: str, args: dict | None = None, **metadata):
-        query = ToolQuery(operation_type="call_tool", params={"name": name, "args": dict(args or {}), **metadata})
-        return self._execute(query, timeout_s=metadata.get("timeout_s"))
+        timeout_s = metadata.pop("timeout_s", None)
+        permissions = tuple(metadata.pop("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ()))))
+        query = ToolQuery(
+            operation_type="tool_call",
+            params={"name": name, "args": dict(args or {}), "permissions": permissions, **metadata},
+        )
+        return self._execute(query, timeout_s=timeout_s)
+
+    async def list(self, **kwargs):
+        query = ToolQuery(operation_type="tool_list", params={})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def describe(self, name: str, **kwargs):
+        query = ToolQuery(operation_type="tool_describe", params={"name": name})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def load_manifest(self, path: str, **kwargs):
+        query = ToolQuery(operation_type="tool_load_manifest", params={"path": path})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def unload(self, name: str, **kwargs):
+        query = ToolQuery(operation_type="tool_unload", params={"name": name})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def register_builtin(self, name: str, **kwargs):
+        query = ToolQuery(operation_type="tool_register_builtin", params={"name": name})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def status(self, **kwargs):
+        query = ToolQuery(operation_type="tool_status", params={})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def cancel(self, call_id: str, **kwargs):
+        query = ToolQuery(operation_type="tool_cancel", params={"call_id": call_id})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))

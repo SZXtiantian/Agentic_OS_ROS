@@ -6,8 +6,9 @@ from typing import Any, Callable
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.hooks import KernelEventSink
-from agentic_os.kernel.system_call import KernelSyscall
+from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
+from .builtins import builtin_tools
 from .loader import ToolLoader
 from .manifest import ToolManifest
 from .mcp_server import MCPToolServer
@@ -40,14 +41,25 @@ class ToolManager:
         self.event_sink = event_sink
         self._registry: dict[str, ToolHandler] = {}
         self._conflicts: dict[str, set[str]] = {}
+        self._descriptions: dict[str, str] = {}
+        self._manifests: dict[str, ToolManifest] = {}
         self._active: set[str] = set()
         self._lock = Lock()
         self._audit_events: list[dict[str, Any]] = []
+        self._register_builtin_tools()
 
-    def register(self, name: str, handler: ToolHandler, conflicts: list[str] | tuple[str, ...] | None = None) -> None:
+    def register(
+        self,
+        name: str,
+        handler: ToolHandler,
+        conflicts: list[str] | tuple[str, ...] | None = None,
+        *,
+        description: str = "",
+    ) -> None:
         if self._is_forbidden(name):
             raise ValueError("TOOL_FORBIDDEN_ROBOT_CAPABILITY")
         self._registry[name] = handler
+        self._descriptions[name] = description
         conflict_set = set(conflicts or (name,))
         conflict_set.add(name)
         self._conflicts[name] = conflict_set
@@ -68,15 +80,64 @@ class ToolManager:
         if not sandbox.get("success", False):
             raise ValueError(str(sandbox.get("error_code") or "TOOL_SANDBOX_DENIED"))
         handler = self.loader.load(manifest)
-        self.register(manifest.name, handler, conflicts=manifest.conflicts or (manifest.name,))
+        self.register(manifest.name, handler, conflicts=manifest.conflicts or (manifest.name,), description=manifest.description)
+        self._manifests[manifest.name] = manifest
         return manifest
 
-    def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
-        tool_name = str(syscall.params.get("name") or syscall.operation_type)
-        tool_args = dict(syscall.params.get("args") or syscall.params.get("parameters") or {})
+    def address_request(self, syscall: KernelSyscall) -> KernelResponse:
+        operation = syscall.operation_type
+        params = syscall.params
+        try:
+            if operation in {"tool_call", "call_tool", "call"}:
+                return self._kernel_response(
+                    self.call_tool(
+                        syscall.agent_name,
+                        str(params.get("name") or operation),
+                        dict(params.get("args") or params.get("parameters") or {}),
+                        tuple(params.get("permissions") or ()),
+                    )
+                )
+            if operation == "tool_list":
+                return self._kernel_response({"success": True, "tools": self.list_tools()})
+            if operation == "tool_describe":
+                return self._kernel_response(self.describe(str(params.get("name") or params.get("tool") or "")))
+            if operation == "tool_load_manifest":
+                access = self._check_access(syscall.agent_name, str(params.get("path") or ""), (), action="install", irreversible=True)
+                if not access.get("success", True):
+                    return self._kernel_response(access)
+                manifest = self.load_manifest(str(params.get("path") or ""))
+                return self._kernel_response({"success": True, "tool": manifest.name, "manifest": manifest.__dict__})
+            if operation == "tool_unload":
+                return self._kernel_response(self.unload(syscall.agent_name, str(params.get("name") or "")))
+            if operation == "tool_register_builtin":
+                return self._kernel_response(self.register_builtin(syscall.agent_name, str(params.get("name") or "")))
+            if operation == "tool_status":
+                return self._kernel_response({"success": True, "status": self.status()})
+            if operation == "tool_cancel":
+                return self._kernel_response({"success": False, "error_code": "TOOL_CANCEL_UNSUPPORTED"})
+            return self._kernel_response(
+                self.call_tool(
+                    syscall.agent_name,
+                    str(params.get("name") or operation),
+                    dict(params.get("args") or params.get("parameters") or {}),
+                    tuple(params.get("permissions") or ()),
+                )
+            )
+        except ValueError as exc:
+            return KernelResponse.error(str(exc) or "TOOL_MANIFEST_INVALID")
+        except Exception as exc:
+            return KernelResponse.error("TOOL_BACKEND_UNAVAILABLE", metadata={"reason": str(exc)})
+
+    def call_tool(
+        self,
+        agent_name: str,
+        tool_name: str,
+        tool_args: dict[str, Any],
+        permissions: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
         if self._is_forbidden(tool_name):
             return {"success": False, "error_code": "TOOL_FORBIDDEN_ROBOT_CAPABILITY"}
-        access = self._check_access(syscall.agent_name, tool_name, tuple(syscall.params.get("permissions") or ()))
+        access = self._check_access(agent_name, tool_name, permissions)
         if not access.get("success", True):
             return access
         handler = self._registry.get(tool_name)
@@ -88,15 +149,56 @@ class ToolManager:
                 return {"success": False, "error_code": "TOOL_BUSY", "tool": tool_name}
             self._active.update(conflicts)
         try:
-            self._record_tool_event("tool.started", syscall.agent_name, tool_name)
+            self._record_tool_event("tool.started", agent_name, tool_name)
             return {"success": True, "tool": tool_name, "result": handler(tool_args)}
         except Exception as exc:
-            self._record_tool_event("tool.failed", syscall.agent_name, tool_name, {"reason": str(exc)})
+            self._record_tool_event("tool.failed", agent_name, tool_name, {"reason": str(exc)})
             return {"success": False, "error_code": "TOOL_FAILED", "reason": str(exc), "tool": tool_name}
         finally:
-            self._record_tool_event("tool.done", syscall.agent_name, tool_name)
+            self._record_tool_event("tool.done", agent_name, tool_name)
             with self._lock:
                 self._active.difference_update(conflicts)
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return [self.describe(name) for name in sorted(self._registry)]
+
+    def describe(self, name: str) -> dict[str, Any]:
+        if name not in self._registry:
+            return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
+        manifest = self._manifests.get(name)
+        return {
+            "success": True,
+            "tool": name,
+            "description": self._descriptions.get(name, ""),
+            "conflicts": sorted(self._conflicts.get(name, {name})),
+            "manifest": manifest.__dict__ if manifest is not None else None,
+            "builtin": manifest is None,
+        }
+
+    def unload(self, agent_name: str, name: str) -> dict[str, Any]:
+        access = self._check_access(agent_name, name, (), action="uninstall", irreversible=True)
+        if not access.get("success", True):
+            return access
+        if name not in self._registry:
+            return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
+        if name in builtin_tools(self.tool_root or Path.cwd()):
+            return {"success": False, "error_code": "TOOL_BUILTIN_UNLOAD_DENIED", "tool": name}
+        self._registry.pop(name, None)
+        self._conflicts.pop(name, None)
+        self._descriptions.pop(name, None)
+        self._manifests.pop(name, None)
+        return {"success": True, "tool": name}
+
+    def register_builtin(self, agent_name: str, name: str) -> dict[str, Any]:
+        access = self._check_access(agent_name, name, (), action="install", irreversible=True)
+        if not access.get("success", True):
+            return access
+        builtins = builtin_tools(self.tool_root or Path.cwd())
+        if name not in builtins:
+            return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
+        handler, description = builtins[name]
+        self.register(name, handler, description=description)
+        return {"success": True, "tool": name}
 
     def _is_forbidden(self, name: str, permissions: tuple[str, ...] = ()) -> bool:
         lowered = name.lower()
@@ -110,14 +212,17 @@ class ToolManager:
         permissions: tuple[str, ...],
         *,
         action: str = "execute",
+        irreversible: bool = False,
     ) -> dict[str, Any]:
         if self.access_manager is None:
             return {"success": True}
+        groups = ("admin",) if action in {"install", "uninstall"} else ()
         decision = self.access_manager.check(
             AccessRequest(
-                subject=AccessSubject(agent_name=agent_name, permissions=permissions),
+                subject=AccessSubject(agent_name=agent_name, groups=groups, permissions=permissions),
                 action=action,
                 resource=AccessResource("tool", tool_name),
+                irreversible=irreversible,
             )
         )
         if decision.allowed:
@@ -138,6 +243,15 @@ class ToolManager:
             "sandbox": self.sandbox_policy.to_dict(),
             "recent_events": list(self._audit_events[-20:]),
         }
+
+    def _register_builtin_tools(self) -> None:
+        for name, (handler, description) in builtin_tools(self.tool_root or Path.cwd()).items():
+            self.register(name, handler, description=description)
+
+    def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
+        if result.get("success", False):
+            return KernelResponse.ok(result, data=result)
+        return KernelResponse.error(str(result.get("error_code") or "TOOL_BACKEND_UNAVAILABLE"), metadata=result)
 
     def _record_tool_event(
         self,
