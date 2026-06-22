@@ -25,7 +25,8 @@ def test_kernel_status_reports_scheduler_queues_managers_and_recent_syscalls(tmp
             ),
             timeout_s=1.0,
         )
-        assert result.success is True
+        assert result.success is False
+        assert result.error_code == "LLM_PROVIDER_UNAVAILABLE"
 
         status = service.status()
     finally:
@@ -37,7 +38,8 @@ def test_kernel_status_reports_scheduler_queues_managers_and_recent_syscalls(tmp
     assert "llm" in status["queues"]
     assert status["managers"]["llm"] == "ready"
     assert status["managers"]["storage"] == "ready"
-    assert status["manager_status"]["tool"]["tool_count"] == 0
+    assert status["manager_status"]["tool"]["tool_count"] >= 3
+    assert status["llm"]["state"] == "unavailable"
     assert status["access"]["policy"] == "DefaultAccessPolicy"
     assert status["audit"]["enabled"] is True
     assert status["events"]["count"] > 0
@@ -48,7 +50,8 @@ def test_kernel_status_reports_scheduler_queues_managers_and_recent_syscalls(tmp
     assert status["recent_syscalls"][-1]["queue_name"] == "llm"
     assert status["recent_syscalls"][-1]["syscall_id"].startswith("ksc_")
     assert status["recent_syscalls"][-1]["audit_id"].startswith("audit_")
-    assert status["recent_syscalls"][-1]["status"] == "succeeded"
+    assert status["recent_syscalls"][-1]["status"] == "failed"
+    assert status["recent_syscalls"][-1]["error_code"] == "LLM_PROVIDER_UNAVAILABLE"
     assert audit.recent(limit=1)[0]["session_id"] == "sess_observe"
     rendered_status = str(status)
     rendered_audit = str(audit.recent(limit=1)[0])
