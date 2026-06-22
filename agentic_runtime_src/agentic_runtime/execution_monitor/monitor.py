@@ -6,7 +6,7 @@ class ExecutionMonitor:
         self.audit_logger = audit_logger
         self.resource_manager = resource_manager
 
-    def status(self, skills: list[str], ros_bridge: str = "mock") -> dict:
+    def status(self, skills: list[str], ros_bridge: str = "cli") -> dict:
         return {
             "agenticd": "running",
             "ros_bridge": ros_bridge,

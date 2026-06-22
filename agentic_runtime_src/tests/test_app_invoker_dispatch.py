@@ -42,5 +42,6 @@ def test_app_invoker_legacy_app_uses_scheduler(monkeypatch):
         result = await invoker.run_app("legacy_agent", {"place": "workspace"}, parent_session_id="sess_parent", route_plan_id="plan")
         assert result["result"]["success"] is True
         assert result["result"]["kwargs"]["route_plan_id"] == "plan"
+        assert "mock" not in result["result"]["kwargs"]
 
     asyncio.run(run())

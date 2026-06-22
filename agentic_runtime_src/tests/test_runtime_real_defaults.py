@@ -4,6 +4,7 @@ import pytest
 
 from agentic_runtime.cli import build_parser as build_runtime_parser
 from agentic_runtime.config import RuntimeConfig
+from agentic_runtime.execution_monitor import ExecutionMonitor
 from agentic_runtime.kernel_service.schemas import RunAppRequest
 from agentic_runtime.nl_gateway import GatewayFlags, _flags_from_args, build_parser as build_gateway_parser
 from agentic_runtime.photo_cli import build_parser as build_photo_parser
@@ -51,6 +52,20 @@ def test_session_and_kernel_request_defaults_are_real():
 
     assert session.mock is False
     assert request.mock is False
+
+
+def test_execution_monitor_defaults_to_real_bridge_label():
+    class Audit:
+        def recent(self, limit):
+            return []
+
+    class Resources:
+        def snapshot(self):
+            return {}
+
+    status = ExecutionMonitor(Audit(), Resources()).status([])
+
+    assert status["ros_bridge"] == "cli"
 
 
 def test_runtime_cli_defaults_do_not_request_mock():
