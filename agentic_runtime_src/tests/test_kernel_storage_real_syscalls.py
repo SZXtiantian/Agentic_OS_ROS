@@ -139,6 +139,10 @@ def test_storage_delete_and_share_require_intervention_in_kernel_service(tmp_pat
     assert share.success is False
     assert share.error_code == "ACCESS_INTERVENTION_REQUIRED"
     assert any(event["event_type"] == "access.checked" for event in status["events"]["recent"])
+    assert any(
+        event["event_type"] == "storage.audit" and event["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_storage_sdk_facade_uses_kernel_service(tmp_path):

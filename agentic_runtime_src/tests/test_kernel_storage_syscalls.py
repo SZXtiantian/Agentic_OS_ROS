@@ -1,6 +1,7 @@
 import pytest
 
 from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.storage import LSFSAdapter, StorageManager
 from agentic_os.kernel.system_call import KernelSyscall
 
@@ -95,6 +96,41 @@ def test_sto_share_updates_policy_only_after_confirmation(tmp_path):
     assert allowed["sharing_policy"]["labels"] == ["shared"]
     assert allowed["sharing_policy"]["metadata"] == {"scope": "operator"}
     assert storage.share_policy("reports/x.md")["sharing_policy"]["metadata"] == {"scope": "operator"}
+
+
+def test_dangerous_storage_operations_emit_audit_events(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    storage = StorageManager(tmp_path / "storage", access_manager=access, event_sink=sink)
+    storage.write("reports/x.md", "old")
+    storage.write("reports/x.md", "new")
+
+    rollback = storage.rollback("reports/x.md")
+    share = storage.share("reports/x.md", {"scope": "operator"})
+    delete = storage.delete("reports/x.md")
+
+    assert rollback["success"] is True
+    assert share["success"] is True
+    assert delete["success"] is True
+    events = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["rollback", "share", "delete"]
+    assert all(event["metadata"]["success"] is True for event in events)
+    assert all(event["metadata"]["irreversible"] is True for event in events)
+
+
+def test_denied_dangerous_storage_operation_emits_audit_event(tmp_path):
+    sink = InMemoryKernelEventSink()
+    storage = StorageManager(tmp_path / "storage", access_manager=AccessManager(), event_sink=sink)
+    storage.write("reports/x.md", "content")
+
+    denied = storage.delete("reports/x.md")
+
+    assert denied["success"] is False
+    assert denied["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+    audit = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"][-1]
+    assert audit["metadata"]["action"] == "delete"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
 
 
 def test_lsfs_adapter_status_implemented_true_when_enabled(tmp_path):

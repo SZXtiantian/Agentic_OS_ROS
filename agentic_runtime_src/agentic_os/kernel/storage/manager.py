@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
 
@@ -27,10 +28,16 @@ class StorageManager:
         "driver_config",
     }
 
-    def __init__(self, root: str | Path, access_manager: AccessManager | None = None) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        access_manager: AccessManager | None = None,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.access_manager = access_manager
+        self.event_sink = event_sink
         self.index_path = self.root / ".storage_index.sqlite3"
         self._index_available = True
         self._index_error = ""
@@ -131,12 +138,16 @@ class StorageManager:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("delete", relative_path, irreversible=True)
         if not decision.get("success", True):
-            return decision
+            return self._audit_dangerous_result("delete", relative_path, decision)
         if not path.exists() or not path.is_file():
-            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
+            return self._audit_dangerous_result(
+                "delete",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)},
+            )
         path.unlink()
         self._remove_index(relative_path)
-        return {"success": True, "path": str(path)}
+        return self._audit_dangerous_result("delete", relative_path, {"success": True, "path": str(path)})
 
     def mount(self, collection_name: str) -> dict[str, Any]:
         path = self._safe_path(collection_name or "default", allow_root=False)
@@ -172,17 +183,30 @@ class StorageManager:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("rollback", relative_path, irreversible=True)
         if not decision.get("success", True):
-            return decision
+            return self._audit_dangerous_result("rollback", relative_path, decision)
         versions = sorted(self._version_dir(relative_path).glob("*.bak"))
         if not versions:
-            return {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path)}
+            return self._audit_dangerous_result(
+                "rollback",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path)},
+            )
         latest = self._version_dir(relative_path) / version if version else versions[-1]
         if latest not in versions:
-            return {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path), "version": version}
+            return self._audit_dangerous_result(
+                "rollback",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_VERSION_NOT_FOUND", "path": str(path), "version": version},
+            )
         path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(latest, path)
         self._index_file(relative_path, metadata={"rollback_version": latest.name})
-        return {"success": True, "path": str(path), "version": latest.name}
+        return self._audit_dangerous_result(
+            "rollback",
+            relative_path,
+            {"success": True, "path": str(path), "version": latest.name},
+            version=latest.name,
+        )
 
     def stat(self, relative_path: str) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -236,15 +260,28 @@ class StorageManager:
     def share(self, relative_path: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         if not path.exists():
-            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
+            return self._audit_dangerous_result(
+                "share",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)},
+            )
         decision = self._check_access("share", relative_path, irreversible=True)
         if not decision.get("success", True):
-            return decision
+            return self._audit_dangerous_result("share", relative_path, decision)
         if not self._index_available:
-            return {"success": False, "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE", "reason": self._index_error}
+            return self._audit_dangerous_result(
+                "share",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE", "reason": self._index_error},
+            )
         sharing_policy = {"labels": ["shared"], "metadata": dict(metadata or {})}
         self._save_share_policy(str(Path(relative_path)), sharing_policy)
-        return {"success": True, "path": str(path), "sharing_policy": sharing_policy, "share_registry_path": str(self.index_path)}
+        return self._audit_dangerous_result(
+            "share",
+            relative_path,
+            {"success": True, "path": str(path), "sharing_policy": sharing_policy, "share_registry_path": str(self.index_path)},
+            share_registry_path=str(self.index_path),
+        )
 
     def share_policy(self, relative_path: str) -> dict[str, Any]:
         self._safe_path(relative_path, allow_root=False)
@@ -356,6 +393,26 @@ class StorageManager:
             "reason": decision.reason,
             "requires_intervention": decision.requires_intervention,
         }
+
+    def _audit_dangerous_result(
+        self,
+        action: str,
+        relative_path: str,
+        result: dict[str, Any],
+        **metadata: Any,
+    ) -> dict[str, Any]:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "storage.audit",
+                action=action,
+                relative_path=str(Path(relative_path)),
+                success=bool(result.get("success", False)),
+                error_code=str(result.get("error_code") or ""),
+                irreversible=True,
+                provider="local_fs",
+                **metadata,
+            )
+        return result
 
     def _save_version(self, path: Path, relative_path: str) -> str:
         version_dir = self._version_dir(relative_path)

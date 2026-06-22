@@ -34,7 +34,7 @@ class KernelService:
         self.llm = self._build_llm_adapter()
         self.context = self._build_context_manager()
         self.memory = self._build_memory_manager()
-        self.storage = StorageManager(self._storage_root(), access_manager=self.access_manager)
+        self.storage = StorageManager(self._storage_root(), access_manager=self.access_manager, event_sink=self.event_sink)
         self.tool = self._build_tool_manager()
         robot_backend = RuntimeRobotCapabilityBackend(runtime_server) if runtime_server is not None else None
         skill_backend = RuntimeSkillBackend(runtime_server) if runtime_server is not None else None
