@@ -94,6 +94,41 @@ def test_queue_peek_drain_and_remove_cancel_unexecuted_syscall():
     assert store.size(KernelQueueName.MEMORY) == 0
 
 
+def test_queue_remove_missing_syscall_is_precise_noop():
+    sink = InMemoryKernelEventSink()
+    store = KernelQueueStore(event_sink=sink)
+    first = make_syscall("agent_a", 1, KernelQueueName.MEMORY)
+    second = make_syscall("agent_a", 2, KernelQueueName.MEMORY)
+
+    store.add(KernelQueueName.MEMORY, first)
+    store.add(KernelQueueName.MEMORY, second)
+
+    assert store.remove("ksc_missing") is None
+    assert store.size(KernelQueueName.MEMORY) == 2
+    assert first.status == "queued"
+    assert second.status == "queued"
+    assert [event["event_type"] for event in sink.recent()] == ["queue.added", "queue.added"]
+
+
+def test_queue_remove_cancels_only_matching_middle_syscall():
+    store = KernelQueueStore()
+    first = make_syscall("agent_a", 1, KernelQueueName.MEMORY)
+    second = make_syscall("agent_a", 2, KernelQueueName.MEMORY)
+    third = make_syscall("agent_a", 3, KernelQueueName.MEMORY)
+
+    store.add(KernelQueueName.MEMORY, first)
+    store.add(KernelQueueName.MEMORY, second)
+    store.add(KernelQueueName.MEMORY, third)
+
+    removed = store.remove(second.syscall_id)
+
+    assert removed is second
+    assert second.status == "cancelled"
+    assert first.status == "queued"
+    assert third.status == "queued"
+    assert store.drain(KernelQueueName.MEMORY) == [first, third]
+
+
 def test_full_queue_reject_policy_is_deterministic():
     store = KernelQueueStore(
         policies={KernelQueueName.MEMORY: KernelQueuePolicy(max_size=1, on_full="reject")}

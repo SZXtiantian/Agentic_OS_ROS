@@ -143,14 +143,19 @@ class KernelQueueStore:
 
     def remove(self, syscall_id: str) -> KernelSyscall | None:
         with self._condition:
-            for queue in self._queues.values():
+            for queue_name, queue in self._queues.items():
                 for item in list(queue):
                     if item.syscall.syscall_id == syscall_id:
                         queue.remove(item)
                         item.syscall.cancel("removed from queue before execution")
-                    self._condition.notify_all()
-                    self._emit("syscall.cancelled", queue_name="unknown", syscall_id=item.syscall.syscall_id, agent_name=item.syscall.agent_name)
-                    return item.syscall
+                        self._condition.notify_all()
+                        self._emit(
+                            "syscall.cancelled",
+                            queue_name=queue_name,
+                            syscall_id=item.syscall.syscall_id,
+                            agent_name=item.syscall.agent_name,
+                        )
+                        return item.syscall
             return None
 
     def mark_backpressure(self, queue_name: str) -> None:
