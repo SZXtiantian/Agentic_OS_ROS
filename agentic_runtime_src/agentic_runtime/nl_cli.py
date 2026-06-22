@@ -150,11 +150,11 @@ class AgenticNaturalLanguageCLI:
         else:
             os.environ.pop("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", None)
         try:
-            server = RuntimeServer.create(mock=not self.real)
+            server = RuntimeServer.create()
             result = await server.scheduler.run_app(
                 "camera_arm_inspection_agent",
                 place=intent.place,
-                mock=not self.real,
+                mock=False,
             )
         finally:
             if previous is None:
@@ -168,7 +168,7 @@ class AgenticNaturalLanguageCLI:
         if not self._ensure_real_bridge_ready():
             self._print_bridge_unavailable()
             return 1
-        server = RuntimeServer.create(mock=not self.real)
+        server = RuntimeServer.create()
         result = await server.executor.dispatcher.bridge_client.stop_robot("operator_requested_from_agentic_chat")
         if self.json_output:
             print_json(result)
@@ -178,7 +178,7 @@ class AgenticNaturalLanguageCLI:
         return 0 if bool(result.get("success", False)) else 1
 
     def _print_status(self) -> None:
-        server = RuntimeServer.create(mock=not self.real)
+        server = RuntimeServer.create()
         data = server.monitor.status([skill.name for skill in server.registry.list_skills()], ros_bridge=server.config.ros_bridge_mode)
         data["scheduler"] = server.scheduler.status()
         if self.json_output:
@@ -196,7 +196,7 @@ class AgenticNaturalLanguageCLI:
                 print(f"  - {record.get('skill_name')}: {record.get('status')} {record.get('error_code')}")
 
     def _print_sessions(self) -> None:
-        server = RuntimeServer.create(mock=not self.real)
+        server = RuntimeServer.create()
         sessions = [record.to_dict() for record in server.session_manager.list_sessions(limit=10)]
         if self.json_output:
             print_json(sessions)
@@ -205,7 +205,7 @@ class AgenticNaturalLanguageCLI:
             print(f"{record['session_id']} {record['app_id']} {record['status']}")
 
     def _print_audit(self) -> None:
-        server = RuntimeServer.create(mock=not self.real)
+        server = RuntimeServer.create()
         records = server.audit_logger.recent(limit=20)
         if self.json_output:
             print_json(records)

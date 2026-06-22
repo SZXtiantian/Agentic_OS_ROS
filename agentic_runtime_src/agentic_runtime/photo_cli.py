@@ -108,10 +108,10 @@ class RobotPhotoCLI:
             "text": text,
             "allow_arm_motion": self.allow_arm_motion,
             "assume_yes": self.assume_yes,
-            "mock": not self.real,
+            "mock": False,
         }
-        server = RuntimeServer.create(mock=not self.real)
-        agent = self._load_agent(runtime=server, mock=not self.real)
+        server = RuntimeServer.create()
+        agent = self._load_agent(runtime=server, mock=False)
         result = await agent.arun(task_input)
         self._print_result(result)
         app_result = dict(result.get("result") or result)
