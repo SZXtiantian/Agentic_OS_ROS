@@ -178,7 +178,10 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
 
     assert result.success is True
     assert server.bridge_client.navigation_calls == [{"place": "厨房", "timeout_s": 2}]
-    assert any(record["skill_name"] == "robot.navigate_to" for record in server.audit_logger.recent(limit=5))
+    assert any(
+        record["skill_name"] == "robot.navigate_to" and record["session_id"] == "sess_kernel_robot"
+        for record in server.audit_logger.recent(limit=20)
+    )
 
 
 def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):

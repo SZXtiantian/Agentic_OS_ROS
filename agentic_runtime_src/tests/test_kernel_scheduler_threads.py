@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 
-from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
+from agentic_os.kernel.hooks import InMemoryKernelEventSink, KernelQueueName, KernelQueueStore
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
 from agentic_os.kernel.scheduler import BaseKernelScheduler, FIFOKernelScheduler, SchedulerLaneSpec
 from agentic_os.kernel.system_call import (
@@ -132,7 +132,7 @@ def test_scheduler_converts_manager_timeout_to_structured_error():
 def test_scheduler_batches_llm_syscalls_in_window():
     store = KernelQueueStore()
     provider = BatchProvider()
-    manager = LLMAdapter([LLMConfig(name="batch", backend="mock")], providers={"batch": provider})
+    manager = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
     lane = SchedulerLaneSpec(
         "llm",
         KernelQueueName.LLM,
@@ -167,6 +167,36 @@ def test_scheduler_batches_llm_syscalls_in_window():
     assert len(results) == 3
     assert all(result.success for result in results)
     assert sorted(result.response.response_message["index"] for result in results) == [0, 1, 2]
+
+
+def test_scheduler_releases_batch_syscall_after_manager_done_event():
+    store = KernelQueueStore()
+    sink = InMemoryKernelEventSink()
+    provider = BatchProvider()
+    manager = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
+    lane = SchedulerLaneSpec(
+        "llm",
+        KernelQueueName.LLM,
+        concurrent=True,
+        manager_key="llm",
+        batchable=True,
+        batch_window_ms=10,
+        max_batch_size=8,
+    )
+    scheduler = FIFOKernelScheduler(store, managers={"llm": manager}, lanes=(lane,), poll_timeout_s=0.01, event_sink=sink)
+    executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0, event_sink=sink)
+
+    scheduler.start()
+    try:
+        result = executor.execute_request("agent_a", LLMQuery(operation_type="chat"), timeout_s=1.0)
+        event_types = [event["event_type"] for event in sink.recent(limit=20)]
+    finally:
+        scheduler.stop()
+
+    assert result.success is True
+    assert result.syscall.status == KernelSyscallStatus.DONE
+    assert "manager.done" in event_types
+    assert event_types.index("syscall.done") < event_types.index("manager.done")
 
 
 def test_scheduler_status_reports_queue_sizes():
