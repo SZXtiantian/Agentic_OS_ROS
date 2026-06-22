@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import os
+import threading
 from typing import Any
 
 from agentic_os.kernel.context import GenerationSnapshot
@@ -30,6 +32,8 @@ class LLMAdapter:
     ) -> None:
         self.llm_configs = normalize_llm_configs(llm_configs)
         self.providers = dict(providers or {})
+        self._active: dict[str, threading.Event] = {}
+        self._active_lock = threading.Lock()
         if routing_strategy == "smart":
             self.router = SmartRouting(self.llm_configs)
         else:
@@ -39,7 +43,7 @@ class LLMAdapter:
         if syscall.operation_type in {"llm_status", "status"}:
             return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
         if syscall.operation_type in {"llm_cancel", "cancel"}:
-            return KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"reason": "no active cancellable LLM call"})
+            return self.cancel(_cancel_call_id(syscall.params))
         query = getattr(syscall, "query", None)
         if not isinstance(query, LLMQuery):
             query = LLMQuery(
@@ -51,11 +55,26 @@ class LLMAdapter:
                 response_format=syscall.params.get("response_format"),
                 action_type=str(syscall.params.get("action_type") or _action_type_from_operation(syscall.operation_type)),
             )
-        return self.complete(query)
+        cancel_event = self._register_active(syscall.syscall_id)
+        try:
+            response = self.complete(query)
+            if cancel_event.is_set():
+                return KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"call_id": syscall.syscall_id})
+            response.metadata.setdefault("call_id", syscall.syscall_id)
+            return response
+        finally:
+            self._unregister_active(syscall.syscall_id)
 
     def address_batch(self, syscalls: list[KernelSyscall]) -> list[KernelResponse]:
-        queries: list[LLMQuery] = []
-        for syscall in syscalls:
+        responses: list[KernelResponse | None] = [None] * len(syscalls)
+        indexed_queries: list[tuple[int, KernelSyscall, LLMQuery, threading.Event]] = []
+        for index, syscall in enumerate(syscalls):
+            if syscall.operation_type in {"llm_status", "status"}:
+                responses[index] = KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+                continue
+            if syscall.operation_type in {"llm_cancel", "cancel"}:
+                responses[index] = self.cancel(_cancel_call_id(syscall.params))
+                continue
             query = getattr(syscall, "query", None)
             if not isinstance(query, LLMQuery):
                 query = LLMQuery(
@@ -67,14 +86,32 @@ class LLMAdapter:
                     response_format=syscall.params.get("response_format"),
                     action_type=str(syscall.params.get("action_type", "chat")),
                 )
-            queries.append(query)
-        return self.complete_batch(queries)
+            cancel_event = self._register_active(syscall.syscall_id)
+            indexed_queries.append((index, syscall, query, cancel_event))
+        if indexed_queries:
+            try:
+                batch_responses = self.complete_batch([item[2] for item in indexed_queries])
+                for (index, syscall, _query, cancel_event), response in zip(indexed_queries, batch_responses, strict=False):
+                    if cancel_event.is_set():
+                        responses[index] = KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"call_id": syscall.syscall_id})
+                    else:
+                        response.metadata.setdefault("call_id", syscall.syscall_id)
+                        responses[index] = response
+                for index, syscall, _query, _cancel_event in indexed_queries[len(batch_responses) :]:
+                    responses[index] = KernelResponse.error(
+                        LLMCoreErrorCode.RESPONSE_INVALID,
+                        metadata={"reason": "missing batch response", "call_id": syscall.syscall_id},
+                    )
+            finally:
+                for _index, syscall, _query, _cancel_event in indexed_queries:
+                    self._unregister_active(syscall.syscall_id)
+        return [response or KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID) for response in responses]
 
     def complete(self, query: LLMQuery) -> KernelResponse:
         if query.operation_type in {"llm_status", "status"}:
             return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
         if query.operation_type in {"llm_cancel", "cancel"}:
-            return KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"reason": "no active cancellable LLM call"})
+            return self.cancel(str(query.params.get("call_id") or query.params.get("syscall_id") or ""))
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not candidates:
             return KernelResponse.error(
@@ -157,28 +194,100 @@ class LLMAdapter:
     def status(self) -> dict[str, Any]:
         providers = []
         for config in self.llm_configs:
-            state = "configured"
-            reason = ""
-            if config.backend in {"mock", "fake", "stub", "dummy"}:
-                state = "unavailable"
-                reason = "mock/fake/stub/dummy LLM backends are disabled"
-            elif config.backend in {"openai_compatible", "ollama_openai_compatible", "vllm_openai_compatible", "vllm"}:
-                api_key = bool(config.api_key or (config.api_key_env and os.environ.get(config.api_key_env)))
-                if not config.hostname or not api_key:
-                    state = "unavailable"
-                    reason = "base_url or api key not configured"
+            provider_status = self._config_status(config)
             providers.append(
                 {
                     "name": config.name,
                     "backend": config.backend,
                     "enabled": config.enabled,
-                    "state": state,
-                    "error_code": "" if state != "unavailable" else LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
-                    "reason": reason,
+                    "state": provider_status["state"],
+                    "error_code": provider_status["error_code"],
+                    "reason": provider_status["reason"],
                     "capabilities": list(config.capabilities),
                 }
             )
-        return {"providers": providers, "state": "ready" if any(item["state"] == "configured" for item in providers) else "unavailable"}
+        with self._active_lock:
+            active = sorted(self._active)
+        return {
+            "providers": providers,
+            "state": "ready" if any(item["state"] == "configured" for item in providers) else "unavailable",
+            "active": active,
+            "active_count": len(active),
+        }
+
+    def cancel(self, call_id: str = "") -> KernelResponse:
+        if not call_id:
+            return KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"reason": "call_id required"})
+        with self._active_lock:
+            event = self._active.get(call_id)
+        if event is None:
+            return KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"call_id": call_id})
+        event.set()
+        return KernelResponse.ok({"cancelled": [call_id]}, metadata={"call_id": call_id, "status": "cancel_requested"})
+
+    def _register_active(self, call_id: str) -> threading.Event:
+        event = threading.Event()
+        with self._active_lock:
+            self._active[call_id] = event
+        return event
+
+    def _unregister_active(self, call_id: str) -> None:
+        with self._active_lock:
+            self._active.pop(call_id, None)
+
+    def _config_status(self, config: LLMConfig) -> dict[str, str]:
+        if not config.enabled:
+            return {"state": "disabled", "error_code": "", "reason": ""}
+        if config.backend in {"mock", "fake", "stub", "dummy"}:
+            return {
+                "state": "unavailable",
+                "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                "reason": "mock/fake/stub/dummy LLM backends are disabled",
+            }
+        if config.backend in {"openai_compatible", "ollama_openai_compatible", "vllm_openai_compatible", "vllm"}:
+            missing = []
+            if not config.hostname:
+                missing.append("base_url")
+            if not (config.api_key or (config.api_key_env and os.environ.get(config.api_key_env))):
+                missing.append("api_key")
+            if missing:
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                    "reason": f"missing required config: {', '.join(missing)}",
+                }
+            return {"state": "configured", "error_code": "", "reason": ""}
+        if config.backend in {"litellm", "litellm_compatible"}:
+            if importlib.util.find_spec("litellm") is None:
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING,
+                    "reason": "missing dependency: litellm",
+                }
+            return {"state": "configured", "error_code": "", "reason": ""}
+        if config.backend in {"huggingface", "hf", "hflocal"}:
+            if importlib.util.find_spec("transformers") is None:
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING,
+                    "reason": "missing dependency: transformers",
+                }
+            return {
+                "state": "unavailable",
+                "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                "reason": "local HuggingFace generation pipeline is not configured",
+            }
+        if config.backend == "local":
+            return {
+                "state": "unavailable",
+                "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                "reason": "local LLM backend is not configured",
+            }
+        return {
+            "state": "unavailable",
+            "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+            "reason": f"unsupported backend: {config.backend}",
+        }
 
 
 def response_text(response: KernelResponse) -> str:
@@ -201,3 +310,7 @@ def _action_type_from_operation(operation_type: str) -> str:
     if operation_type in {"llm_complete", "complete"}:
         return "complete"
     return "chat"
+
+
+def _cancel_call_id(params: dict[str, Any]) -> str:
+    return str(params.get("call_id") or params.get("syscall_id") or params.get("correlation_id") or "")

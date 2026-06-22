@@ -15,6 +15,6 @@ class LocalBackendProvider:
     def complete(self, query: LLMQuery) -> KernelResponse:
         return KernelResponse(
             False,
-            error_code=LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING,
-            metadata={"backend": self.config.backend, "model": self.config.name},
+            error_code=LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+            metadata={"backend": self.config.backend, "model": self.config.name, "reason": "local LLM backend is not configured"},
         )

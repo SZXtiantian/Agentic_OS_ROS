@@ -126,7 +126,7 @@ def test_kernel_service_default_config_reports_llm_unavailable(tmp_path):
     assert status["config"]["llm"]["configs"][0]["name"] == "unconfigured"
     assert status["config"]["llm"]["configs"][0]["backend"] == "openai_compatible"
     assert status["llm"]["state"] == "unavailable"
-    assert status["llm"]["providers"][0]["error_code"] == "LLM_PROVIDER_UNAVAILABLE"
+    assert status["llm"]["providers"][0]["error_code"] == "LLM_PROVIDER_UNCONFIGURED"
 
 
 def test_kernel_service_uses_rr_scheduler_from_kernel_config(tmp_path):
@@ -175,7 +175,7 @@ def test_kernel_service_execute_request_lazily_starts_scheduler(tmp_path):
         service.stop()
 
     assert result.success is False
-    assert result.error_code == "LLM_PROVIDER_UNAVAILABLE"
+    assert result.error_code == "LLM_PROVIDER_UNCONFIGURED"
     assert status["scheduler"]["active"] is True
     assert status["scheduler"]["threads"]
 

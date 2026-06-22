@@ -46,12 +46,12 @@ class OpenAICompatibleProvider:
         api_key = self.config.api_key or (os.environ.get(self.config.api_key_env) if self.config.api_key_env else "")
         if not api_key:
             return KernelResponse.error(
-                LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
                 metadata={"reason": "api key not configured", "required_config": ["api_key_env"]},
             )
         if not self.config.hostname:
             return KernelResponse.error(
-                LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
                 metadata={"reason": "base_url not configured", "required_config": ["base_url"]},
             )
 
@@ -79,7 +79,7 @@ class OpenAICompatibleProvider:
             with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            return KernelResponse(False, error_code=LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
+            return KernelResponse(False, error_code=LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
         except json.JSONDecodeError as exc:
             return KernelResponse(False, error_code=LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": str(exc)})
 
@@ -94,12 +94,12 @@ class OpenAICompatibleProvider:
         api_key = self.config.api_key or (os.environ.get(self.config.api_key_env) if self.config.api_key_env else "")
         if not api_key:
             return KernelResponse.error(
-                LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
                 metadata={"reason": "api key not configured", "required_config": ["api_key_env"]},
             )
         if not self.config.hostname:
             return KernelResponse.error(
-                LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
                 metadata={"reason": "base_url not configured", "required_config": ["base_url"]},
             )
         inputs = query.params.get("input", query.params.get("texts", query.params.get("text", "")))
@@ -118,7 +118,7 @@ class OpenAICompatibleProvider:
             with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            return KernelResponse.error(LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
+            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
         except json.JSONDecodeError as exc:
             return KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": str(exc)})
         embeddings = [item.get("embedding") for item in body.get("data", []) if isinstance(item, dict)]
@@ -153,7 +153,7 @@ class LiteLLMProvider:
             )
             normalized = normalize_litellm_response(body)
         except Exception as exc:
-            return KernelResponse.error(LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
+            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
         return KernelResponse.ok(normalized.to_dict(), metadata={"provider": self.config.name})
 
 
@@ -170,6 +170,6 @@ class HuggingFaceProvider:
                 metadata={"backend": self.config.backend, "dependency": "transformers"},
             )
         return KernelResponse.error(
-            LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+            LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
             metadata={"backend": self.config.backend, "reason": "local HuggingFace generation pipeline is not configured"},
         )

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import threading
+import urllib.error
+
 from agentic_os.kernel.llm_core import (
     HuggingFaceProvider,
     LLMAdapter,
     LLMConfig,
     LLMCoreErrorCode,
     LiteLLMProvider,
+    OpenAICompatibleProvider,
     SmartRouting,
     normalize_openai_response,
 )
@@ -13,7 +17,7 @@ from agentic_os.kernel.model_library import ModelEndpoint, ModelLibrary
 from agentic_os.kernel.system_call import KernelResponse, LLMQuery, create_syscall
 
 
-class FakeProvider:
+class RecordingProvider:
     def __init__(self, name: str) -> None:
         self.name = name
         self.queries: list[LLMQuery] = []
@@ -36,7 +40,7 @@ class JSONProvider:
         return KernelResponse.ok({"role": "assistant", "content": self.content})
 
 
-class FakeBatchLLMProvider:
+class BatchLLMProvider:
     def __init__(self) -> None:
         self.batches: list[list[LLMQuery]] = []
 
@@ -48,7 +52,7 @@ class FakeBatchLLMProvider:
         return [KernelResponse.ok({"index": index}) for index, _query in enumerate(queries)]
 
 
-class FakePartialFailureBatchProvider(FakeBatchLLMProvider):
+class PartialFailureBatchProvider(BatchLLMProvider):
     def complete_batch(self, queries: list[LLMQuery]) -> list[KernelResponse]:
         self.batches.append(list(queries))
         return [
@@ -58,27 +62,38 @@ class FakePartialFailureBatchProvider(FakeBatchLLMProvider):
         ]
 
 
+class BlockingProvider:
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def complete(self, query: LLMQuery) -> KernelResponse:
+        self.entered.set()
+        self.release.wait(timeout=2.0)
+        return KernelResponse.ok({"content": "late response"})
+
+
 def test_llm_adapter_routes_sequentially():
-    provider_a = FakeProvider("mock-a")
-    provider_b = FakeProvider("mock-b")
+    provider_a = RecordingProvider("model-a")
+    provider_b = RecordingProvider("model-b")
     adapter = LLMAdapter(
         [
-            LLMConfig(name="mock-a", backend="mock"),
-            LLMConfig(name="mock-b", backend="mock"),
+            LLMConfig(name="model-a", backend="openai_compatible"),
+            LLMConfig(name="model-b", backend="openai_compatible"),
         ],
-        providers={"mock-a": provider_a, "mock-b": provider_b},
+        providers={"model-a": provider_a, "model-b": provider_b},
     )
 
     first = adapter.complete(LLMQuery(operation_type="chat"))
     second = adapter.complete(LLMQuery(operation_type="chat"))
 
-    assert first.response_message["model"] == "mock-a"
-    assert second.response_message["model"] == "mock-b"
+    assert first.response_message["model"] == "model-a"
+    assert second.response_message["model"] == "model-b"
 
 
-def test_llm_adapter_uses_fake_provider_without_network():
-    provider = FakeProvider("offline")
-    adapter = LLMAdapter([LLMConfig(name="offline", backend="mock")], providers={"offline": provider})
+def test_llm_adapter_uses_injected_provider_without_network():
+    provider = RecordingProvider("offline")
+    adapter = LLMAdapter([LLMConfig(name="offline", backend="openai_compatible")], providers={"offline": provider})
     query = LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hi"}])
 
     response = adapter.complete(query)
@@ -88,8 +103,8 @@ def test_llm_adapter_uses_fake_provider_without_network():
 
 
 def test_llm_adapter_batch_preserves_order():
-    provider = FakeBatchLLMProvider()
-    adapter = LLMAdapter([LLMConfig(name="batch", backend="mock")], providers={"batch": provider})
+    provider = BatchLLMProvider()
+    adapter = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
 
     responses = adapter.complete_batch([LLMQuery(operation_type="chat") for _ in range(3)])
 
@@ -98,8 +113,8 @@ def test_llm_adapter_batch_preserves_order():
 
 
 def test_llm_adapter_batch_single_failure_does_not_fail_whole_batch():
-    provider = FakePartialFailureBatchProvider()
-    adapter = LLMAdapter([LLMConfig(name="batch", backend="mock")], providers={"batch": provider})
+    provider = PartialFailureBatchProvider()
+    adapter = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
 
     responses = adapter.complete_batch([LLMQuery(operation_type="chat") for _ in range(3)])
 
@@ -108,8 +123,8 @@ def test_llm_adapter_batch_single_failure_does_not_fail_whole_batch():
 
 
 def test_llm_adapter_batch_falls_back_to_sequential_complete():
-    provider = FakeProvider("sequential")
-    adapter = LLMAdapter([LLMConfig(name="sequential", backend="mock")], providers={"sequential": provider})
+    provider = RecordingProvider("sequential")
+    adapter = LLMAdapter([LLMConfig(name="sequential", backend="openai_compatible")], providers={"sequential": provider})
     queries = [LLMQuery(operation_type="chat") for _ in range(2)]
 
     responses = adapter.complete_batch(queries)
@@ -133,7 +148,7 @@ def test_optional_litellm_dependency_missing_is_structured():
     response = provider.complete(LLMQuery(operation_type="chat"))
 
     assert response.success is False
-    assert response.error_code in {LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING, LLMCoreErrorCode.REQUEST_FAILED}
+    assert response.error_code in {LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING, LLMCoreErrorCode.PROVIDER_ERROR}
 
 
 def test_optional_huggingface_dependency_missing_is_structured():
@@ -141,9 +156,8 @@ def test_optional_huggingface_dependency_missing_is_structured():
 
     response = provider.complete(LLMQuery(operation_type="chat"))
 
-    assert response.success in {True, False}
-    if not response.success:
-        assert response.error_code == LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING
+    assert response.success is False
+    assert response.error_code in {LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING, LLMCoreErrorCode.PROVIDER_UNCONFIGURED}
 
 
 def test_openai_response_normalization_includes_tool_calls():
@@ -167,8 +181,8 @@ def test_openai_response_normalization_includes_tool_calls():
 
 
 def test_json_response_valid_and_invalid_are_normalized():
-    valid = LLMAdapter([LLMConfig(name="json", backend="mock")], providers={"json": JSONProvider('{"ok": true}')})
-    invalid = LLMAdapter([LLMConfig(name="json", backend="mock")], providers={"json": JSONProvider("{bad")})
+    valid = LLMAdapter([LLMConfig(name="json", backend="openai_compatible")], providers={"json": JSONProvider('{"ok": true}')})
+    invalid = LLMAdapter([LLMConfig(name="json", backend="openai_compatible")], providers={"json": JSONProvider("{bad")})
     query = LLMQuery(operation_type="chat", response_format={"type": "json_object"})
 
     valid_response = valid.complete(query)
@@ -183,11 +197,11 @@ def test_json_response_valid_and_invalid_are_normalized():
 
 def test_selected_llms_and_fallback_candidates_work():
     failing = FailingProvider()
-    good = FakeProvider("good")
+    good = RecordingProvider("good")
     adapter = LLMAdapter(
         [
-            LLMConfig(name="bad", backend="mock"),
-            LLMConfig(name="good", backend="mock"),
+            LLMConfig(name="bad", backend="openai_compatible"),
+            LLMConfig(name="good", backend="openai_compatible"),
         ],
         providers={"bad": failing, "good": good},
     )
@@ -204,9 +218,9 @@ def test_selected_llms_and_fallback_candidates_work():
 def test_smart_routing_sorts_by_quality_then_cost():
     router = SmartRouting(
         [
-            LLMConfig(name="cheap", backend="mock", quality_score=0.5, cost_per_1k_input=0.1),
-            LLMConfig(name="best", backend="mock", quality_score=0.9, cost_per_1k_input=1.0),
-            LLMConfig(name="mid", backend="mock", quality_score=0.5, cost_per_1k_input=0.05),
+            LLMConfig(name="cheap", backend="openai_compatible", quality_score=0.5, cost_per_1k_input=0.1),
+            LLMConfig(name="best", backend="openai_compatible", quality_score=0.9, cost_per_1k_input=1.0),
+            LLMConfig(name="mid", backend="openai_compatible", quality_score=0.5, cost_per_1k_input=0.05),
         ]
     )
 
@@ -214,7 +228,7 @@ def test_smart_routing_sorts_by_quality_then_cost():
 
 
 def test_llm_query_with_json_response_format_preserved():
-    provider = FakeProvider("configured")
+    provider = RecordingProvider("configured")
     adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     query = LLMQuery(
         operation_type="chat",
@@ -229,7 +243,7 @@ def test_llm_query_with_json_response_format_preserved():
 
 
 def test_llm_query_with_tools_preserved():
-    provider = FakeProvider("configured")
+    provider = RecordingProvider("configured")
     adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     query = LLMQuery(
         operation_type="chat",
@@ -243,7 +257,7 @@ def test_llm_query_with_tools_preserved():
 
 
 def test_llm_adapter_address_request_accepts_llm_syscall():
-    provider = FakeProvider("configured")
+    provider = RecordingProvider("configured")
     adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     syscall = create_syscall(
         "agent_a",
@@ -263,6 +277,85 @@ def test_llm_adapter_without_real_provider_fails_unavailable():
 
     assert response.success is False
     assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_llm_adapter_cancel_missing_call_returns_syscall_not_found():
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": RecordingProvider("configured")})
+    syscall = create_syscall("agent_a", LLMQuery(operation_type="cancel", params={"call_id": "missing"}))
+
+    response = adapter.address_request(syscall)
+
+    assert response.success is False
+    assert response.error_code == "SYSCALL_NOT_FOUND"
+
+
+def test_llm_adapter_can_cancel_active_syscall_by_id():
+    provider = BlockingProvider()
+    adapter = LLMAdapter([LLMConfig(name="blocking", backend="openai_compatible")], providers={"blocking": provider})
+    syscall = create_syscall("agent_a", LLMQuery(operation_type="chat"))
+    result: dict[str, KernelResponse] = {}
+
+    thread = threading.Thread(target=lambda: result.setdefault("response", adapter.address_request(syscall)))
+    thread.start()
+    assert provider.entered.wait(timeout=1.0)
+    assert syscall.syscall_id in adapter.status()["active"]
+
+    cancel = adapter.address_request(create_syscall("agent_a", LLMQuery(operation_type="cancel", params={"call_id": syscall.syscall_id})))
+    provider.release.set()
+    thread.join(timeout=1.0)
+
+    assert cancel.success is True
+    assert result["response"].success is False
+    assert result["response"].error_code == LLMCoreErrorCode.CANCELLED
+    assert adapter.status()["active"] == []
+
+
+def test_llm_adapter_batch_handles_cancel_without_provider_call():
+    provider = RecordingProvider("configured")
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
+    syscall = create_syscall("agent_a", LLMQuery(operation_type="cancel", params={"call_id": "missing"}))
+
+    response = adapter.address_batch([syscall])[0]
+
+    assert response.success is False
+    assert response.error_code == "SYSCALL_NOT_FOUND"
+    assert provider.queries == []
+
+
+def test_llm_status_reports_unconfigured_openai_provider():
+    adapter = LLMAdapter([LLMConfig(name="needs_config", backend="openai_compatible")])
+
+    status = adapter.status()
+
+    assert status["state"] == "unavailable"
+    assert status["providers"][0]["error_code"] == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
+    assert "base_url" in status["providers"][0]["reason"]
+    assert "api_key" in status["providers"][0]["reason"]
+
+
+def test_openai_provider_missing_config_returns_unconfigured():
+    provider = OpenAICompatibleProvider(LLMConfig(name="needs_config", backend="openai_compatible"))
+
+    response = provider.complete(LLMQuery(operation_type="chat"))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
+
+
+def test_openai_provider_remote_failure_returns_provider_error(monkeypatch):
+    provider = OpenAICompatibleProvider(
+        LLMConfig(name="configured", backend="openai_compatible", hostname="https://example.test/v1", api_key="test-key")
+    )
+
+    def raise_url_error(request, timeout):
+        raise urllib.error.URLError("network down")
+
+    monkeypatch.setattr("agentic_os.kernel.llm_core.provider.urllib.request.urlopen", raise_url_error)
+
+    response = provider.complete(LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hi"}]))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_ERROR
 
 
 def test_model_library_router_backward_compatible():
