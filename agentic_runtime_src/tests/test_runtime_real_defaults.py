@@ -50,7 +50,7 @@ def test_session_and_kernel_request_defaults_are_real():
     session = SessionRecord.create("app_a")
     request = RunAppRequest()
 
-    assert session.mock is False
+    assert "mock" not in session.to_dict()
     assert request.mock is False
 
 

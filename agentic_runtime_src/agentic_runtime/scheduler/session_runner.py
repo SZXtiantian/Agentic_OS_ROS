@@ -24,7 +24,7 @@ class SessionRunner:
     async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False, **kwargs: Any) -> dict[str, Any]:
         task = dict(kwargs)
         task.setdefault("place", place)
-        session = self.session_manager.create_session(app_id, task=task, mock=mock)
+        session = self.session_manager.create_session(app_id, task=task)
         self.context_manager.snapshot(session.session_id, app_id, task=task)
         self.session_manager.start_session(session.session_id)
         try:

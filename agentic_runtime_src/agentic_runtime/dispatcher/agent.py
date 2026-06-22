@@ -32,7 +32,6 @@ class DispatcherAgent:
         dispatcher_session = self.runtime.session_manager.create_session(
             "agentic_dispatcher",
             task={"user_text": user_text, "route_plan_id": route_plan_id},
-            mock=bool(getattr(flags, "mock", False)),
         )
         self.runtime.session_manager.start_session(dispatcher_session.session_id)
 

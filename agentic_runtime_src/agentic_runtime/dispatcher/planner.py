@@ -71,7 +71,6 @@ class DispatcherPlanner:
             raise LLMError("LLM_PLAN_MODE_INVALID", "dispatcher LLM plan must use planner_mode=llm")
         app_task_input = dict(plan.get("app_task_input") or {})
         app_task_input.setdefault("text", user_text)
-        app_task_input["mock"] = bool(getattr(flags, "mock", False))
         app_task_input["allow_arm_motion"] = bool(getattr(flags, "allow_arm_motion", False))
         app_task_input["assume_yes"] = bool(getattr(flags, "assume_yes", False))
         app_task_input["parent_task_id"] = task_id
@@ -86,7 +85,6 @@ class DispatcherPlanner:
         compact = re.sub(r"\s+", "", text.lower())
         base_input = {
             "text": text,
-            "mock": bool(getattr(flags, "mock", False)),
             "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
             "assume_yes": bool(getattr(flags, "assume_yes", False)),
             "parent_task_id": task_id,
@@ -323,7 +321,6 @@ def _build_user_prompt(user_text: str, app_index: AppIndex, flags: Any, *, task_
             ],
             "target_allowlist": ["workspace"],
             "flags": {
-                "mock": bool(getattr(flags, "mock", False)),
                 "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
                 "assume_yes": bool(getattr(flags, "assume_yes", False)),
                 "require_llm": _require_llm(flags),
@@ -351,7 +348,6 @@ def _build_user_prompt(user_text: str, app_index: AppIndex, flags: Any, *, task_
                 "target": "workspace",
                 "app_task_input": {
                     "text": user_text,
-                    "mock": bool(getattr(flags, "mock", False)),
                     "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
                     "assume_yes": bool(getattr(flags, "assume_yes", False)),
                     "parent_task_id": task_id,
