@@ -97,6 +97,14 @@ class _KernelBaseAPI:
 
 
 class KernelLLMAPI(_KernelBaseAPI):
+    def _metadata(self, kwargs: dict[str, Any]) -> dict[str, Any]:
+        metadata = dict(kwargs.get("metadata") or {})
+        permissions = kwargs.get("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ())))
+        metadata.setdefault("permissions", tuple(permissions))
+        metadata.setdefault("app_id", self.ctx.app_manifest.name)
+        metadata.setdefault("session_id", self.ctx.session_id)
+        return metadata
+
     async def chat(self, messages: list[dict], **kwargs):
         query = LLMQuery(
             operation_type="llm_chat",
@@ -105,6 +113,7 @@ class KernelLLMAPI(_KernelBaseAPI):
             selected_llms=kwargs.get("selected_llms"),
             response_format=kwargs.get("response_format"),
             params=dict(kwargs.get("params") or {}),
+            metadata=self._metadata(kwargs),
             action_type="chat",
         )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
@@ -115,6 +124,7 @@ class KernelLLMAPI(_KernelBaseAPI):
             params={"prompt": prompt, **dict(kwargs.get("params") or {})},
             selected_llms=kwargs.get("selected_llms"),
             response_format=kwargs.get("response_format"),
+            metadata=self._metadata(kwargs),
             action_type="complete",
         )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
@@ -124,6 +134,7 @@ class KernelLLMAPI(_KernelBaseAPI):
             operation_type="llm_embed",
             params={"texts": texts},
             selected_llms=kwargs.get("selected_llms"),
+            metadata=self._metadata(kwargs),
             action_type="embed",
         )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))

@@ -49,6 +49,8 @@ Human requests are durable JSONL queue records under the runtime human channel r
 
 LLM status exposes provider configuration state and active `call_id`s. Cancelling an unknown LLM call returns `SYSCALL_NOT_FOUND`; cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
+Configured external LLM provider calls require explicit `llm.external.call` permission in syscall metadata. When a provider is configured and the permission is present, the call is still intervention-gated; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`. Missing provider configuration still fails as `LLM_PROVIDER_UNCONFIGURED` before any access prompt because no external call is attempted.
+
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.cancel(call_id)` cancels only the matching active runtime call in the current session; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
 
 Runtime skill backend responses must explicitly include `success` or, for human replies, `answered`. Missing or non-object backend responses fail with `SKILL_RESULT_INVALID` and are audited instead of being treated as successful.
@@ -124,7 +126,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 393 passed, 3 skipped
+# 399 passed, 3 skipped
 scripts/run_tests.sh
-# 393 passed, 3 deselected; Agentic OS MVP checks passed.
+# 399 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

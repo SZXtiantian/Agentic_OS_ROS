@@ -82,7 +82,7 @@ def test_kernel_sdk_llm_uses_kernel_query():
             raise AssertionError("skill executor should not be used for kernel llm")
 
     async def run():
-        app = AppManifest("sdk_kernel_app", "0", "", "main:run", [], [])
+        app = AppManifest("sdk_kernel_app", "0", "", "main:run", ["llm.external.call"], [])
         ctx = AgentContext(FakeExecutor(), app, "sess_kernel")
         result = await ctx.kernel.llm.chat(messages=[{"role": "user", "content": "hello"}], timeout_s=1.5)
         assert result.success is True
@@ -93,6 +93,7 @@ def test_kernel_sdk_llm_uses_kernel_query():
     assert captured["agent_name"] == "sdk_kernel_app"
     assert isinstance(captured["query"], LLMQuery)
     assert captured["query"].messages[0]["content"] == "hello"
+    assert captured["query"].metadata["permissions"] == ("llm.external.call",)
     assert captured["timeout_s"] == 1.5
 
 

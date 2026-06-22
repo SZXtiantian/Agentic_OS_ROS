@@ -7,6 +7,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.scheduler import RoundRobinKernelScheduler
 from agentic_os.kernel.system_call import KernelSyscall, LLMQuery, MemoryQuery, ToolQuery
 from agentic_runtime.kernel_service import KernelService
@@ -36,7 +37,7 @@ def make_app() -> AppManifest:
         version="0",
         description="",
         entrypoint="main:run",
-        permissions=["robot.move"],
+        permissions=["robot.move", "llm.external.call"],
         required_capabilities=[],
     )
 
@@ -105,12 +106,32 @@ def test_kernel_service_starts_and_stops_scheduler(tmp_path):
     assert service.status()["scheduler"]["active"] is False
 
 
-def test_kernel_service_executes_llm_query(tmp_path):
+def test_kernel_service_configured_llm_requires_explicit_permission(tmp_path):
     server, config = openai_config(tmp_path)
     service = KernelService(config=config)
     service.start()
     try:
         result = service.execute_request("agent_a", LLMQuery(operation_type="chat"), timeout_s=1.0)
+    finally:
+        service.stop()
+        server.shutdown()
+
+    assert result.success is False
+    assert result.error_code == "ACCESS_DENIED"
+    assert result.metadata["queue_name"] == "llm"
+
+
+def test_kernel_service_executes_llm_query_after_intervention_approval(tmp_path):
+    server, config = openai_config(tmp_path)
+    service = KernelService(config=config)
+    service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
+    service.start()
+    try:
+        result = service.execute_request(
+            "agent_a",
+            LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"]}),
+            timeout_s=1.0,
+        )
     finally:
         service.stop()
         server.shutdown()
@@ -237,6 +258,7 @@ def test_robot_skill_not_routed_to_generic_tool(tmp_path):
 def test_sdk_kernel_llm_chat_uses_kernel_service(tmp_path):
     server, config = openai_config(tmp_path)
     service = KernelService(config=config)
+    service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
 
     class FakeExecutor:
         kernel_service = service

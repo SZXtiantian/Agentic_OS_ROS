@@ -117,6 +117,15 @@ class DefaultAccessPolicy:
                 )
             return AccessDecision(allowed=True, reason="robot sensor access allowed")
 
+        if action == "execute" and resource_type == "llm":
+            if "llm.external.call" not in set(request.subject.permissions):
+                return AccessDecision(
+                    allowed=False,
+                    error_code="ACCESS_DENIED",
+                    reason="external LLM provider execution requires llm.external.call permission",
+                )
+            return AccessDecision(allowed=True, reason="external LLM provider access allowed")
+
         if "admin" in groups:
             return AccessDecision(allowed=True, reason="admin access allowed")
 

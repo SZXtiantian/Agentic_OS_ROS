@@ -178,6 +178,7 @@ class KernelService:
         return LLMAdapter(
             [LLMConfig.from_dict(config) if isinstance(config, dict) else config for config in configs],
             routing_strategy=routing_strategy,
+            access_manager=self.access_manager,
             event_sink=self.event_sink,
         )
 

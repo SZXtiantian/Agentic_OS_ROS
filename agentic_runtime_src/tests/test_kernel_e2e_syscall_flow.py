@@ -7,6 +7,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.llm_core import response_text
 from agentic_os.kernel.memory import ConversationExtractor
 from agentic_runtime.audit import AuditLogger
@@ -59,6 +60,7 @@ def test_kernel_e2e_llm_memory_storage_flow(tmp_path):
         ),
         audit_logger=audit,
     )
+    service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
 
     class FakeExecutor:
         kernel_service = service
@@ -67,7 +69,7 @@ def test_kernel_e2e_llm_memory_storage_flow(tmp_path):
             raise AssertionError("kernel e2e flow should not call skill executor")
 
     async def run():
-        app = AppManifest("e2e_kernel_app", "0", "", "main:run", [], [])
+        app = AppManifest("e2e_kernel_app", "0", "", "main:run", ["llm.external.call"], [])
         ctx = AgentContext(FakeExecutor(), app, "sess_e2e")
         service.start()
         try:

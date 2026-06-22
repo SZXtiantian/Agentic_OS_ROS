@@ -5,6 +5,7 @@ import os
 import threading
 from typing import Any
 
+from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.context import GenerationSnapshot
 from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall, LLMQuery
@@ -30,10 +31,12 @@ class LLMAdapter:
         llm_configs: list[LLMConfig | dict],
         routing_strategy: str = "sequential",
         providers: dict[str, LLMProvider] | None = None,
+        access_manager: AccessManager | None = None,
         event_sink: KernelEventSink | None = None,
     ) -> None:
         self.llm_configs = normalize_llm_configs(llm_configs)
         self.providers = dict(providers or {})
+        self.access_manager = access_manager
         self.event_sink = event_sink
         self._active: dict[str, threading.Event] = {}
         self._active_lock = threading.Lock()
@@ -58,6 +61,10 @@ class LLMAdapter:
                 response_format=syscall.params.get("response_format"),
                 action_type=str(syscall.params.get("action_type") or _action_type_from_operation(syscall.operation_type)),
             )
+        access_response = self._check_external_access(syscall, query)
+        if access_response is not None:
+            self._audit_provider_result(query, None, access_response, access_gate=True)
+            return access_response
         cancel_event = self._register_active(syscall.syscall_id)
         try:
             response = self.complete(query)
@@ -89,6 +96,11 @@ class LLMAdapter:
                     response_format=syscall.params.get("response_format"),
                     action_type=str(syscall.params.get("action_type", "chat")),
                 )
+            access_response = self._check_external_access(syscall, query)
+            if access_response is not None:
+                self._audit_provider_result(query, None, access_response, batch=True, access_gate=True)
+                responses[index] = access_response
+                continue
             cancel_event = self._register_active(syscall.syscall_id)
             indexed_queries.append((index, syscall, query, cancel_event))
         if indexed_queries:
@@ -178,6 +190,10 @@ class LLMAdapter:
         time_slice_s: float,
         snapshot: GenerationSnapshot | None = None,
     ) -> tuple[KernelResponse, GenerationSnapshot | None]:
+        access_response = self._check_external_access(None, query)
+        if access_response is not None:
+            self._audit_provider_result(query, None, access_response, time_slice=True, access_gate=True)
+            return access_response, None
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not candidates:
             response = KernelResponse.error(LLMCoreErrorCode.MODEL_NOT_FOUND)
@@ -336,6 +352,53 @@ class LLMAdapter:
             "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
             "reason": f"unsupported backend: {config.backend}",
         }
+
+    def _check_external_access(self, syscall: KernelSyscall | None, query: LLMQuery) -> KernelResponse | None:
+        if self.access_manager is None:
+            return None
+        candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
+        if not any(self._config_status(config).get("state") == "configured" for config in candidates):
+            return None
+        syscall_params = syscall.params if syscall is not None else {}
+        permissions = tuple(query.metadata.get("permissions") or syscall_params.get("permissions") or ())
+        if "llm.external.call" not in permissions:
+            return KernelResponse.error(
+                "ACCESS_DENIED",
+                metadata={
+                    "reason": "external LLM provider calls require explicit llm.external.call permission",
+                    "requires_intervention": False,
+                },
+            )
+        agent_name = str(
+            (syscall.agent_name if syscall is not None else "")
+            or query.metadata.get("agent_name")
+            or query.metadata.get("app_id")
+            or "llm_kernel"
+        )
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(
+                    agent_name=agent_name,
+                    app_id=str(query.metadata.get("app_id") or agent_name),
+                    session_id=str(query.metadata.get("session_id") or ""),
+                    permissions=permissions,
+                ),
+                action="execute",
+                resource=AccessResource("llm", "external_provider", owner_agent=agent_name),
+                irreversible=True,
+                reason="external LLM provider call",
+            )
+        )
+        if decision.allowed:
+            return None
+        return KernelResponse.error(
+            decision.error_code,
+            metadata={
+                "reason": decision.reason,
+                "requires_intervention": decision.requires_intervention,
+                "intervention_id": decision.intervention_id,
+            },
+        )
 
     def _audit_provider_result(
         self,

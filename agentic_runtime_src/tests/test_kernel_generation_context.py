@@ -1,4 +1,5 @@
 from agentic_os.kernel.context import GenerationSnapshot, SessionContextManager, SimpleGenerationContextManager
+from agentic_os.kernel.access import AccessManager
 from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
 from agentic_os.kernel.scheduler import RoundRobinKernelScheduler, SchedulerLaneSpec
@@ -130,6 +131,37 @@ def test_llm_adapter_time_slice_marks_non_preemptible_provider():
 
     assert response.success is True
     assert response.metadata["non_preemptible_llm_call"] is True
+    assert snapshot is None
+
+
+def test_llm_time_slice_path_enforces_external_access_gate():
+    class Provider:
+        calls = 0
+
+        def complete(self, query):
+            self.calls += 1
+            return KernelResponse.ok({"text": "done"})
+
+    provider = Provider()
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="configured",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+                model="real-model",
+            )
+        ],
+        providers={"configured": provider},
+        access_manager=AccessManager(),
+    )
+
+    response, snapshot = adapter.complete_with_time_slice(LLMQuery(operation_type="chat"), time_slice_s=0.001)
+
+    assert response.success is False
+    assert response.error_code == "ACCESS_DENIED"
+    assert provider.calls == 0
     assert snapshot is None
 
 

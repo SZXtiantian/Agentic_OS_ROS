@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import urllib.error
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.llm_core import (
     HuggingFaceProvider,
@@ -289,6 +290,95 @@ def test_llm_adapter_address_request_accepts_llm_syscall():
 
     assert response.success is True
     assert response.metadata["model"] == "configured"
+
+
+def test_llm_external_call_requires_explicit_permission_before_provider_call():
+    sink = InMemoryKernelEventSink()
+    provider = RecordingProvider("configured")
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="configured",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+                model="real-model",
+            )
+        ],
+        providers={"configured": provider},
+        access_manager=AccessManager(event_sink=sink),
+        event_sink=sink,
+    )
+    syscall = create_syscall("agent_a", LLMQuery(operation_type="chat"))
+
+    response = adapter.address_request(syscall)
+
+    assert response.success is False
+    assert response.error_code == "ACCESS_DENIED"
+    assert provider.queries == []
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "llm.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ACCESS_DENIED"
+    assert audit["metadata"]["access_gate"] is True
+
+
+def test_llm_external_call_with_permission_requires_intervention_by_default():
+    sink = InMemoryKernelEventSink()
+    provider = RecordingProvider("configured")
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="configured",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+                model="real-model",
+            )
+        ],
+        providers={"configured": provider},
+        access_manager=AccessManager(event_sink=sink),
+        event_sink=sink,
+    )
+    syscall = create_syscall(
+        "agent_a",
+        LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"]}),
+    )
+
+    response = adapter.address_request(syscall)
+
+    assert response.success is False
+    assert response.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert provider.queries == []
+    assert any(
+        event["event_type"] == "access.checked" and event["metadata"]["requires_intervention"] is True
+        for event in sink.recent(limit=10)
+    )
+
+
+def test_llm_external_call_runs_after_operator_intervention_allows():
+    sink = InMemoryKernelEventSink()
+    provider = RecordingProvider("configured")
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="configured",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+                model="real-model",
+            )
+        ],
+        providers={"configured": provider},
+        access_manager=access,
+        event_sink=sink,
+    )
+    query = LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"]})
+
+    response = adapter.address_request(create_syscall("agent_a", query))
+
+    assert response.success is True
+    assert provider.queries == [query]
+    assert any(event["event_type"] == "access.checked" for event in sink.recent(limit=10))
 
 
 def test_llm_adapter_without_real_provider_fails_unavailable():
