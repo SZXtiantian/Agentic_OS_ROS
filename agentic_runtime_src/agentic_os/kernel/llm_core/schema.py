@@ -29,7 +29,7 @@ class LLMConfig:
     def from_dict(cls, data: dict[str, Any]) -> "LLMConfig":
         return cls(
             name=str(data["name"]),
-            backend=str(data.get("backend") or "mock"),
+            backend=str(data.get("backend") or "openai_compatible"),
             hostname=str(data.get("hostname") or data.get("base_url") or ""),
             api_key_env=str(data.get("api_key_env") or ""),
             model=str(data.get("model")) if data.get("model") is not None else None,

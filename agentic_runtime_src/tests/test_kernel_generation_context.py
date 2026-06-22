@@ -120,7 +120,11 @@ def test_rr_scheduler_suspends_requeues_and_resumes_fake_streaming_llm():
 
 
 def test_llm_adapter_time_slice_marks_non_preemptible_provider():
-    adapter = LLMAdapter([LLMConfig(name="mock", backend="mock")])
+    class Provider:
+        def complete(self, query):
+            return KernelResponse.ok({"text": "done"})
+
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": Provider()})
 
     response, snapshot = adapter.complete_with_time_slice(LLMQuery(operation_type="chat"), time_slice_s=0.001)
 

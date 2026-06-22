@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from agentic_os.kernel.context import GenerationSnapshot
@@ -11,7 +12,6 @@ from .provider import (
     HuggingFaceProvider,
     LiteLLMProvider,
     LLMProvider,
-    MockLLMProvider,
     OpenAICompatibleProvider,
     UnsupportedLLMProvider,
     VLLMOpenAIProvider,
@@ -36,6 +36,10 @@ class LLMAdapter:
             self.router = SequentialRouting(self.llm_configs)
 
     def address_request(self, syscall: KernelSyscall) -> KernelResponse:
+        if syscall.operation_type in {"llm_status", "status"}:
+            return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+        if syscall.operation_type in {"llm_cancel", "cancel"}:
+            return KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"reason": "no active cancellable LLM call"})
         query = getattr(syscall, "query", None)
         if not isinstance(query, LLMQuery):
             query = LLMQuery(
@@ -45,7 +49,7 @@ class LLMAdapter:
                 tools=syscall.params.get("tools"),
                 selected_llms=syscall.params.get("selected_llms"),
                 response_format=syscall.params.get("response_format"),
-                action_type=str(syscall.params.get("action_type", "chat")),
+                action_type=str(syscall.params.get("action_type") or _action_type_from_operation(syscall.operation_type)),
             )
         return self.complete(query)
 
@@ -67,9 +71,16 @@ class LLMAdapter:
         return self.complete_batch(queries)
 
     def complete(self, query: LLMQuery) -> KernelResponse:
+        if query.operation_type in {"llm_status", "status"}:
+            return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+        if query.operation_type in {"llm_cancel", "cancel"}:
+            return KernelResponse.error(LLMCoreErrorCode.CANCELLED, metadata={"reason": "no active cancellable LLM call"})
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not candidates:
-            return KernelResponse(False, error_code=LLMCoreErrorCode.MODEL_NOT_FOUND)
+            return KernelResponse.error(
+                LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                metadata={"reason": "no enabled LLM provider configured"},
+            )
 
         last_response: KernelResponse | None = None
         for config in candidates:
@@ -88,7 +99,7 @@ class LLMAdapter:
             return []
         candidates = self.router.candidates(selected_llms=queries[0].selected_llms, capability=queries[0].action_type)
         if not candidates:
-            return [KernelResponse.error(LLMCoreErrorCode.MODEL_NOT_FOUND) for _ in queries]
+            return [KernelResponse.error(LLMCoreErrorCode.PROVIDER_UNAVAILABLE, metadata={"reason": "no enabled LLM provider configured"}) for _ in queries]
 
         last_responses: list[KernelResponse] | None = None
         for config in candidates:
@@ -131,8 +142,6 @@ class LLMAdapter:
             return self.providers[config.name]
         if config.backend in self.providers:
             return self.providers[config.backend]
-        if config.backend == "mock":
-            return MockLLMProvider(config)
         if config.backend in {"litellm", "litellm_compatible"}:
             return LiteLLMProvider(config)
         if config.backend in {"openai_compatible", "ollama_openai_compatible", "vllm_openai_compatible"}:
@@ -144,6 +153,32 @@ class LLMAdapter:
         if config.backend in {"local"}:
             return LocalBackendProvider(config)
         return UnsupportedLLMProvider(config)
+
+    def status(self) -> dict[str, Any]:
+        providers = []
+        for config in self.llm_configs:
+            state = "configured"
+            reason = ""
+            if config.backend in {"mock", "fake", "stub", "dummy"}:
+                state = "unavailable"
+                reason = "mock/fake/stub/dummy LLM backends are disabled"
+            elif config.backend in {"openai_compatible", "ollama_openai_compatible", "vllm_openai_compatible", "vllm"}:
+                api_key = bool(config.api_key or (config.api_key_env and os.environ.get(config.api_key_env)))
+                if not config.hostname or not api_key:
+                    state = "unavailable"
+                    reason = "base_url or api key not configured"
+            providers.append(
+                {
+                    "name": config.name,
+                    "backend": config.backend,
+                    "enabled": config.enabled,
+                    "state": state,
+                    "error_code": "" if state != "unavailable" else LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                    "reason": reason,
+                    "capabilities": list(config.capabilities),
+                }
+            )
+        return {"providers": providers, "state": "ready" if any(item["state"] == "configured" for item in providers) else "unavailable"}
 
 
 def response_text(response: KernelResponse) -> str:
@@ -158,3 +193,11 @@ def _normalize_batch_length(responses: list[KernelResponse], expected: int) -> l
         return responses[:expected]
     missing = [KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": "missing batch response"})]
     return responses + missing * (expected - len(responses))
+
+
+def _action_type_from_operation(operation_type: str) -> str:
+    if operation_type in {"llm_embed", "embed"}:
+        return "embed"
+    if operation_type in {"llm_complete", "complete"}:
+        return "complete"
+    return "chat"

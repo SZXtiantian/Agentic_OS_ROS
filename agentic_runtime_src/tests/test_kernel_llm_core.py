@@ -124,7 +124,7 @@ def test_llm_adapter_returns_error_for_missing_provider():
     response = adapter.complete(LLMQuery(operation_type="chat"))
 
     assert response.success is False
-    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNSUPPORTED
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
 
 
 def test_optional_litellm_dependency_missing_is_structured():
@@ -214,7 +214,8 @@ def test_smart_routing_sorts_by_quality_then_cost():
 
 
 def test_llm_query_with_json_response_format_preserved():
-    adapter = LLMAdapter([LLMConfig(name="mock", backend="mock")])
+    provider = FakeProvider("configured")
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     query = LLMQuery(
         operation_type="chat",
         messages=[{"role": "user", "content": "return json"}],
@@ -224,11 +225,12 @@ def test_llm_query_with_json_response_format_preserved():
     response = adapter.complete(query)
 
     assert response.success is True
-    assert response.response_message["response_format"] == {"type": "json_object"}
+    assert provider.queries[0].response_format == {"type": "json_object"}
 
 
 def test_llm_query_with_tools_preserved():
-    adapter = LLMAdapter([LLMConfig(name="mock", backend="mock")])
+    provider = FakeProvider("configured")
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     query = LLMQuery(
         operation_type="chat",
         tools=[{"type": "function", "function": {"name": "calculator.add"}}],
@@ -237,11 +239,12 @@ def test_llm_query_with_tools_preserved():
     response = adapter.complete(query)
 
     assert response.success is True
-    assert response.response_message["tools"] == query.tools
+    assert provider.queries[0].tools == query.tools
 
 
 def test_llm_adapter_address_request_accepts_llm_syscall():
-    adapter = LLMAdapter([LLMConfig(name="mock", backend="mock")])
+    provider = FakeProvider("configured")
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": provider})
     syscall = create_syscall(
         "agent_a",
         LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hello"}]),
@@ -250,7 +253,16 @@ def test_llm_adapter_address_request_accepts_llm_syscall():
     response = adapter.address_request(syscall)
 
     assert response.success is True
-    assert response.metadata["model"] == "mock"
+    assert response.metadata["model"] == "configured"
+
+
+def test_llm_adapter_without_real_provider_fails_unavailable():
+    adapter = LLMAdapter([LLMConfig(name="disabled", backend="mock")])
+
+    response = adapter.complete(LLMQuery(operation_type="chat"))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
 
 
 def test_model_library_router_backward_compatible():

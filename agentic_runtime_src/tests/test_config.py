@@ -28,5 +28,7 @@ def test_runtime_config_loads_kernel_block():
     config = RuntimeConfig.load()
 
     assert config.kernel["scheduler_policy"] == "fifo"
-    assert config.kernel["llm"]["configs"][0]["name"] == "mock-kernel"
+    assert config.kernel["llm"]["configs"][0]["name"] == "unconfigured"
+    assert config.kernel["llm"]["configs"][0]["backend"] == "openai_compatible"
+    assert config.kernel["memory"]["provider"] == "sqlite"
     assert config.kernel["tool"]["mcp_enabled"] is False

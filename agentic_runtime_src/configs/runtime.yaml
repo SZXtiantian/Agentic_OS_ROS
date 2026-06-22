@@ -22,12 +22,15 @@ kernel:
   llm:
     routing_strategy: sequential
     configs:
-      - name: mock-kernel
-        backend: mock
+      - name: unconfigured
+        backend: openai_compatible
         enabled: true
-        capabilities: [chat, json, tool]
+        base_url: ""
+        api_key_env: AGENTIC_LLM_API_KEY
+        model: ""
+        capabilities: [chat, complete, embed, json, tool]
   memory:
-    provider: in_memory
+    provider: sqlite
     max_notes: 1000
     two_tier_enabled: false
   storage:

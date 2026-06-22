@@ -146,7 +146,10 @@ class KernelService:
 
     def _build_llm_adapter(self) -> LLMAdapter:
         llm_config = dict(self.kernel_config.get("llm") or {})
-        configs = list(llm_config.get("configs") or [{"name": "mock-kernel", "backend": "mock", "enabled": True}])
+        configs = list(
+            llm_config.get("configs")
+            or [{"name": "unconfigured", "backend": "openai_compatible", "enabled": True, "capabilities": ["chat", "complete", "embed"]}]
+        )
         routing_strategy = str(llm_config.get("routing_strategy") or "sequential")
         return LLMAdapter([LLMConfig.from_dict(config) if isinstance(config, dict) else config for config in configs], routing_strategy=routing_strategy)
 
@@ -174,7 +177,10 @@ class KernelService:
 
     def _config_summary(self) -> dict[str, Any]:
         llm_config = dict(self.kernel_config.get("llm") or {})
-        configs = list(llm_config.get("configs") or [{"name": "mock-kernel", "backend": "mock", "enabled": True}])
+        configs = list(
+            llm_config.get("configs")
+            or [{"name": "unconfigured", "backend": "openai_compatible", "enabled": True, "capabilities": ["chat", "complete", "embed"]}]
+        )
         safe_llms = [
             {
                 "name": str(item.get("name", "")) if isinstance(item, dict) else getattr(item, "name", ""),
@@ -271,7 +277,7 @@ class KernelService:
         return {"status": "ready"}
 
     def _llm_status(self) -> dict[str, Any]:
-        return {"providers": self._config_summary()["llm"]["configs"]}
+        return self.llm.status()
 
     def _storage_status(self) -> dict[str, Any]:
         return {"root": str(self._storage_root())}

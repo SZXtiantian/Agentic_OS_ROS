@@ -72,13 +72,41 @@ class _KernelBaseAPI:
 class KernelLLMAPI(_KernelBaseAPI):
     async def chat(self, messages: list[dict], **kwargs):
         query = LLMQuery(
-            operation_type="chat",
+            operation_type="llm_chat",
             messages=list(messages),
             tools=kwargs.get("tools"),
             selected_llms=kwargs.get("selected_llms"),
             response_format=kwargs.get("response_format"),
             params=dict(kwargs.get("params") or {}),
+            action_type="chat",
         )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def complete(self, prompt: str, **kwargs):
+        query = LLMQuery(
+            operation_type="llm_complete",
+            params={"prompt": prompt, **dict(kwargs.get("params") or {})},
+            selected_llms=kwargs.get("selected_llms"),
+            response_format=kwargs.get("response_format"),
+            action_type="complete",
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def embed(self, texts, **kwargs):
+        query = LLMQuery(
+            operation_type="llm_embed",
+            params={"texts": texts},
+            selected_llms=kwargs.get("selected_llms"),
+            action_type="embed",
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def status(self, **kwargs):
+        query = LLMQuery(operation_type="llm_status", action_type="status")
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def cancel(self, call_id: str = "", **kwargs):
+        query = LLMQuery(operation_type="llm_cancel", params={"call_id": call_id}, action_type="cancel")
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
 
