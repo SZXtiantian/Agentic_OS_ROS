@@ -32,8 +32,8 @@ retry_policy:
   max_attempts: 0
   retry_on: []
 backend:
-  type: mock
-  bridge: human_io
+  type: runtime_human_queue
+  queue: file_jsonl
 observability:
   audit: true
   record_feedback: false

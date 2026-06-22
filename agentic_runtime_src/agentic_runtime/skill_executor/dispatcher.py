@@ -6,13 +6,15 @@ from pathlib import Path
 from typing import Any
 
 from agentic_runtime.config import find_repo_root
+from agentic_runtime.human_channel import FileHumanQueueChannel
 from agentic_runtime.ros_bridge_client.types import RosBridgeClient
 
 
 class SkillDispatcher:
-    def __init__(self, bridge_client: RosBridgeClient, memory_store) -> None:
+    def __init__(self, bridge_client: RosBridgeClient, memory_store, human_channel: FileHumanQueueChannel | None = None) -> None:
         self.bridge_client = bridge_client
         self.memory_store = memory_store
+        self.human_channel = human_channel
 
     async def dispatch(
         self,
@@ -67,11 +69,17 @@ class SkillDispatcher:
         if skill_name == "storage.list_recent_photos":
             return self._list_recent_photos(int(args.get("limit", 5)), app_id=app_id)
         if skill_name == "human.ask":
-            return await self.bridge_client.ask_human(
-                args["question"],
-                options=args.get("options"),
+            if self.human_channel is None:
+                return {"success": False, "answered": False, "answer": "", "error_code": "HUMAN_BACKEND_UNAVAILABLE"}
+            return await self.human_channel.ask(
+                question=args["question"],
+                options=list(args.get("options") or []),
                 timeout_s=int(args.get("timeout_s", 60)),
                 require_confirmation=bool(args.get("require_confirmation", False)),
+                app_id=app_id,
+                session_id=session_id,
+                correlation_id=str(args.get("correlation_id") or ""),
+                cancel_event=cancel_event,
             )
         if skill_name == "report.say":
             return await self.bridge_client.report_say(args["message"])

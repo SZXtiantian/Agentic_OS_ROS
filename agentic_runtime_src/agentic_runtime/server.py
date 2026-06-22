@@ -11,6 +11,7 @@ from agentic_runtime.config_manager import ConfigManager
 from agentic_runtime.context_manager import ContextManager
 from agentic_runtime.execution_monitor import ExecutionMonitor
 from agentic_runtime.hardware_adapter import BridgeManager
+from agentic_runtime.human_channel import FileHumanQueueChannel
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.llm import LLMChat
 from agentic_runtime.memory import create_memory_manager
@@ -50,6 +51,7 @@ class RuntimeServer:
     kernel_service: KernelService
     task_log_manager: TaskLogManager
     llm_chat: LLMChat
+    human_channel: FileHumanQueueChannel
 
     @classmethod
     def create(cls, mock: bool = False) -> "RuntimeServer":
@@ -67,7 +69,8 @@ class RuntimeServer:
         syscall_store = SyscallStore(config.session_root)
         resource_manager = ResourceManager()
         bridge_client = create_ros_bridge_client(config, mock=mock)
-        dispatcher = SkillDispatcher(bridge_client, memory_manager)
+        human_channel = FileHumanQueueChannel(config.session_root.parent / "human")
+        dispatcher = SkillDispatcher(bridge_client, memory_manager, human_channel=human_channel)
         executor = SkillExecutor(
             registry=registry,
             permission_manager=PermissionManager(),
@@ -109,6 +112,7 @@ class RuntimeServer:
             kernel_service=None,  # type: ignore[arg-type]
             task_log_manager=task_log_manager,
             llm_chat=llm_chat,
+            human_channel=human_channel,
         )
         server.kernel_service = KernelService(server)
         server.executor.kernel_service = server.kernel_service

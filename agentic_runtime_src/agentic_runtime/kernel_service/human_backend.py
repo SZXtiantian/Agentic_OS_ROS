@@ -10,6 +10,7 @@ class RuntimeHumanBackend:
     """Human lane backend that delegates to the real runtime human.ask skill."""
 
     def __init__(self, runtime_server: Any | None) -> None:
+        self.runtime_server = runtime_server
         self.skill_backend = RuntimeSkillBackend(runtime_server)
 
     def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
@@ -37,7 +38,15 @@ class RuntimeHumanBackend:
         status = self.skill_backend.status()
         if status.get("success", False):
             status["backend"] = "runtime_human_skill"
+        human_channel = getattr(self.runtime_server, "human_channel", None)
+        if human_channel is not None and hasattr(human_channel, "status"):
+            status["human_channel"] = human_channel.status()
         return status
 
     def cancel(self, session_id: str, call_id: str = "") -> dict[str, Any]:
+        human_channel = getattr(self.runtime_server, "human_channel", None)
+        if call_id and human_channel is not None and hasattr(human_channel, "cancel"):
+            result = human_channel.cancel(call_id, session_id=session_id)
+            if result.get("success", False):
+                return result
         return self.skill_backend.cancel(session_id, call_id=call_id)
