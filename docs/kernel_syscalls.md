@@ -74,7 +74,7 @@ Kernel hook events are visible under `KernelService.status()["events"]["recent"]
 | --- | --- |
 | `context.audit` | context put/get/delete/list/snapshot/recover/compact/clear; compact events include `compact_mode: structural_truncation` |
 | `memory.audit` | memory delete/export/import success and failure |
-| `storage.audit` | storage overwrite/delete/rollback/share success and failure |
+| `storage.audit` | storage write/read/list plus overwrite/delete/rollback/share success and failure |
 | `tool.audit` | tool manifest load, unload, and builtin registration success and failure |
 | `llm.audit` | provider attempts, provider unconfigured/errors, batch attempts, time-slice attempts, and LLM cancel requests |
 | `human.audit` | human ask/cancel requests, backend unavailable, timeout, cancellation, and answered results |
@@ -122,7 +122,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 386 passed, 3 skipped
+# 388 passed, 3 skipped
 scripts/run_tests.sh
-# 386 passed, 3 deselected; Agentic OS MVP checks passed.
+# 388 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

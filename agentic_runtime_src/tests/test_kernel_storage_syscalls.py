@@ -1,6 +1,6 @@
 import pytest
 
-from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
+from agentic_os.kernel.access import AccessManager, AccessRule, AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.storage import LSFSAdapter, StorageManager
 from agentic_os.kernel.system_call import KernelSyscall
@@ -31,6 +31,52 @@ def test_sto_write_and_retrieve(tmp_path):
     assert result["retrieval_mode"] == "lexical_fts"
     assert result["semantic"] is False
     assert result["matches"][0]["relative_path"] == "reports/x.md"
+
+
+def test_storage_write_read_list_emit_access_and_audit_events(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(event_sink=sink)
+    storage = StorageManager(tmp_path / "storage", access_manager=access, event_sink=sink)
+
+    written = storage.write("reports/x.md", "kitchen ok", agent_name="agent_a")
+    read = storage.read("reports/x.md", agent_name="agent_a")
+    listed = storage.list("reports", agent_name="agent_a")
+
+    assert written["success"] is True
+    assert read["success"] is True
+    assert listed["success"] is True
+    audits = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"]
+    assert [event["metadata"]["action"] for event in audits] == ["write", "read", "list"]
+    assert all(event["metadata"]["irreversible"] is False for event in audits)
+    checked = [event for event in sink.recent(limit=20) if event["event_type"] == "access.checked"]
+    assert [event["metadata"]["action"] for event in checked] == ["write", "read", "list"]
+    assert all(event["metadata"]["allowed"] is True for event in checked)
+
+
+def test_storage_read_access_denial_is_audited(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(event_sink=sink)
+    access.add_rule(
+        AccessRule(
+            subject_agent="agent_a",
+            action="read",
+            resource_type="storage",
+            resource_id_pattern="reports/*",
+            effect="deny",
+            reason="blocked by test rule",
+        )
+    )
+    storage = StorageManager(tmp_path / "storage", access_manager=access, event_sink=sink)
+    storage.write("reports/x.md", "kitchen ok", agent_name="agent_a")
+
+    denied = storage.read("reports/x.md", agent_name="agent_a")
+
+    assert denied["success"] is False
+    assert denied["error_code"] == "ACCESS_DYNAMIC_DENY"
+    audit = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"][-1]
+    assert audit["metadata"]["action"] == "read"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "ACCESS_DYNAMIC_DENY"
 
 
 def test_sto_rejects_absolute_path(tmp_path):
@@ -118,9 +164,9 @@ def test_dangerous_storage_operations_emit_audit_events(tmp_path):
     assert share["success"] is True
     assert delete["success"] is True
     events = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"]
-    assert [event["metadata"]["action"] for event in events] == ["overwrite", "rollback", "share", "delete"]
-    assert all(event["metadata"]["success"] is True for event in events)
-    assert all(event["metadata"]["irreversible"] is True for event in events)
+    dangerous_events = [event for event in events if event["metadata"]["irreversible"] is True]
+    assert [event["metadata"]["action"] for event in dangerous_events] == ["overwrite", "rollback", "share", "delete"]
+    assert all(event["metadata"]["success"] is True for event in dangerous_events)
 
 
 def test_denied_dangerous_storage_operation_emits_audit_event(tmp_path):
