@@ -72,7 +72,7 @@ Kernel hook events are visible under `KernelService.status()["events"]["recent"]
 | --- | --- |
 | `context.audit` | context put/get/delete/list/snapshot/recover/compact/clear; compact events include `compact_mode: structural_truncation` |
 | `memory.audit` | memory delete/export/import success and failure |
-| `storage.audit` | storage delete/rollback/share success and failure |
+| `storage.audit` | storage overwrite/delete/rollback/share success and failure |
 | `tool.audit` | tool manifest load, unload, and builtin registration success and failure |
 | `llm.audit` | provider attempts, provider unconfigured/errors, batch attempts, time-slice attempts, and LLM cancel requests |
 | `human.audit` | human ask/cancel requests, backend unavailable, timeout, cancellation, and answered results |

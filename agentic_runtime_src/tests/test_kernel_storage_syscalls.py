@@ -52,7 +52,8 @@ def test_sto_rejects_audit_path_even_if_relative_escape_attempt(tmp_path):
 
 
 def test_sto_overwrite_requires_intervention(tmp_path):
-    storage = StorageManager(tmp_path / "storage", access_manager=AccessManager())
+    sink = InMemoryKernelEventSink()
+    storage = StorageManager(tmp_path / "storage", access_manager=AccessManager(), event_sink=sink)
     storage.write("reports/x.md", "old")
 
     result = storage.address_request(
@@ -62,6 +63,10 @@ def test_sto_overwrite_requires_intervention(tmp_path):
     assert result["success"] is False
     assert result["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
     assert result["requires_intervention"] is True
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "storage.audit"][-1]
+    assert audit["metadata"]["action"] == "overwrite"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
 
 
 def test_sto_rollback_restores_previous_content(tmp_path):
@@ -113,7 +118,7 @@ def test_dangerous_storage_operations_emit_audit_events(tmp_path):
     assert share["success"] is True
     assert delete["success"] is True
     events = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"]
-    assert [event["metadata"]["action"] for event in events] == ["rollback", "share", "delete"]
+    assert [event["metadata"]["action"] for event in events] == ["overwrite", "rollback", "share", "delete"]
     assert all(event["metadata"]["success"] is True for event in events)
     assert all(event["metadata"]["irreversible"] is True for event in events)
 

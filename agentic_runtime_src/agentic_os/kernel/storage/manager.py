@@ -108,10 +108,11 @@ class StorageManager:
     def write(self, relative_path: str, content: Any, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         version = ""
-        if path.exists():
+        overwriting = path.exists()
+        if overwriting:
             decision = self._check_access("overwrite", relative_path, irreversible=True)
             if not decision.get("success", True):
-                return decision
+                return self._audit_dangerous_result("overwrite", relative_path, decision)
             version = self._save_version(path, relative_path)
         path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, (dict, list)):
@@ -120,7 +121,10 @@ class StorageManager:
             payload = str(content)
         path.write_text(payload, encoding="utf-8")
         self._index_file(relative_path, metadata=dict(metadata or {}))
-        return {"success": True, "path": str(path), "size_bytes": path.stat().st_size, "version": version}
+        result = {"success": True, "path": str(path), "size_bytes": path.stat().st_size, "version": version}
+        if overwriting:
+            return self._audit_dangerous_result("overwrite", relative_path, result, version=version)
+        return result
 
     def read(self, relative_path: str) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
