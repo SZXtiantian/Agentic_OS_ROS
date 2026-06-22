@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from agentic_os.kernel.system_call import ContextQuery, LLMQuery, MemoryQuery, SkillQuery, StorageQuery, ToolQuery
+from agentic_os.kernel.system_call import (
+    ContextQuery,
+    KernelResponse,
+    LLMQuery,
+    MemoryQuery,
+    SkillQuery,
+    StorageQuery,
+    ToolQuery,
+)
 
 from .access import KernelAccessAPI
 
@@ -34,6 +42,19 @@ class KernelSDKResult:
             raw=result,
         )
 
+    @classmethod
+    def from_kernel_response(cls, response: KernelResponse) -> "KernelSDKResult":
+        metadata = dict(response.metadata or {})
+        return cls(
+            success=response.success,
+            response=response,
+            error_code=response.error_code,
+            syscall_id=str(metadata.get("syscall_id", "")),
+            audit_id=str(metadata.get("audit_id", "")),
+            metadata=metadata,
+            raw=response,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -54,6 +75,12 @@ class KernelAPI:
         if service is None:
             raise RuntimeError("kernel service is not available on this AgentContext")
         return service.status()
+
+    async def cancel(self, syscall_id: str = "") -> KernelSDKResult:
+        service = self.ctx.kernel_service
+        if service is None:
+            raise RuntimeError("kernel service is not available on this AgentContext")
+        return KernelSDKResult.from_kernel_response(service.cancel_request(syscall_id))
 
 
 class _KernelBaseAPI:

@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from types import SimpleNamespace
 
 from agentic_os.kernel.scheduler import RoundRobinKernelScheduler
-from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, ToolQuery
+from agentic_os.kernel.system_call import KernelSyscall, LLMQuery, MemoryQuery, ToolQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
@@ -179,6 +179,27 @@ def test_kernel_service_execute_request_lazily_starts_scheduler(tmp_path):
     assert result.error_code == "LLM_PROVIDER_UNCONFIGURED"
     assert status["scheduler"]["active"] is True
     assert status["scheduler"]["threads"]
+
+
+def test_kernel_service_cancel_request_reports_missing_and_cancels_queued(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    queued = KernelSyscall.create("agent_a", "memory", "remember", {"memory_id": "queued"})
+    service.queue_store.add("memory", queued)
+
+    cancelled = service.cancel_request(queued.syscall_id)
+    missing = service.cancel_request("ksc_missing")
+    status = service.status()
+
+    assert cancelled.success is True
+    assert queued.status == "cancelled"
+    assert service.queue_store.size("memory") == 0
+    assert missing.success is False
+    assert missing.error_code == "SYSCALL_NOT_FOUND"
+    assert any(
+        event["event_type"] == "kernel.cancel_request"
+        and event["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_kernel_service_executes_memory_query(tmp_path):

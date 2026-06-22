@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import agentic_runtime
 import pytest
-from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, StorageQuery
+from agentic_os.kernel.system_call import KernelResponse, LLMQuery, MemoryQuery, StorageQuery
 from agentic_runtime.app_manager import AppManager
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.errors import AgenticRuntimeError
@@ -158,6 +158,36 @@ def test_kernel_sdk_memory_search_and_storage_retrieve_use_queries():
     assert isinstance(captured[1][1], StorageQuery)
     assert captured[1][1].operation_type == "sto_retrieve"
     assert captured[1][1].params["collection_name"] == "reports"
+
+
+def test_kernel_sdk_cancel_uses_kernel_service_cancel_request():
+    captured = {}
+
+    class FakeService:
+        def cancel_request(self, syscall_id):
+            captured["syscall_id"] = syscall_id
+            return KernelResponse.ok(
+                {"cancelled": [syscall_id]},
+                metadata={"syscall_id": syscall_id, "status": "cancelled"},
+                data={"cancelled": [syscall_id]},
+            )
+
+    class FakeExecutor:
+        kernel_service = FakeService()
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("kernel cancel must use KernelService.cancel_request")
+
+    async def run():
+        app = AppManifest("sdk_cancel_app", "0", "", "main:run", [], [])
+        ctx = AgentContext(FakeExecutor(), app, "sess_cancel")
+        result = await ctx.kernel.cancel("ksc_queued")
+        assert result.success is True
+        assert result.syscall_id == "ksc_queued"
+
+    asyncio.run(run())
+
+    assert captured["syscall_id"] == "ksc_queued"
 
 
 def test_kernel_sdk_result_includes_syscall_and_audit_id(tmp_path):

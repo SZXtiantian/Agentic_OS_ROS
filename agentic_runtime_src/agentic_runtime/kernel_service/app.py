@@ -15,7 +15,7 @@ from agentic_os.kernel.memory import MemoryManager
 from agentic_os.kernel.scheduler import FIFOKernelScheduler, RoundRobinKernelScheduler
 from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
 from agentic_os.kernel.storage import StorageManager
-from agentic_os.kernel.system_call import KernelQuery, SyscallExecutionResult, SyscallExecutor
+from agentic_os.kernel.system_call import KernelQuery, KernelResponse, SyscallExecutionResult, SyscallExecutor
 from agentic_os.kernel.tool import ToolManager
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
 from agentic_runtime.kernel_service.robot_backend import RuntimeRobotCapabilityBackend
@@ -77,6 +77,16 @@ class KernelService:
         result = self.executor.execute_request(agent_name, query, timeout_s=timeout_s)
         self._record_kernel_syscall(agent_name, query, result, started)
         return result
+
+    def cancel_request(self, syscall_id: str) -> KernelResponse:
+        response = self.executor.cancel_request(syscall_id)
+        self.event_sink.emit(
+            "kernel.cancel_request",
+            syscall_id=syscall_id,
+            success=response.success,
+            error_code=response.error_code,
+        )
+        return response
 
     def status(self) -> dict[str, Any]:
         status = self.kernel_status()

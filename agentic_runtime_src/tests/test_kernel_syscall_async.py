@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from threading import Thread
 
-from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
+from agentic_os.kernel.hooks import InMemoryKernelEventSink, KernelQueueName, KernelQueueStore
 from agentic_os.kernel.system_call import (
     KernelResponse,
     KernelSyscall,
@@ -98,6 +98,32 @@ def test_execute_request_timeout_sets_timeout_status():
     assert result.syscall.status == KernelSyscallStatus.TIMEOUT
     assert result.syscall.wait(timeout_s=0.01) is True
     assert result.syscall.time_limit_s == 0.01
+
+
+def test_executor_cancel_request_removes_only_queued_match():
+    sink = InMemoryKernelEventSink()
+    store = KernelQueueStore(event_sink=sink)
+    executor = SyscallExecutor(queue_store=store, event_sink=sink)
+    first = KernelSyscall.create("agent_a", KernelQueueName.MEMORY, "remember", {"memory_id": "first"})
+    second = KernelSyscall.create("agent_a", KernelQueueName.MEMORY, "remember", {"memory_id": "second"})
+
+    store.add(KernelQueueName.MEMORY, first)
+    store.add(KernelQueueName.MEMORY, second)
+
+    cancelled = executor.cancel_request(first.syscall_id)
+    missing = executor.cancel_request("ksc_missing")
+
+    assert cancelled.success is True
+    assert cancelled.metadata["syscall_id"] == first.syscall_id
+    assert first.status == KernelSyscallStatus.CANCELLED
+    assert second.status == KernelSyscallStatus.QUEUED
+    assert store.drain(KernelQueueName.MEMORY) == [second]
+    assert missing.success is False
+    assert missing.error_code == "SYSCALL_NOT_FOUND"
+    assert any(
+        event["event_type"] == "syscall.cancelled" and event["metadata"]["syscall_id"] == first.syscall_id
+        for event in sink.recent(limit=10)
+    )
 
 
 def test_cancel_reject_and_response_helpers_set_event():

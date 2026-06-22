@@ -166,6 +166,31 @@ class SyscallExecutor:
                 ended_monotonic=time.monotonic(),
             )
 
+    def cancel_request(self, syscall_id: str) -> KernelResponse:
+        if not syscall_id:
+            response = KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"reason": "syscall_id required"})
+            self._emit_cancel_result(syscall_id, response)
+            return response
+
+        removed = self.queue_store.remove(syscall_id)
+        if removed is None:
+            response = KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"syscall_id": syscall_id})
+            self._emit_cancel_result(syscall_id, response)
+            return response
+
+        response = KernelResponse.ok(
+            {"cancelled": [syscall_id]},
+            metadata={
+                "syscall_id": syscall_id,
+                "queue_name": getattr(removed, "queue_name", removed.target),
+                "pid": removed.get_pid(),
+                "status": removed.status,
+            },
+            data={"cancelled": [syscall_id]},
+        )
+        self._emit_cancel_result(syscall_id, response)
+        return response
+
     def _next_pid(self) -> int:
         with self._pid_lock:
             self._next_pid_value += 1
@@ -194,4 +219,13 @@ class SyscallExecutor:
                 operation_type=syscall.operation_type,
                 status=syscall.status,
                 **metadata,
+            )
+
+    def _emit_cancel_result(self, syscall_id: str, response: KernelResponse) -> None:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "syscall.cancel_request",
+                syscall_id=syscall_id,
+                success=response.success,
+                error_code=response.error_code,
             )
