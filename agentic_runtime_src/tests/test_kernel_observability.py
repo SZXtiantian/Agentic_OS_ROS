@@ -47,6 +47,9 @@ def test_kernel_status_reports_scheduler_queues_managers_and_recent_syscalls(tmp
     assert "queue.added" in {event["event_type"] for event in status["events"]["recent"]}
     assert "manager.started" in {event["event_type"] for event in status["events"]["recent"]}
     assert "manager.done" in {event["event_type"] for event in status["events"]["recent"]}
+    llm_audits = [event for event in status["events"]["recent"] if event["event_type"] == "llm.audit"]
+    assert llm_audits
+    assert llm_audits[-1]["metadata"]["error_code"] == "LLM_PROVIDER_UNCONFIGURED"
     assert status["recent_syscalls"][-1]["queue_name"] == "llm"
     assert status["recent_syscalls"][-1]["syscall_id"].startswith("ksc_")
     assert status["recent_syscalls"][-1]["audit_id"].startswith("audit_")

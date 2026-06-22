@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import urllib.error
 
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.llm_core import (
     HuggingFaceProvider,
     LLMAdapter,
@@ -100,6 +101,26 @@ def test_llm_adapter_uses_injected_provider_without_network():
 
     assert response.success is True
     assert provider.queries == [query]
+
+
+def test_llm_adapter_emits_provider_audit_without_prompt_leak():
+    sink = InMemoryKernelEventSink()
+    provider = RecordingProvider("audited")
+    adapter = LLMAdapter(
+        [LLMConfig(name="audited", backend="openai_compatible")],
+        providers={"audited": provider},
+        event_sink=sink,
+    )
+    query = LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "secret prompt"}])
+
+    response = adapter.complete(query)
+
+    assert response.success is True
+    events = [event for event in sink.recent(limit=5) if event["event_type"] == "llm.audit"]
+    assert events[-1]["metadata"]["provider_name"] == "audited"
+    assert events[-1]["metadata"]["backend"] == "openai_compatible"
+    assert events[-1]["metadata"]["success"] is True
+    assert "secret prompt" not in str(events)
 
 
 def test_llm_adapter_batch_preserves_order():

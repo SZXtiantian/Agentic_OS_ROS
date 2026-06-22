@@ -6,6 +6,7 @@ import threading
 from typing import Any
 
 from agentic_os.kernel.context import GenerationSnapshot
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall, LLMQuery
 
 from .errors import LLMCoreErrorCode
@@ -29,9 +30,11 @@ class LLMAdapter:
         llm_configs: list[LLMConfig | dict],
         routing_strategy: str = "sequential",
         providers: dict[str, LLMProvider] | None = None,
+        event_sink: KernelEventSink | None = None,
     ) -> None:
         self.llm_configs = normalize_llm_configs(llm_configs)
         self.providers = dict(providers or {})
+        self.event_sink = event_sink
         self._active: dict[str, threading.Event] = {}
         self._active_lock = threading.Lock()
         if routing_strategy == "smart":
@@ -114,15 +117,18 @@ class LLMAdapter:
             return self.cancel(str(query.params.get("call_id") or query.params.get("syscall_id") or ""))
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not candidates:
-            return KernelResponse.error(
+            response = KernelResponse.error(
                 LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
                 metadata={"reason": "no enabled LLM provider configured"},
             )
+            self._audit_provider_result(query, None, response)
+            return response
 
         last_response: KernelResponse | None = None
         for config in candidates:
             provider = self._provider_for(config)
             response = enforce_json_response(query.response_format, provider.complete(query))
+            self._audit_provider_result(query, config, response)
             if response.success:
                 response.metadata.setdefault("model", config.name)
                 return response
@@ -136,7 +142,16 @@ class LLMAdapter:
             return []
         candidates = self.router.candidates(selected_llms=queries[0].selected_llms, capability=queries[0].action_type)
         if not candidates:
-            return [KernelResponse.error(LLMCoreErrorCode.PROVIDER_UNAVAILABLE, metadata={"reason": "no enabled LLM provider configured"}) for _ in queries]
+            responses = [
+                KernelResponse.error(
+                    LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                    metadata={"reason": "no enabled LLM provider configured"},
+                )
+                for _ in queries
+            ]
+            for query, response in zip(queries, responses, strict=False):
+                self._audit_provider_result(query, None, response, batch=True)
+            return responses
 
         last_responses: list[KernelResponse] | None = None
         for config in candidates:
@@ -147,6 +162,8 @@ class LLMAdapter:
                 responses = [provider.complete(query) for query in queries]
             for response in responses:
                 response.metadata.setdefault("model", config.name)
+            for query, response in zip(queries, responses, strict=False):
+                self._audit_provider_result(query, config, response, batch=True)
             if any(response.success for response in responses):
                 return _normalize_batch_length(responses, len(queries))
             last_responses = responses
@@ -163,12 +180,15 @@ class LLMAdapter:
     ) -> tuple[KernelResponse, GenerationSnapshot | None]:
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not candidates:
-            return KernelResponse.error(LLMCoreErrorCode.MODEL_NOT_FOUND), None
+            response = KernelResponse.error(LLMCoreErrorCode.MODEL_NOT_FOUND)
+            self._audit_provider_result(query, None, response, time_slice=True)
+            return response, None
         config = candidates[0]
         provider = self._provider_for(config)
         if hasattr(provider, "complete_with_time_slice"):
             response, next_snapshot = provider.complete_with_time_slice(query, time_slice_s, snapshot)
             response.metadata.setdefault("model", config.name)
+            self._audit_provider_result(query, config, response, time_slice=True)
             return response, next_snapshot
         response = self.complete(query)
         response.metadata["non_preemptible_llm_call"] = True
@@ -219,13 +239,19 @@ class LLMAdapter:
 
     def cancel(self, call_id: str = "") -> KernelResponse:
         if not call_id:
-            return KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"reason": "call_id required"})
+            response = KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"reason": "call_id required"})
+            self._audit_cancel_result(call_id, response)
+            return response
         with self._active_lock:
             event = self._active.get(call_id)
         if event is None:
-            return KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"call_id": call_id})
+            response = KernelResponse.error("SYSCALL_NOT_FOUND", metadata={"call_id": call_id})
+            self._audit_cancel_result(call_id, response)
+            return response
         event.set()
-        return KernelResponse.ok({"cancelled": [call_id]}, metadata={"call_id": call_id, "status": "cancel_requested"})
+        response = KernelResponse.ok({"cancelled": [call_id]}, metadata={"call_id": call_id, "status": "cancel_requested"})
+        self._audit_cancel_result(call_id, response)
+        return response
 
     def _register_active(self, call_id: str) -> threading.Event:
         event = threading.Event()
@@ -290,6 +316,41 @@ class LLMAdapter:
             "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
             "reason": f"unsupported backend: {config.backend}",
         }
+
+    def _audit_provider_result(
+        self,
+        query: LLMQuery,
+        config: LLMConfig | None,
+        response: KernelResponse,
+        **metadata: Any,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        self.event_sink.emit(
+            "llm.audit",
+            action=query.action_type or _action_type_from_operation(query.operation_type),
+            operation_type=query.operation_type,
+            request_id=query.request_id,
+            provider_name=config.name if config is not None else "",
+            backend=config.backend if config is not None else "",
+            success=response.success,
+            error_code=response.error_code,
+            external_provider=config.backend if config is not None else "",
+            **metadata,
+        )
+
+    def _audit_cancel_result(self, call_id: str, response: KernelResponse) -> None:
+        if self.event_sink is None:
+            return
+        self.event_sink.emit(
+            "llm.audit",
+            action="cancel",
+            operation_type="llm_cancel",
+            call_id=call_id,
+            success=response.success,
+            error_code=response.error_code,
+            external_provider="",
+        )
 
 
 def response_text(response: KernelResponse) -> str:

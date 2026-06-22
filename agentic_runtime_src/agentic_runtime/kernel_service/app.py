@@ -174,7 +174,11 @@ class KernelService:
             or [{"name": "unconfigured", "backend": "openai_compatible", "enabled": True, "capabilities": ["chat", "complete", "embed"]}]
         )
         routing_strategy = str(llm_config.get("routing_strategy") or "sequential")
-        return LLMAdapter([LLMConfig.from_dict(config) if isinstance(config, dict) else config for config in configs], routing_strategy=routing_strategy)
+        return LLMAdapter(
+            [LLMConfig.from_dict(config) if isinstance(config, dict) else config for config in configs],
+            routing_strategy=routing_strategy,
+            event_sink=self.event_sink,
+        )
 
     def _build_memory_manager(self) -> MemoryManager:
         memory_config = dict(self.kernel_config.get("memory") or {})
