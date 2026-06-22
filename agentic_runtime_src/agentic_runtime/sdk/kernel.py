@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from agentic_os.kernel.system_call import ContextQuery, LLMQuery, MemoryQuery, StorageQuery, ToolQuery
+from agentic_os.kernel.system_call import ContextQuery, LLMQuery, MemoryQuery, SkillQuery, StorageQuery, ToolQuery
 
 from .access import KernelAccessAPI
 
@@ -45,6 +45,7 @@ class KernelAPI:
         self.context = KernelContextAPI(ctx)
         self.memory = KernelMemoryAPI(ctx)
         self.storage = KernelStorageAPI(ctx)
+        self.skill = KernelSkillAPI(ctx)
         self.tool = KernelToolAPI(ctx)
         self.access = KernelAccessAPI(ctx)
 
@@ -304,4 +305,51 @@ class KernelToolAPI(_KernelBaseAPI):
 
     async def cancel(self, call_id: str, **kwargs):
         query = ToolQuery(operation_type="tool_cancel", params={"call_id": call_id})
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+
+class KernelSkillAPI(_KernelBaseAPI):
+    async def call(self, name: str, args: dict | None = None, **kwargs):
+        timeout_s = kwargs.pop("timeout_s", None)
+        permissions = tuple(kwargs.pop("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ()))))
+        query = SkillQuery(
+            operation_type="skill_call",
+            skill_name=name,
+            app_id=self.ctx.app_manifest.name,
+            session_id=self.ctx.session_id,
+            params={"args": dict(args or {}), "permissions": permissions, **kwargs},
+        )
+        return self._execute(query, timeout_s=timeout_s)
+
+    async def list(self, **kwargs):
+        query = SkillQuery(operation_type="skill_list", app_id=self.ctx.app_manifest.name, session_id=self.ctx.session_id)
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def describe(self, name: str, **kwargs):
+        query = SkillQuery(
+            operation_type="skill_describe",
+            skill_name=name,
+            app_id=self.ctx.app_manifest.name,
+            session_id=self.ctx.session_id,
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def status(self, call_id: str = "", **kwargs):
+        query = SkillQuery(
+            operation_type="skill_status",
+            call_id=call_id,
+            app_id=self.ctx.app_manifest.name,
+            session_id=self.ctx.session_id,
+            params={"call_id": call_id},
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def cancel(self, call_id: str = "", **kwargs):
+        query = SkillQuery(
+            operation_type="skill_cancel",
+            call_id=call_id,
+            app_id=self.ctx.app_manifest.name,
+            session_id=self.ctx.session_id,
+            params={"call_id": call_id},
+        )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))

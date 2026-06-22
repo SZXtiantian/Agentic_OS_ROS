@@ -23,6 +23,13 @@ class RobotCapabilityManager:
 
     def address_request(self, syscall: KernelSyscall) -> dict[str, Any]:
         if self.skill_adapter is None:
+            if getattr(getattr(syscall, "query", None), "__class__", None).__name__ == "SkillQuery":
+                return {
+                    "success": False,
+                    "error_code": "SKILL_BACKEND_UNAVAILABLE",
+                    "skill_name": self._skill_name(syscall),
+                    "reason": "runtime robot skill backend not configured",
+                }
             return {
                 "success": False,
                 "error_code": "ROBOT_MANAGER_NOT_WIRED",

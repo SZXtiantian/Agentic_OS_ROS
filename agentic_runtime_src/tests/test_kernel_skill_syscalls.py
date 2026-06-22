@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import asyncio
+from types import SimpleNamespace
+
+from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
+from agentic_os.kernel.system_call import SkillQuery
+from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.sdk import AgentContext
+from agentic_runtime.types import AppManifest, SkillResult
+
+
+def make_config(tmp_path):
+    return SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools")
+
+
+class RuntimeCompatibleExecutor:
+    def __init__(self) -> None:
+        self.cancellation_manager = SimpleNamespace(cancel_session=lambda session_id: None)
+        self.calls: list[tuple[str, dict, str]] = []
+
+    async def execute(self, app, skill_name, args, session_id):
+        self.calls.append((skill_name, dict(args), session_id))
+        return SkillResult(True, data={"skill": skill_name, "args": dict(args), "app": app.name, "session_id": session_id})
+
+
+class RuntimeCompatibleRegistry:
+    def __init__(self) -> None:
+        self.skill = SimpleNamespace(
+            name="report.say",
+            version="1",
+            description="Say a report message",
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+            permission_requirements=["report.say"],
+            resource_requirements={"locks": []},
+            safety_constraints={},
+            timeout_s=5,
+            backend={"type": "runtime"},
+        )
+
+    def list_skills(self):
+        return [self.skill]
+
+    def get_skill(self, name):
+        if name != "report.say":
+            raise KeyError(name)
+        return self.skill
+
+
+def test_skill_manager_without_backend_fails_fast():
+    manager = SkillManager()
+    response = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="skill_call", params={"skill_name": "report.say", "args": {"message": "hi"}})
+    )
+
+    assert response.success is False
+    assert response.error_code == "SKILL_BACKEND_UNAVAILABLE"
+
+
+def test_runtime_skill_backend_call_list_describe_cancel():
+    executor = RuntimeCompatibleExecutor()
+    backend = RuntimeSkillBackend(SimpleNamespace(executor=executor, registry=RuntimeCompatibleRegistry()))
+    manager = SkillManager(backend)
+
+    called = manager.call("report.say", {"message": "done"}, app_id="agent_a", session_id="sess_1", permissions=("report.say",))
+    listed = manager.list()
+    described = manager.describe("report.say")
+    status = manager.status(call_id="call_1")
+    cancelled = manager.cancel("sess_1", call_id="call_1")
+
+    assert called["success"] is True
+    assert called["result"]["data"]["skill"] == "report.say"
+    assert listed["skills"][0]["name"] == "report.say"
+    assert described["skill"]["name"] == "report.say"
+    assert status["state"] == "ready"
+    assert cancelled["success"] is True
+
+
+def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    service.start()
+    try:
+        result = service.execute_request(
+            "agent_a",
+            SkillQuery(operation_type="skill_call", skill_name="report.say", params={"args": {"message": "hi"}}),
+            timeout_s=1.0,
+        )
+    finally:
+        service.stop()
+
+    assert result.success is False
+    assert result.error_code == "SKILL_BACKEND_UNAVAILABLE"
+    assert result.metadata["queue_name"] == "skill"
+    assert service.status()["skill"]["error_code"] == "SKILL_BACKEND_UNAVAILABLE"
+
+
+def test_kernel_skill_robot_motion_routes_to_robot_lane_and_fails_without_backend(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    service.start()
+    try:
+        result = service.execute_request(
+            "agent_a",
+            SkillQuery(operation_type="skill_call", skill_name="robot.navigate_to", params={"args": {"place": "kitchen"}}),
+            timeout_s=1.0,
+        )
+    finally:
+        service.stop()
+
+    assert result.success is False
+    assert result.error_code == "SKILL_BACKEND_UNAVAILABLE"
+    assert result.metadata["queue_name"] == "robot_motion"
+
+
+def test_kernel_skill_sdk_facade_uses_kernel_service(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+
+    class Executor:
+        kernel_service = service
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("kernel skill SDK must use kernel service")
+
+    async def run():
+        service.start()
+        try:
+            app = AppManifest("skill_sdk_app", "0", "", "main:run", ["report.say"], [])
+            ctx = AgentContext(Executor(), app, "sess_skill")
+            result = await ctx.kernel.skill.call("report.say", {"message": "done"}, timeout_s=1.0)
+            listed = await ctx.kernel.skill.list(timeout_s=1.0)
+            assert result.success is False
+            assert result.error_code == "SKILL_BACKEND_UNAVAILABLE"
+            assert listed.error_code == "SKILL_BACKEND_UNAVAILABLE"
+        finally:
+            service.stop()
+
+    asyncio.run(run())

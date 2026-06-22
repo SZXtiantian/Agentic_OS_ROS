@@ -13,6 +13,7 @@ from agentic_os.kernel.human import HumanInteractionManager
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
 from agentic_os.kernel.memory import MemoryManager
 from agentic_os.kernel.scheduler import FIFOKernelScheduler, RoundRobinKernelScheduler
+from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
 from agentic_os.kernel.storage import StorageManager
 from agentic_os.kernel.system_call import KernelQuery, SyscallExecutionResult, SyscallExecutor
 from agentic_os.kernel.tool import ToolManager
@@ -34,8 +35,10 @@ class KernelService:
         self.storage = StorageManager(self._storage_root(), access_manager=self.access_manager)
         self.tool = self._build_tool_manager()
         robot_backend = RuntimeRobotCapabilityBackend(runtime_server) if runtime_server is not None else None
+        skill_backend = RuntimeSkillBackend(runtime_server) if runtime_server is not None else None
         self.robot_motion = RobotCapabilityManager(robot_backend)
         self.robot_sensor = RobotCapabilityManager(robot_backend)
+        self.skill = SkillManager(skill_backend)
         self.human = HumanInteractionManager()
         self.managers = {
             "llm": self.llm,
@@ -43,6 +46,7 @@ class KernelService:
             "memory": self.memory,
             "storage": self.storage,
             "tool": self.tool,
+            "skill": self.skill,
             "robot_motion": self.robot_motion,
             "robot_sensor": self.robot_sensor,
             "human": self.human,
@@ -95,6 +99,7 @@ class KernelService:
             "memory": self.memory.status(),
             "storage": self.storage.status(),
             "tool": self.tool.status(),
+            "skill": self.skill.status(),
             "recent_syscalls": self.recent_syscalls(),
         }
 
