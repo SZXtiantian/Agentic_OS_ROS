@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import replace
 
+import agentic_runtime.ros_bridge_client as ros_bridge_client_pkg
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.ros_bridge_client import Ros2CliBridgeClient
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
@@ -129,6 +130,10 @@ def test_bridge_factory_can_select_cli_without_rclpy(tmp_path):
     assert isinstance(client, Ros2CliBridgeClient)
 
 
+def test_ros_bridge_package_does_not_export_mock_client():
+    assert not hasattr(ros_bridge_client_pkg, "MockRosBridgeClient")
+
+
 def test_ros2_cli_bridge_client_camera_arm_methods():
     calls = []
 
@@ -248,5 +253,50 @@ def test_ros2_cli_bridge_client_safety_timeout_returns_structured_error():
         result = await client.check_safety("perception.observe", {"target": "workspace"}, "app")
         assert result["allowed"] is False
         assert result["error_code"] == "SAFETY_BACKEND_TIMEOUT"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_missing_ros2_returns_stable_error():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        raise FileNotFoundError("ros2")
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.get_robot_state()
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert result["state"] == {}
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_action_timeout_returns_stable_error():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        raise TimeoutError("action server unavailable")
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.navigate_to("厨房", 1)
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_ACTION_TIMEOUT"
+        assert result["result"] == {}
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_unparseable_response_returns_stable_error():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return "this is not a ROS response"
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.capture_photo("workspace", "photo", 5)
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert result["image_path"] == ""
 
     asyncio.run(run())

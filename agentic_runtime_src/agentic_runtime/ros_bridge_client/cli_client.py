@@ -13,6 +13,13 @@ from agentic_runtime.types import new_id
 CommandRunner = Callable[[list[str], int], Awaitable[str]]
 
 
+class RosBridgeCommandError(RuntimeError):
+    def __init__(self, error_code: str, reason: str) -> None:
+        super().__init__(reason)
+        self.error_code = error_code
+        self.reason = reason
+
+
 class Ros2CliBridgeClient:
     """Non-rclpy runtime client for Agentic-owned ROS2 bridge interfaces.
 
@@ -26,12 +33,15 @@ class Ros2CliBridgeClient:
         self.runner = runner or self._run_command
 
     async def resolve_place(self, name: str) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/world/resolve_place",
-            "agentic_msgs/srv/ResolvePlace",
-            {"name": name},
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/world/resolve_place",
+                "agentic_msgs/srv/ResolvePlace",
+                {"name": name},
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, place=_normalize_place({}, fallback_name=name))
         place = _normalize_place(data.get("place") or {}, fallback_name=name)
         return {
             "success": bool(data.get("success", False)),
@@ -41,8 +51,11 @@ class Ros2CliBridgeClient:
         }
 
     async def get_robot_state(self) -> dict[str, Any]:
-        output = await self._service_call("/agentic/robot/get_state", "agentic_msgs/srv/GetRobotState", {})
-        data = _parse_response(output)
+        try:
+            output = await self._service_call("/agentic/robot/get_state", "agentic_msgs/srv/GetRobotState", {})
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, state={})
         state = _normalize_state(data.get("state") or {})
         return {
             "success": bool(data.get("success", False)),
@@ -56,15 +69,22 @@ class Ros2CliBridgeClient:
         timeout_s = max(self.timeout_s, 20)
         try:
             output = await self._service_call("/agentic/safety/check", "agentic_msgs/srv/CheckSafety", payload, timeout_s)
-        except TimeoutError:
+        except (TimeoutError, RosBridgeCommandError) as exc:
+            if isinstance(exc, RosBridgeCommandError) and exc.error_code != "ROS_SERVICE_UNAVAILABLE":
+                return {"allowed": False, "error_code": exc.error_code, "reason": exc.reason}
             await asyncio.sleep(0.5)
             try:
                 output = await self._service_call("/agentic/safety/check", "agentic_msgs/srv/CheckSafety", payload, timeout_s)
-            except TimeoutError as exc:
+            except (TimeoutError, RosBridgeCommandError) as exc:
+                if isinstance(exc, RosBridgeCommandError) and exc.error_code != "ROS_SERVICE_UNAVAILABLE":
+                    return {"allowed": False, "error_code": exc.error_code, "reason": exc.reason}
                 return {"allowed": False, "error_code": "SAFETY_BACKEND_TIMEOUT", "reason": str(exc)}
         except RuntimeError as exc:
             return {"allowed": False, "error_code": "SAFETY_BACKEND_UNAVAILABLE", "reason": str(exc)}
-        data = _parse_response(output)
+        try:
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return {"allowed": False, "error_code": exc.error_code, "reason": exc.reason}
         return {
             "allowed": bool(data.get("allowed", False)),
             "error_code": str(data.get("error_code", "")),
@@ -74,13 +94,16 @@ class Ros2CliBridgeClient:
     async def navigate_to(self, place: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
         if cancel_event is not None and cancel_event.is_set():
             return {"success": False, "error_code": "SKILL_CANCELLED", "reason": "navigation cancelled before dispatch"}
-        output = await self._action_send_goal(
-            "/agentic/robot/navigate_to_place",
-            "agentic_msgs/action/NavigateToPlace",
-            {"place": place, "request_id": new_id("nav"), "timeout_s": int(timeout_s)},
-            timeout_s,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._action_send_goal(
+                "/agentic/robot/navigate_to_place",
+                "agentic_msgs/action/NavigateToPlace",
+                {"place": place, "request_id": new_id("nav"), "timeout_s": int(timeout_s)},
+                timeout_s,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -90,13 +113,16 @@ class Ros2CliBridgeClient:
         }
 
     async def inspect_area(self, place: str, timeout_s: int) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/perception/inspect_area",
-            "agentic_msgs/srv/InspectArea",
-            {"place": place, "request_id": new_id("inspect"), "timeout_s": int(timeout_s)},
-            timeout_s + 5,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/perception/inspect_area",
+                "agentic_msgs/srv/InspectArea",
+                {"place": place, "request_id": new_id("inspect"), "timeout_s": int(timeout_s)},
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, summary="", objects=[], anomalies=[], evidence_path="", evidence={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -109,13 +135,16 @@ class Ros2CliBridgeClient:
         }
 
     async def observe(self, target: str, timeout_s: int) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/perception/observe",
-            "agentic_msgs/srv/Observe",
-            {"target": target, "request_id": new_id("observe"), "timeout_s": int(timeout_s)},
-            timeout_s + 5,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/perception/observe",
+                "agentic_msgs/srv/Observe",
+                {"target": target, "request_id": new_id("observe"), "timeout_s": int(timeout_s)},
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, summary="", objects=[], evidence_path="", evidence={})
         evidence = _decode_json_field(data.get("evidence_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -128,13 +157,16 @@ class Ros2CliBridgeClient:
         }
 
     async def capture_photo(self, target: str, label: str, timeout_s: int) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/perception/capture_photo",
-            "agentic_msgs/srv/CapturePhoto",
-            {"target": target, "label": label, "request_id": new_id("capture"), "timeout_s": int(timeout_s)},
-            timeout_s + 5,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/perception/capture_photo",
+                "agentic_msgs/srv/CapturePhoto",
+                {"target": target, "label": label, "request_id": new_id("capture"), "timeout_s": int(timeout_s)},
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, image_path="", metadata_path="", evidence={})
         evidence = _decode_json_field(data.get("evidence_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -146,12 +178,15 @@ class Ros2CliBridgeClient:
         }
 
     async def get_arm_state(self) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/arm/get_state",
-            "agentic_msgs/srv/GetArmState",
-            {"request_id": new_id("arm_state")},
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/arm/get_state",
+                "agentic_msgs/srv/GetArmState",
+                {"request_id": new_id("arm_state")},
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, state=_normalize_arm_state({}))
         state = _normalize_arm_state(data.get("state") or {})
         return {
             "success": bool(data.get("success", False)),
@@ -163,13 +198,16 @@ class Ros2CliBridgeClient:
     async def move_arm_named(self, name: str, timeout_s: int, cancel_event=None) -> dict[str, Any]:
         if cancel_event is not None and cancel_event.is_set():
             return {"success": False, "error_code": "SKILL_CANCELLED", "reason": "arm action cancelled before dispatch"}
-        output = await self._action_send_goal(
-            "/agentic/arm/move_named",
-            "agentic_msgs/action/MoveArmNamed",
-            {"name": name, "request_id": new_id("arm"), "timeout_s": int(timeout_s)},
-            timeout_s + 2,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._action_send_goal(
+                "/agentic/arm/move_named",
+                "agentic_msgs/action/MoveArmNamed",
+                {"name": name, "request_id": new_id("arm"), "timeout_s": int(timeout_s)},
+                timeout_s + 2,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -192,8 +230,11 @@ class Ros2CliBridgeClient:
             "request_id": new_id("gripper"),
             "timeout_s": int(timeout_s),
         }
-        output = await self._service_call("/agentic/gripper/set", "agentic_msgs/srv/SetGripper", payload, timeout_s + 1)
-        data = _parse_response(output)
+        try:
+            output = await self._service_call("/agentic/gripper/set", "agentic_msgs/srv/SetGripper", payload, timeout_s + 1)
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
             "success": bool(data.get("success", False)),
@@ -203,12 +244,15 @@ class Ros2CliBridgeClient:
         }
 
     async def stop_robot(self, reason: str) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/robot/stop",
-            "agentic_msgs/srv/StopRobot",
-            {"reason": reason, "request_id": new_id("stop")},
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/robot/stop",
+                "agentic_msgs/srv/StopRobot",
+                {"reason": reason, "request_id": new_id("stop")},
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return _bridge_error(exc, message="", reason=reason)
         return {
             "success": bool(data.get("success", False)),
             "error_code": str(data.get("error_code", "")),
@@ -223,18 +267,21 @@ class Ros2CliBridgeClient:
         timeout_s: int = 60,
         require_confirmation: bool = False,
     ) -> dict[str, Any]:
-        output = await self._service_call(
-            "/agentic/human/ask",
-            "agentic_msgs/srv/AskHuman",
-            {
-                "question": question,
-                "options": list(options or []),
-                "timeout_s": int(timeout_s),
-                "require_explicit_confirmation": bool(require_confirmation),
-            },
-            timeout_s,
-        )
-        data = _parse_response(output)
+        try:
+            output = await self._service_call(
+                "/agentic/human/ask",
+                "agentic_msgs/srv/AskHuman",
+                {
+                    "question": question,
+                    "options": list(options or []),
+                    "timeout_s": int(timeout_s),
+                    "require_explicit_confirmation": bool(require_confirmation),
+                },
+                timeout_s,
+            )
+            data = _parse_required_response(output)
+        except RosBridgeCommandError as exc:
+            return {"answered": False, "answer": "", "error_code": exc.error_code, "reason": exc.reason}
         return {
             "answered": bool(data.get("answered", False)),
             "answer": str(data.get("answer", "")),
@@ -246,20 +293,40 @@ class Ros2CliBridgeClient:
         return {"success": True, "message": message, "transport": "runtime_stdout"}
 
     async def _service_call(self, name: str, srv_type: str, payload: dict[str, Any], timeout_s: int | None = None) -> str:
-        return await self.runner(["ros2", "service", "call", name, srv_type, _ros2_payload(payload)], int(timeout_s or self.timeout_s))
+        command = ["ros2", "service", "call", name, srv_type, _ros2_payload(payload)]
+        try:
+            return await self.runner(command, int(timeout_s or self.timeout_s))
+        except RosBridgeCommandError:
+            raise
+        except FileNotFoundError as exc:
+            raise RosBridgeCommandError("ROS_BRIDGE_UNAVAILABLE", str(exc) or "ros2 command is unavailable") from exc
+        except TimeoutError as exc:
+            raise RosBridgeCommandError("ROS_SERVICE_UNAVAILABLE", str(exc) or f"ROS2 service timed out: {name}") from exc
+        except RuntimeError as exc:
+            raise RosBridgeCommandError("ROS_SERVICE_UNAVAILABLE", str(exc) or f"ROS2 service unavailable: {name}") from exc
 
     async def _action_send_goal(self, name: str, action_type: str, payload: dict[str, Any], timeout_s: int | None = None) -> str:
-        return await self.runner(
-            ["ros2", "action", "send_goal", name, action_type, _ros2_payload(payload), "--feedback"],
-            int(timeout_s or self.timeout_s),
-        )
+        command = ["ros2", "action", "send_goal", name, action_type, _ros2_payload(payload), "--feedback"]
+        try:
+            return await self.runner(command, int(timeout_s or self.timeout_s))
+        except RosBridgeCommandError:
+            raise
+        except FileNotFoundError as exc:
+            raise RosBridgeCommandError("ROS_BRIDGE_UNAVAILABLE", str(exc) or "ros2 command is unavailable") from exc
+        except TimeoutError as exc:
+            raise RosBridgeCommandError("ROS_ACTION_TIMEOUT", str(exc) or f"ROS2 action timed out: {name}") from exc
+        except RuntimeError as exc:
+            raise RosBridgeCommandError("ROS_SERVICE_UNAVAILABLE", str(exc) or f"ROS2 action unavailable: {name}") from exc
 
     async def _run_command(self, command: list[str], timeout_s: int) -> str:
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError as exc:
+            raise RosBridgeCommandError("ROS_BRIDGE_UNAVAILABLE", str(exc) or "ros2 command is unavailable") from exc
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
         except asyncio.TimeoutError:
@@ -308,6 +375,17 @@ def _parse_response(output: str) -> dict[str, Any]:
             except json.JSONDecodeError:
                 pass
     return _parse_ros_repr(text)
+
+
+def _parse_required_response(output: str) -> dict[str, Any]:
+    parsed = _parse_response(output)
+    if not parsed:
+        raise RosBridgeCommandError("ROS_RESULT_INVALID", "ROS2 bridge returned an empty or unparseable result")
+    return parsed
+
+
+def _bridge_error(exc: RosBridgeCommandError, **extra: Any) -> dict[str, Any]:
+    return {"success": False, "error_code": exc.error_code, "reason": exc.reason, **extra}
 
 
 def _parse_ros_repr(text: str) -> dict[str, Any]:
