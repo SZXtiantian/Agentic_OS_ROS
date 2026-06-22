@@ -53,7 +53,7 @@ def test_session_and_kernel_request_defaults_are_real():
     request = RunAppRequest()
 
     assert "mock" not in session.to_dict()
-    assert request.mock is False
+    assert "mock" not in request.to_dict()
 
 
 def test_execution_monitor_defaults_to_real_bridge_label():
