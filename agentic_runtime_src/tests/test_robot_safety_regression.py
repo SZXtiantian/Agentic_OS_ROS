@@ -3,12 +3,17 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from agentic_os.kernel.system_call import RobotCapabilityQuery, ToolQuery
+from agentic_runtime.errors import ResourceLockedError
 from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.ros_bridge_client.cli_client import Ros2CliBridgeClient
 from agentic_runtime.server import RuntimeServer
-from runtime_test_helpers import create_test_runtime_server
+from agentic_runtime.skill_executor.resource_manager import ResourceManager
 from agentic_runtime.types import AppManifest
 
 
@@ -21,6 +26,19 @@ def _robot_app(name: str = "robot_safety_app") -> AppManifest:
         permissions=["robot.move", "robot.stop", "perception.inspect", "arm.move.named", "gripper.control"],
         required_capabilities=[],
     )
+
+
+def _runtime_with_missing_ros2(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    monkeypatch.setenv("AGENTIC_RUNTIME_CONFIG", str(Path(__file__).resolve().parents[1] / "configs" / "runtime.yaml"))
+    calls = []
+
+    async def missing_ros2(command, timeout_s):
+        calls.append((command, timeout_s))
+        raise FileNotFoundError("ros2")
+
+    server = RuntimeServer.create(bridge_client=Ros2CliBridgeClient(runner=missing_ros2))
+    return server, calls
 
 
 def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
@@ -40,9 +58,8 @@ def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
     assert result.error_code == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"
 
 
-def test_robot_skill_path_uses_access_safety_resource_audit_and_bridge(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = create_test_runtime_server()
+def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge(tmp_path, monkeypatch):
+    server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     class SpyAccessManager:
         def __init__(self, delegate) -> None:
@@ -63,46 +80,36 @@ def test_robot_skill_path_uses_access_safety_resource_audit_and_bridge(tmp_path,
             {"place": "厨房", "timeout_s": 2},
             "sess_safe_chain",
         )
-        assert result.success is True
+        assert result.success is False
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
 
     asyncio.run(run())
 
     assert spy_access.calls
     assert spy_access.calls[0].resource.resource_type == "robot_motion"
     assert spy_access.calls[0].resource.resource_id == "robot.navigate_to"
-    assert server.bridge_client.navigation_calls == [{"place": "厨房", "timeout_s": 2}]
+    assert bridge_calls
+    assert bridge_calls[0][0][:3] == ["ros2", "service", "call"]
+    assert bridge_calls[0][0][3] == "/agentic/safety/check"
     assert server.executor.resource_manager.snapshot() == {}
     record = server.audit_logger.recent(limit=1)[0]
     assert record["skill_name"] == "robot.navigate_to"
     assert record["permission_result"] == "allowed"
-    assert record["safety_result"] == "allowed"
-    assert record["resource_lock_result"] == "locked"
-    assert record["status"] == "succeeded"
+    assert record["safety_result"] == "denied"
+    assert record["resource_lock_result"] == "not_required"
+    assert record["status"] == "rejected"
+    assert record["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
 
 
-def test_same_base_motion_lock_prevents_parallel_bridge_calls(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = create_test_runtime_server()
-    server.bridge_client.navigation_sleep_s = 0.2
-    app = _robot_app("parallel_motion_app")
+def test_same_base_motion_lock_rejects_parallel_sessions_without_bridge_dependency():
+    manager = ResourceManager()
+    manager.acquire("base", "sess_a", "call_a")
 
-    async def run():
-        first = asyncio.create_task(
-            server.executor.execute(app, "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess_a")
-        )
-        await asyncio.sleep(0.05)
-        second = asyncio.create_task(
-            server.executor.execute(app, "robot.navigate_to", {"place": "客厅", "timeout_s": 2}, "sess_b")
-        )
-        return await asyncio.gather(first, second)
+    with pytest.raises(ResourceLockedError):
+        manager.acquire("base", "sess_b", "call_b")
 
-    first_result, second_result = asyncio.run(run())
-
-    assert first_result.success is True
-    assert second_result.success is False
-    assert second_result.error_code == "RESOURCE_LOCKED"
-    assert len(server.bridge_client.navigation_calls) == 1
-    assert server.executor.resource_manager.snapshot() == {}
+    manager.release("base", "sess_a", "call_a")
+    assert manager.snapshot() == {}
 
 
 class SerialRobotMotionManager:
@@ -156,8 +163,7 @@ def test_kernel_robot_motion_lane_is_serial(tmp_path):
 
 
 def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = create_test_runtime_server()
+    server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     service = server.kernel_service
     service.start()
@@ -177,17 +183,19 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
     finally:
         service.stop()
 
-    assert result.success is True
-    assert server.bridge_client.navigation_calls == [{"place": "厨房", "timeout_s": 2}]
+    assert result.success is False
+    assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+    assert bridge_calls
     assert any(
-        record["skill_name"] == "robot.navigate_to" and record["session_id"] == "sess_kernel_robot"
+        record["skill_name"] == "robot.navigate_to"
+        and record["session_id"] == "sess_kernel_robot"
+        and record["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         for record in server.audit_logger.recent(limit=20)
     )
 
 
 def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = create_test_runtime_server()
+    server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     service = server.kernel_service
     service.start()
@@ -208,4 +216,4 @@ def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monk
 
     assert result.success is False
     assert result.error_code == "PERMISSION_DENIED"
-    assert server.bridge_client.navigation_calls == []
+    assert bridge_calls == []
