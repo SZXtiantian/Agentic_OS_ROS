@@ -41,9 +41,11 @@ def test_bridge_factory_rejects_simulated_mode():
         create_ros_bridge_client(RuntimeConfig.load(), mock=True)
 
 
-def test_runtime_server_create_rejects_simulated_mode_without_test_bridge():
+def test_runtime_server_create_rejects_simulated_mode_even_with_explicit_bridge():
     with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
         RuntimeServer.create(mock=True)
+    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+        RuntimeServer.create(mock=True, bridge_client=object())
 
 
 def test_session_and_kernel_request_defaults_are_real():

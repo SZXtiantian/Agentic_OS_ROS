@@ -4,6 +4,7 @@ from typing import Any
 
 from agentic_runtime.app_factory import AppFactory
 from agentic_runtime.context_manager import ContextManager
+from agentic_runtime.simulation import simulated_backend_disabled
 from agentic_runtime.session import SessionManager
 from agentic_runtime.storage import StorageManager
 
@@ -22,6 +23,13 @@ class SessionRunner:
         self.context_manager = context_manager
 
     async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False, **kwargs: Any) -> dict[str, Any]:
+        if mock:
+            return {
+                "session_id": "",
+                "app_id": app_id,
+                "status": "failed",
+                "result": simulated_backend_disabled("SessionRunner.run_app(mock=True)"),
+            }
         task = dict(kwargs)
         task.setdefault("place", place)
         session = self.session_manager.create_session(app_id, task=task)

@@ -19,6 +19,7 @@ from agentic_os.kernel.system_call import KernelQuery, SyscallExecutionResult, S
 from agentic_os.kernel.tool import ToolManager
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
 from agentic_runtime.kernel_service.robot_backend import RuntimeRobotCapabilityBackend
+from agentic_runtime.simulation import simulated_backend_disabled
 
 
 class KernelService:
@@ -118,9 +119,16 @@ class KernelService:
         return status
 
     async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False) -> dict[str, Any]:
+        if mock:
+            return {
+                "session_id": "",
+                "app_id": app_id,
+                "status": "failed",
+                "result": simulated_backend_disabled("KernelService.run_app(mock=True)"),
+            }
         if self.runtime_server is None:
             return {"success": False, "error_code": "RUNTIME_SERVER_NOT_WIRED"}
-        return await self.runtime_server.scheduler.run_app(app_id, place=place, mock=mock)
+        return await self.runtime_server.scheduler.run_app(app_id, place=place)
 
     def _storage_root(self) -> Path:
         if self.config is not None:

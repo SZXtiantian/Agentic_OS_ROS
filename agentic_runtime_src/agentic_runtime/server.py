@@ -56,10 +56,10 @@ class RuntimeServer:
 
     @classmethod
     def create(cls, mock: bool = False, bridge_client: object | None = None) -> "RuntimeServer":
-        if mock and bridge_client is None:
+        if mock:
             raise RuntimeError(simulated_backend_disabled("RuntimeServer.create(mock=True)")["error_code"])
         config_path = None
-        if not mock and not os.environ.get("AGENTIC_RUNTIME_CONFIG"):
+        if not os.environ.get("AGENTIC_RUNTIME_CONFIG"):
             candidate = Path("/opt/agentic/etc/agentic_robot.yaml")
             if candidate.exists():
                 config_path = candidate
