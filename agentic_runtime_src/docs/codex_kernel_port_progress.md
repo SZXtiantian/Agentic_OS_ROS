@@ -137,7 +137,7 @@ pytest -q tests/test_sdk.py tests/test_skill_executor.py tests/test_room_inspect
 pytest -q
 python scripts/check_forbidden_imports.py
 bash scripts/run_tests.sh
-AGENTIC_HOME=/tmp/agentic_pr15_demo AGENTIC_VAR=/tmp/agentic_pr15_demo/var AGENTIC_ETC=/tmp/agentic_pr15_demo/etc python -m agentic_runtime.cli bridge install --profile ros2_mock --dry-run --json
+AGENTIC_HOME=/tmp/agentic_pr15_demo AGENTIC_VAR=/tmp/agentic_pr15_demo/var AGENTIC_ETC=/tmp/agentic_pr15_demo/etc python -m agentic_runtime.cli bridge install --profile ros2_default --dry-run --json
 bash scripts/install_to_opt_agentic.sh
 source /opt/agentic/setup.bash
 /opt/agentic/bin/agentic status --json
