@@ -80,4 +80,4 @@ def test_human_manager_returns_not_wired_without_adapter():
     result = manager.address_request(syscall)
 
     assert result["success"] is False
-    assert result["error_code"] == "HUMAN_MANAGER_NOT_WIRED"
+    assert result["error_code"] == "HUMAN_BACKEND_UNAVAILABLE"

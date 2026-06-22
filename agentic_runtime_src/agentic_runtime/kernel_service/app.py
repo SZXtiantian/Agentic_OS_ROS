@@ -17,6 +17,7 @@ from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
 from agentic_os.kernel.storage import StorageManager
 from agentic_os.kernel.system_call import KernelQuery, SyscallExecutionResult, SyscallExecutor
 from agentic_os.kernel.tool import ToolManager
+from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
 from agentic_runtime.kernel_service.robot_backend import RuntimeRobotCapabilityBackend
 
 
@@ -39,7 +40,7 @@ class KernelService:
         self.robot_motion = RobotCapabilityManager(robot_backend)
         self.robot_sensor = RobotCapabilityManager(robot_backend)
         self.skill = SkillManager(skill_backend)
-        self.human = HumanInteractionManager()
+        self.human = HumanInteractionManager(RuntimeHumanBackend(runtime_server) if runtime_server is not None else None)
         self.managers = {
             "llm": self.llm,
             "context": self.context,
@@ -100,6 +101,7 @@ class KernelService:
             "storage": self.storage.status(),
             "tool": self.tool.status(),
             "skill": self.skill.status(),
+            "human": self.human.status(),
             "recent_syscalls": self.recent_syscalls(),
         }
 

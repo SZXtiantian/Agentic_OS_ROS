@@ -32,3 +32,5 @@ def test_runtime_config_loads_kernel_block():
     assert config.kernel["llm"]["configs"][0]["backend"] == "openai_compatible"
     assert config.kernel["memory"]["provider"] == "sqlite"
     assert config.kernel["tool"]["mcp_enabled"] is False
+    assert config.allow_mock_backends is False
+    assert config.ros_bridge_mode == "cli"

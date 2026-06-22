@@ -36,7 +36,7 @@ class RuntimeConfig:
     allow_mock_backends: bool
     app_root: Path
     skill_root: Path
-    ros_bridge_mode: str = "mock"
+    ros_bridge_mode: str = "cli"
     daemon_host: str = "127.0.0.1"
     daemon_port: int = 8765
     session_root: Path = Path("/opt/agentic/var/sessions")
@@ -88,10 +88,10 @@ class RuntimeConfig:
             audit_log_path=resolve(data.get("audit_log_path"), var_root / "audit" / "audit.jsonl"),
             memory_db_path=resolve(data.get("memory_db_path"), var_root / "memory" / "memory.sqlite3"),
             default_skill_timeout_s=int(data.get("default_skill_timeout_s", 60)),
-            allow_mock_backends=bool(data.get("allow_mock_backends", True)),
+            allow_mock_backends=bool(data.get("allow_mock_backends", False)),
             app_root=resolve(data.get("app_root"), app_root_default),
             skill_root=resolve(data.get("skill_root"), skill_root_default),
-            ros_bridge_mode=str(data.get("ros_bridge_mode", "mock")),
+            ros_bridge_mode=str(data.get("ros_bridge_mode", "cli")),
             daemon_host=str(os.environ.get("AGENTIC_DAEMON_HOST", data.get("daemon_host", "127.0.0.1"))),
             daemon_port=int(os.environ.get("AGENTIC_DAEMON_PORT", data.get("daemon_port", 8765))),
             session_root=resolve(os.environ.get("AGENTIC_SESSION_ROOT", data.get("session_root")), var_root / "sessions"),
