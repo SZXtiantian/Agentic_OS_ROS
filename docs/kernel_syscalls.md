@@ -43,7 +43,7 @@ LLM status exposes provider configuration state and active `call_id`s. Cancellin
 
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.cancel(call_id)` cancels only the matching active runtime call in the current session; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
 
-Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. `human.cancel` forwards the same `call_id`/`correlation_id` to the runtime cancellation manager; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
+Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.cancel` forwards the same `call_id`/`correlation_id` to the runtime cancellation manager; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 
 ## Permissions And Intervention
 
@@ -107,7 +107,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 378 passed
+# 379 passed
 scripts/run_tests.sh
-# 378 passed; Agentic OS MVP checks passed.
+# 379 passed; Agentic OS MVP checks passed.
 ```

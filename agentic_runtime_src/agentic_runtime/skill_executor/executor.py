@@ -62,6 +62,8 @@ class SkillExecutor:
         args = dict(args or {})
         skill = self.registry.get_skill(skill_name)
         call = SkillCall(skill.name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill.name, args, app.name, session_id)
+        if skill.name == "human.ask" and call.call_id and not args.get("correlation_id"):
+            args["correlation_id"] = call.call_id
         syscall = SkillSyscall.create(app.name, session_id, skill.name, args)
         self._record_syscall(syscall)
         self._set_current_skill(session_id, skill.name)
@@ -272,7 +274,7 @@ class SkillExecutor:
         )
 
     def _status_for_error(self, error_code: str) -> str:
-        if error_code == "SKILL_CANCELLED":
+        if error_code in {"SKILL_CANCELLED", "HUMAN_CANCELLED"}:
             return "cancelled"
         if error_code in {"SKILL_TIMEOUT", "NAVIGATION_TIMEOUT"}:
             return "timeout"

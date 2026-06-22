@@ -100,6 +100,7 @@ def test_human_queue_cancel_returns_stable_codes(tmp_path):
 
 def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    monkeypatch.setenv("AGENTIC_SESSION_ROOT", str(tmp_path / "var" / "sessions"))
     server = create_test_runtime_server()
     app = AppManifest(
         name="human_queue_app",
@@ -131,3 +132,41 @@ def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
     audit = server.audit_logger.recent(limit=1)[0]
     assert audit["skill_name"] == "human.ask"
     assert audit["backend"] == "runtime_human_queue"
+
+
+def test_runtime_human_skill_uses_call_id_as_queue_correlation(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    monkeypatch.setenv("AGENTIC_SESSION_ROOT", str(tmp_path / "var" / "sessions"))
+    server = create_test_runtime_server()
+    app = AppManifest(
+        name="human_queue_app",
+        version="0",
+        description="",
+        entrypoint="main:run",
+        permissions=["human.ask"],
+        required_capabilities=["human.ask"],
+    )
+
+    async def run():
+        task = asyncio.create_task(
+            server.executor.execute(
+                app,
+                "human.ask",
+                {"question": "Approve?", "timeout_s": 1},
+                "sess_runtime_human",
+                call_id="human_call_1",
+            )
+        )
+        await _wait_for_request(server.human_channel.paths.requests, "human_call_1")
+        cancel = server.human_channel.cancel("human_call_1", session_id="sess_runtime_human")
+        result = await task
+        return cancel, result
+
+    cancel, result = asyncio.run(run())
+
+    assert cancel["success"] is True
+    assert result.success is False
+    assert result.error_code == "HUMAN_CANCELLED"
+    assert result.data["correlation_id"] == "human_call_1"
+    audit = server.audit_logger.recent(limit=1)[0]
+    assert audit["status"] == "cancelled"
