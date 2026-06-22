@@ -5,7 +5,7 @@ from agentic_os.kernel.scheduler import RoundRobinKernelScheduler, SchedulerLane
 from agentic_os.kernel.system_call import KernelResponse, LLMQuery, RobotCapabilityQuery, SyscallExecutor
 
 
-class FakeStreamingProvider:
+class RecordingStreamingProvider:
     def __init__(self) -> None:
         self.calls = 0
 
@@ -52,12 +52,12 @@ def test_generation_context_save_restore_partial_response():
     manager = SimpleGenerationContextManager()
     prompt = [{"role": "user", "content": "inspect"}]
 
-    saved = manager.save("gen_1", "ksc_1", prompt, partial_response="partial", metadata={"model": "mock"})
+    saved = manager.save("gen_1", "ksc_1", prompt, partial_response="partial", metadata={"model": "recording"})
     restored = manager.restore("gen_1")
 
     assert restored is saved
     assert restored.partial_response == "partial"
-    assert restored.metadata["model"] == "mock"
+    assert restored.metadata["model"] == "recording"
 
 
 def test_generation_context_prompt_hash_changes_on_prompt_change():
@@ -76,10 +76,10 @@ def test_rr_scheduler_does_not_preempt_robot_motion():
     assert scheduler.can_preempt_lane(KernelQueueName.LLM) is True
 
 
-def test_rr_scheduler_suspends_requeues_and_resumes_fake_streaming_llm():
+def test_rr_scheduler_suspends_requeues_and_resumes_recording_streaming_llm():
     store = KernelQueueStore()
-    provider = FakeStreamingProvider()
-    manager = LLMAdapter([LLMConfig(name="stream", backend="mock")], providers={"stream": provider})
+    provider = RecordingStreamingProvider()
+    manager = LLMAdapter([LLMConfig(name="stream", backend="openai_compatible")], providers={"stream": provider})
     lane = SchedulerLaneSpec(
         "llm",
         KernelQueueName.LLM,

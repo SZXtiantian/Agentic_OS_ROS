@@ -271,12 +271,13 @@ def test_llm_adapter_address_request_accepts_llm_syscall():
 
 
 def test_llm_adapter_without_real_provider_fails_unavailable():
-    adapter = LLMAdapter([LLMConfig(name="disabled", backend="mock")])
+    adapter = LLMAdapter([LLMConfig(name="disabled", backend="mock")], providers={"disabled": RecordingProvider("disabled")})
 
     response = adapter.complete(LLMQuery(operation_type="chat"))
 
     assert response.success is False
     assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
+    assert response.metadata["backend"] == "mock"
 
 
 def test_llm_adapter_cancel_missing_call_returns_syscall_not_found():

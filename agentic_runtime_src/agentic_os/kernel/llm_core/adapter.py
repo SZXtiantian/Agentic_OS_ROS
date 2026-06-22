@@ -175,6 +175,8 @@ class LLMAdapter:
         return response, None
 
     def _provider_for(self, config: LLMConfig) -> LLMProvider:
+        if config.backend in {"mock", "fake", "stub", "dummy"}:
+            return UnsupportedLLMProvider(config)
         if config.name in self.providers:
             return self.providers[config.name]
         if config.backend in self.providers:
