@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
+from agentic_os.kernel.human import HumanInteractionManager
 from agentic_os.kernel.system_call import SkillQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
@@ -42,10 +44,53 @@ def test_human_lane_without_runtime_returns_stable_error(tmp_path):
     finally:
         service.stop()
 
+    status = service.status()
     assert result.success is False
     assert result.error_code == "HUMAN_BACKEND_UNAVAILABLE"
     assert result.metadata["queue_name"] == "human"
-    assert service.status()["human"]["error_code"] == "HUMAN_BACKEND_UNAVAILABLE"
+    assert status["human"]["error_code"] == "HUMAN_BACKEND_UNAVAILABLE"
+    assert any(
+        event["event_type"] == "human.audit" and event["metadata"]["error_code"] == "HUMAN_BACKEND_UNAVAILABLE"
+        for event in status["events"]["recent"]
+    )
+
+
+def test_human_manager_audits_ask_and_cancel():
+    class Backend:
+        def address_request(self, syscall):
+            return {"success": True, "answered": True, "answer": "yes", "correlation_id": "human_1"}
+
+        def cancel(self, session_id, call_id=""):
+            return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "session_id": session_id, "call_id": call_id}
+
+        def status(self):
+            return {"success": True, "state": "ready", "backend": "test_backend"}
+
+    sink = InMemoryKernelEventSink()
+    manager = HumanInteractionManager(Backend(), event_sink=sink)
+
+    ask = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "correlation_id": "human_1"},
+        )
+    )
+    cancel = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_cancel",
+            params={"session_id": "sess_human", "call_id": "human_1"},
+        )
+    )
+
+    assert ask.success is True
+    assert cancel.success is False
+    assert cancel.error_code == "SYSCALL_NOT_FOUND"
+    events = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["ask", "cancel"]
+    assert events[0]["metadata"]["success"] is True
+    assert events[1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
 
 
 def test_runtime_human_backend_uses_skill_executor_contract():

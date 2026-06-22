@@ -41,7 +41,10 @@ class KernelService:
         self.robot_motion = RobotCapabilityManager(robot_backend)
         self.robot_sensor = RobotCapabilityManager(robot_backend)
         self.skill = SkillManager(skill_backend)
-        self.human = HumanInteractionManager(RuntimeHumanBackend(runtime_server) if runtime_server is not None else None)
+        self.human = HumanInteractionManager(
+            RuntimeHumanBackend(runtime_server) if runtime_server is not None else None,
+            event_sink=self.event_sink,
+        )
         self.managers = {
             "llm": self.llm,
             "context": self.context,
