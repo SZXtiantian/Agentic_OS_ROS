@@ -29,12 +29,14 @@ class SQLiteContextProvider:
         self._lock = RLock()
         self._available = True
         self._error = ""
+        self._last_error: dict[str, str] = {"operation": "", "error_code": "", "reason": ""}
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._initialize()
         except Exception as exc:
             self._available = False
             self._error = str(exc)
+            self._record_error("initialize", "CONTEXT_PROVIDER_UNAVAILABLE", str(exc))
 
     def put(
         self,
@@ -48,6 +50,7 @@ class SQLiteContextProvider:
         self._require_available()
         value_json = _json_dumps(value)
         if len(value_json.encode("utf-8")) > self.max_value_bytes:
+            self._record_error("put", "CONTEXT_SNAPSHOT_TOO_LARGE", f"context value exceeds {self.max_value_bytes} bytes")
             return {"success": False, "error_code": "CONTEXT_SNAPSHOT_TOO_LARGE", "key": key}
         now = _utc_now()
         ttl_s = metadata.get("ttl_s")
@@ -147,6 +150,7 @@ class SQLiteContextProvider:
         self._require_available()
         state_json = _json_dumps(state)
         if len(state_json.encode("utf-8")) > self.max_snapshot_bytes:
+            self._record_error("snapshot", "CONTEXT_SNAPSHOT_TOO_LARGE", f"context snapshot exceeds {self.max_snapshot_bytes} bytes")
             return {"success": False, "error_code": "CONTEXT_SNAPSHOT_TOO_LARGE"}
         snapshot_id = f"ctx_{uuid4().hex}"
         now = _utc_now()
@@ -249,25 +253,32 @@ class SQLiteContextProvider:
                 "error_code": "CONTEXT_PROVIDER_UNAVAILABLE",
                 "reason": self._error,
                 "path": str(self.db_path),
+                "db_path": str(self.db_path),
+                "last_error": dict(self._last_error),
             }
         try:
             with self._connect() as conn:
                 kv_count = conn.execute("SELECT COUNT(*) AS count FROM context_kv").fetchone()["count"]
                 snapshot_count = conn.execute("SELECT COUNT(*) AS count FROM context_snapshots").fetchone()["count"]
         except Exception as exc:
+            self._record_error("status", "CONTEXT_PROVIDER_UNAVAILABLE", str(exc))
             return {
                 "state": "unavailable",
                 "provider": "sqlite",
                 "error_code": "CONTEXT_PROVIDER_UNAVAILABLE",
                 "reason": str(exc),
                 "path": str(self.db_path),
+                "db_path": str(self.db_path),
+                "last_error": dict(self._last_error),
             }
         return {
             "state": "ready",
             "provider": "sqlite",
             "path": str(self.db_path),
+            "db_path": str(self.db_path),
             "kv_count": int(kv_count),
             "snapshot_count": int(snapshot_count),
+            "last_error": dict(self._last_error),
         }
 
     def _initialize(self) -> None:
@@ -319,3 +330,10 @@ class SQLiteContextProvider:
     def _require_available(self) -> None:
         if not self._available:
             raise RuntimeError(self._error or "context provider unavailable")
+
+    def _record_error(self, operation: str, error_code: str, reason: str) -> None:
+        self._last_error = {
+            "operation": str(operation),
+            "error_code": str(error_code),
+            "reason": str(reason),
+        }

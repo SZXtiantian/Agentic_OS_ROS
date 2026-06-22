@@ -41,6 +41,30 @@ def test_context_sqlite_provider_persists_put_get(tmp_path):
     assert reopened.status()["state"] == "ready"
 
 
+def test_context_sqlite_status_exposes_real_provider_observability(tmp_path):
+    db_path = tmp_path / "context.sqlite3"
+    provider = SQLiteContextProvider(db_path)
+
+    status = provider.status()
+
+    assert status["state"] == "ready"
+    assert status["provider"] == "sqlite"
+    assert status["path"] == str(db_path)
+    assert status["db_path"] == str(db_path)
+    assert status["last_error"] == {"operation": "", "error_code": "", "reason": ""}
+
+
+def test_context_provider_records_last_error_for_size_limit(tmp_path):
+    provider = SQLiteContextProvider(tmp_path / "context.sqlite3", max_value_bytes=4)
+
+    result = provider.put("agent_a", "sess_1", "context", "too.big", "12345", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "CONTEXT_SNAPSHOT_TOO_LARGE"
+    assert provider.status()["last_error"]["operation"] == "put"
+    assert provider.status()["last_error"]["error_code"] == "CONTEXT_SNAPSHOT_TOO_LARGE"
+
+
 def test_context_manager_snapshot_recover_compat_persists(tmp_path):
     manager = ContextManager(tmp_path / "ctx")
     manager.snapshot("sess_1", "agent_a", task={"place": "kitchen"}, current_skill="robot.inspect_area")
@@ -194,3 +218,5 @@ def test_context_unavailable_status_and_error_code(tmp_path):
     assert response.success is False
     assert response.error_code == "CONTEXT_PROVIDER_UNAVAILABLE"
     assert manager.status()["state"] == "unavailable"
+    assert manager.status()["db_path"] == str(blocking_file / "context.sqlite3")
+    assert manager.status()["last_error"]["error_code"] == "CONTEXT_PROVIDER_UNAVAILABLE"
