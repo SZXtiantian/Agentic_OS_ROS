@@ -11,7 +11,6 @@ from agentic_os.kernel.tool import ToolManager as KernelToolManager
 
 from agentic_runtime.context_manager import ContextManager
 from agentic_runtime.memory import create_memory_manager
-from agentic_runtime.ros_bridge_client.mock_client import MockRosBridgeClient
 from agentic_runtime.scheduler import SingleRobotScheduler
 from agentic_runtime.skill_executor.resource_manager import ResourceManager
 from agentic_runtime.skill_registry import SkillRegistry
@@ -68,7 +67,7 @@ def test_runtime_scheduler_uses_kernel_fifo_admission():
     scheduler = SingleRobotScheduler(Runner())
 
     assert isinstance(scheduler.kernel_scheduler, FIFORequestScheduler)
-    result = asyncio.run(scheduler.run_app("inspection_agent", place="厨房", mock=True))
+    result = asyncio.run(scheduler.run_app("inspection_agent", place="厨房"))
 
     assert result["result"]["success"] is True
     assert scheduler.status()["last_kernel_syscall_id"].startswith("ksc_")
@@ -101,18 +100,3 @@ backend:
     syscall = AgenticSyscall.create("app", "sess", "memory.remember", {"key": "x"})
     kernel_syscall = syscall.to_kernel_syscall()
     assert kernel_syscall.operation_type == "memory.remember"
-
-
-def test_mock_bridge_uses_kernel_world_model(tmp_path):
-    configs = tmp_path / "configs"
-    configs.mkdir()
-    (configs / "places.yaml").write_text(
-        "places:\n  厨房:\n    id: kitchen\n    frame_id: map\n    pose: {x: 1, y: 2, yaw: 0}\n    allowed: true\n",
-        encoding="utf-8",
-    )
-    (configs / "safety.yaml").write_text("safety:\n  forbidden_zones: []\n", encoding="utf-8")
-    bridge = MockRosBridgeClient(tmp_path)
-
-    assert bridge.world_model.resolve_place("厨房")["success"] is True
-    resolved = asyncio.run(bridge.resolve_place("厨房"))
-    assert resolved["place"]["id"] == "kitchen"
