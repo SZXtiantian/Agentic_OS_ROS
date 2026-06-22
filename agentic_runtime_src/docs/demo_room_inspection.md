@@ -1,6 +1,6 @@
 # Demo: Room Inspection
 
-## Happy Path
+## Real Bridge Happy Path
 
 User request:
 
@@ -20,7 +20,7 @@ Runtime flow:
 Command:
 
 ```bash
-/opt/agentic/bin/agentic-run inspection_agent --place 厨房 --mock
+/opt/agentic/bin/agentic-run inspection_agent --place 厨房 --real
 ```
 
 Expected summary:
@@ -31,20 +31,36 @@ Expected summary:
 success=true
 ```
 
-## Forbidden Zone
+This path requires the real AgenticOS ROS2 bridge services and robot/Nav2 stack
+to be available. The runtime does not provide a simulated success backend.
 
-Command:
+## Missing Bridge
 
-```bash
-/opt/agentic/bin/agentic-run inspection_agent --place 楼梯 --mock
-```
+If ROS2, the AgenticOS bridge service, or the robot backend is unavailable, the
+same app must fail visibly instead of fabricating a navigation or inspection
+result.
 
 Expected summary:
 
 ```text
-PLACE_NOT_AVAILABLE 或 FORBIDDEN_ZONE
+ROS_BRIDGE_UNAVAILABLE 或 ROS_SERVICE_UNAVAILABLE
 success=false
 ```
+
+The audit log and session context should include the same error code.
+
+## Forbidden Zone
+
+Forbidden-zone validation is owned by the real safety bridge. When the bridge is
+available and rejects `楼梯`, the app returns:
+
+```text
+FORBIDDEN_ZONE
+success=false
+```
+
+If the bridge is unavailable, the expected result is the bridge availability
+error above, not a locally fabricated forbidden-zone decision.
 
 ## Missing Permission
 
@@ -58,7 +74,9 @@ The navigation backend is not called.
 
 ## Timeout
 
-With mock navigation sleep longer than `timeout_s`, `robot.navigate_to` returns `SKILL_TIMEOUT`, releases the `base` lock, and writes an audit record.
+Timeouts must come from the runtime timeout path or from real ROS2 bridge/action
+timeouts. `robot.navigate_to` returns `SKILL_TIMEOUT` or `ROS_ACTION_TIMEOUT`,
+releases any held resource locks, and writes an audit record.
 
 ## Stop
 
@@ -66,7 +84,7 @@ With mock navigation sleep longer than `timeout_s`, `robot.navigate_to` returns 
 
 ## Kernel Session Inspection
 
-The installed mock run creates a persisted session under `/opt/agentic/var/sessions`:
+Runs create persisted sessions under `/opt/agentic/var/sessions`:
 
 ```bash
 /opt/agentic/bin/agenticctl sessions --limit 5
@@ -80,7 +98,7 @@ Bridge ownership and profile status are visible through:
 /opt/agentic/bin/agenticctl bridge status
 ```
 
-## ROS2 Bridge Mock
+## ROS2 Bridge Build
 
 The ROS2 adapter packages can be built independently:
 
@@ -99,10 +117,10 @@ colcon --log-base log/ros2_bridge build \
   agentic_app_runtime_bridge
 ```
 
-The MVP Runtime can still use `MockRosBridgeClient` for offline unit tests, but
-this machine is treated as a real-robot integration environment. For ROS2
-testing, use the real bridge profile and a robot/Nav2 stack rather than a local
-simulation harness.
+The Runtime no longer ships an offline ROS bridge simulator for success-path
+tests. If ROS2, bridge services, or robot/Nav2 are unavailable, runtime calls
+must fail fast with stable bridge error codes. For ROS2 testing, use the real
+bridge profile and a robot/Nav2 stack rather than a local simulation harness.
 
 ## Nav2 Integration Notes
 

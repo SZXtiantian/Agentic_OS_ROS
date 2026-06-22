@@ -1683,13 +1683,15 @@ Runtime 不 import rclpy，通过 shell/HTTP/mock/client 调用 ROS2 bridge。
 agentic_runtime/agentic_runtime/ros_bridge_client/
 ├── __init__.py
 ├── client.py
-├── mock_client.py
 └── types.py
 ```
 
-#### MVP 推荐
+#### Historical MVP Note
 
-先实现 `MockRosBridgeClient`，支持：
+Earlier MVP notes suggested a simulated bridge client for offline development.
+That path has been retired: current runtime success paths must use real bridge
+services, and missing ROS2 dependencies must return stable fail-fast errors.
+The current client contract is:
 
 ```python
 await client.resolve_place("厨房")
@@ -1699,7 +1701,7 @@ await client.inspect_area("厨房", timeout_s=60)
 await client.stop_robot("reason")
 ```
 
-之后再替换为真实 ROS bridge client。
+All calls above must go through a real bridge backend.
 
 #### 完成标准
 
@@ -2923,7 +2925,7 @@ test -d agentic_apps
 
 要求：
 - 实现 SQLite memory。
-- 实现 MockRosBridgeClient。
+- 实现真实 ROS bridge client；缺依赖时返回稳定错误码，不得伪造成功。
 - 实现 SkillExecutor 状态机。
 - 实现 ctx.* SDK。
 - 实现 CLI: python -m agentic_runtime.cli run-app room_inspection_app --place 厨房 --mock

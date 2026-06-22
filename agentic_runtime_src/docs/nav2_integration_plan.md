@@ -1,7 +1,8 @@
 # Nav2 Integration Plan
 
-MVP navigation can use `MockRosBridgeClient` for offline unit tests, but this
-host is configured as a real-robot test environment.
+Navigation success tests require the real AgenticOS ROS2 bridge and a
+robot/Nav2 stack. The runtime no longer includes an offline bridge simulator;
+missing ROS2 or bridge services must surface as stable fail-fast errors.
 
 The ROS2 `navigation_bridge_node` also has a real Nav2 path: with
 `mock_nav:=false`, it translates AgenticOS `NavigateToPlace` goals into Nav2
