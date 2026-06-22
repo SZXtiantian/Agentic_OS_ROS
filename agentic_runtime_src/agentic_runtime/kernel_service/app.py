@@ -7,6 +7,7 @@ from typing import Any
 
 from agentic_os.kernel.access import AccessManager
 from agentic_os.kernel.capability import RobotCapabilityManager
+from agentic_os.kernel.context import ContextManager
 from agentic_os.kernel.hooks import InMemoryKernelEventSink, KernelQueueStore, sanitize_event_payload
 from agentic_os.kernel.human import HumanInteractionManager
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
@@ -28,6 +29,7 @@ class KernelService:
         self.access_manager = AccessManager(event_sink=self.event_sink)
         self.queue_store = KernelQueueStore(event_sink=self.event_sink)
         self.llm = self._build_llm_adapter()
+        self.context = self._build_context_manager()
         self.memory = self._build_memory_manager()
         self.storage = StorageManager(self._storage_root(), access_manager=self.access_manager)
         self.tool = self._build_tool_manager()
@@ -37,6 +39,7 @@ class KernelService:
         self.human = HumanInteractionManager()
         self.managers = {
             "llm": self.llm,
+            "context": self.context,
             "memory": self.memory,
             "storage": self.storage,
             "tool": self.tool,
@@ -88,6 +91,7 @@ class KernelService:
             "audit": {"enabled": self.audit_logger is not None},
             "events": {"count": self.event_sink.count(), "recent": self.event_sink.recent(limit=25)},
             "llm": self._llm_status(),
+            "context": self.context.status(),
             "storage": self._storage_status(),
             "tool": self.tool.status(),
             "recent_syscalls": self.recent_syscalls(),
@@ -114,6 +118,25 @@ class KernelService:
         if self.config is not None:
             return Path(getattr(self.config, "storage_root"))
         return Path("/tmp/agentic_kernel_storage")
+
+    def _context_root(self) -> Path:
+        context_config = dict(self.kernel_config.get("context") or {})
+        if context_config.get("root"):
+            root = Path(context_config["root"])
+        else:
+            root = self._storage_root() / ".kernel_context"
+        if not root.is_absolute() and self.config is not None:
+            root = Path(getattr(self.config, "repo_root", Path.cwd())) / root
+        return root
+
+    def _build_context_manager(self) -> ContextManager:
+        context_config = dict(self.kernel_config.get("context") or {})
+        manager = ContextManager(root=self._context_root())
+        provider_status = manager.status()
+        fail_fast = bool(context_config.get("fail_fast", False))
+        if fail_fast and provider_status.get("state") != "ready":
+            raise RuntimeError(str(provider_status))
+        return manager
 
     def _build_llm_adapter(self) -> LLMAdapter:
         llm_config = dict(self.kernel_config.get("llm") or {})

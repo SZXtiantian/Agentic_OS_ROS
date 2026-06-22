@@ -201,6 +201,8 @@ def _default_policies() -> dict[str, KernelQueuePolicy]:
         KernelQueueName.MEMORY: KernelQueuePolicy(max_size=None, on_full="reject"),
         KernelQueueName.STORAGE: KernelQueuePolicy(max_size=None, on_full="reject"),
         KernelQueueName.TOOL: KernelQueuePolicy(max_size=None, on_full="reject"),
+        KernelQueueName.CONTEXT: KernelQueuePolicy(max_size=None, on_full="reject"),
+        KernelQueueName.SKILL: KernelQueuePolicy(max_size=None, on_full="reject"),
         KernelQueueName.ROBOT_MOTION: KernelQueuePolicy(max_size=None, on_full="reject"),
         KernelQueueName.ROBOT_SENSOR: KernelQueuePolicy(max_size=None, on_full="block"),
         KernelQueueName.HUMAN: KernelQueuePolicy(max_size=None, on_full="block"),

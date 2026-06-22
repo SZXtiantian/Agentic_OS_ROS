@@ -10,6 +10,8 @@ class KernelQueueName:
     MEMORY = "memory"
     STORAGE = "storage"
     TOOL = "tool"
+    CONTEXT = "context"
+    SKILL = "skill"
     ROBOT_MOTION = "robot_motion"
     ROBOT_SENSOR = "robot_sensor"
     HUMAN = "human"
@@ -20,6 +22,8 @@ DEFAULT_KERNEL_QUEUES = (
     KernelQueueName.MEMORY,
     KernelQueueName.STORAGE,
     KernelQueueName.TOOL,
+    KernelQueueName.CONTEXT,
+    KernelQueueName.SKILL,
     KernelQueueName.ROBOT_MOTION,
     KernelQueueName.ROBOT_SENSOR,
     KernelQueueName.HUMAN,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, StorageQuery, ToolQuery
+from agentic_os.kernel.system_call import ContextQuery, LLMQuery, MemoryQuery, StorageQuery, ToolQuery
 
 from .access import KernelAccessAPI
 
@@ -42,6 +42,7 @@ class KernelAPI:
     def __init__(self, ctx) -> None:
         self.ctx = ctx
         self.llm = KernelLLMAPI(ctx)
+        self.context = KernelContextAPI(ctx)
         self.memory = KernelMemoryAPI(ctx)
         self.storage = KernelStorageAPI(ctx)
         self.tool = KernelToolAPI(ctx)
@@ -76,6 +77,85 @@ class KernelLLMAPI(_KernelBaseAPI):
             selected_llms=kwargs.get("selected_llms"),
             response_format=kwargs.get("response_format"),
             params=dict(kwargs.get("params") or {}),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+
+class KernelContextAPI(_KernelBaseAPI):
+    async def snapshot(self, state: dict | None = None, checkpoint: str = "default", **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_snapshot",
+            params={"state": dict(state or {}), "metadata": dict(kwargs.get("metadata") or {})},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+            checkpoint=checkpoint,
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def recover(self, session_id: str = "", checkpoint: str = "", **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_recover",
+            params={"checkpoint": checkpoint},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=session_id or self.ctx.session_id,
+            checkpoint=checkpoint,
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def put(self, key: str, value, **kwargs):
+        params = {"key": key, "value": value, "metadata": dict(kwargs.get("metadata") or {})}
+        if "ttl_s" in kwargs:
+            params["ttl_s"] = kwargs["ttl_s"]
+        query = ContextQuery(
+            operation_type="ctx_put",
+            params=params,
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def get(self, key: str, **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_get",
+            params={"key": key},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def delete(self, key: str, **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_delete",
+            params={"key": key},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def list(self, prefix: str = "", limit: int = 100, **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_list",
+            params={"prefix": prefix, "limit": int(limit)},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def compact(self, max_tokens: int = 2000, **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_compact",
+            params={"max_tokens": int(max_tokens)},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
+        )
+        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+
+    async def clear(self, scope: str = "session", **kwargs):
+        query = ContextQuery(
+            operation_type="ctx_clear",
+            params={"scope": scope},
+            namespace=str(kwargs.get("namespace") or "context"),
+            session_id=str(kwargs.get("session_id") or self.ctx.session_id),
         )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 

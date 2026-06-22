@@ -39,6 +39,22 @@ class ToolQuery(KernelQuery):
 
 
 @dataclass
+class ContextQuery(KernelQuery):
+    namespace: str = "context"
+    session_id: str = ""
+    checkpoint: str = ""
+
+
+@dataclass
+class SkillQuery(KernelQuery):
+    namespace: str = "skill"
+    skill_name: str = ""
+    call_id: str = ""
+    app_id: str = ""
+    session_id: str = ""
+
+
+@dataclass
 class RobotCapabilityQuery(KernelQuery):
     skill_name: str = ""
     app_id: str = ""
@@ -51,10 +67,17 @@ class KernelResponse:
     response_message: Any = None
     error_code: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    data: Any = None
 
     @classmethod
-    def ok(cls, response_message: Any = None, metadata: dict[str, Any] | None = None) -> "KernelResponse":
-        return cls(True, response_message=response_message, metadata=dict(metadata or {}))
+    def ok(
+        cls,
+        response_message: Any = None,
+        metadata: dict[str, Any] | None = None,
+        data: Any = None,
+    ) -> "KernelResponse":
+        payload = response_message if data is None else data
+        return cls(True, response_message=response_message, metadata=dict(metadata or {}), data=payload)
 
     @classmethod
     def error(
@@ -62,12 +85,14 @@ class KernelResponse:
         error_code: str,
         response_message: Any = None,
         metadata: dict[str, Any] | None = None,
+        data: Any = None,
     ) -> "KernelResponse":
-        return cls(False, response_message=response_message, error_code=error_code, metadata=dict(metadata or {}))
+        return cls(False, response_message=response_message, error_code=error_code, metadata=dict(metadata or {}), data=data)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
+            "data": self.data,
             "response_message": self.response_message,
             "error_code": self.error_code,
             "metadata": self.metadata,

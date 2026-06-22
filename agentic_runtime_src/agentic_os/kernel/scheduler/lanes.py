@@ -34,6 +34,8 @@ DEFAULT_SCHEDULER_LANES = (
     SchedulerLaneSpec("memory", KernelQueueName.MEMORY, concurrent=True, max_workers=1, manager_key="memory"),
     SchedulerLaneSpec("storage", KernelQueueName.STORAGE, concurrent=True, max_workers=1, manager_key="storage"),
     SchedulerLaneSpec("tool", KernelQueueName.TOOL, concurrent=True, max_workers=1, manager_key="tool"),
+    SchedulerLaneSpec("context", KernelQueueName.CONTEXT, concurrent=True, max_workers=1, manager_key="context"),
+    SchedulerLaneSpec("skill", KernelQueueName.SKILL, concurrent=True, max_workers=1, manager_key="skill"),
     SchedulerLaneSpec(
         "robot_motion",
         KernelQueueName.ROBOT_MOTION,

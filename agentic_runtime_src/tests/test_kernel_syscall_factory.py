@@ -1,11 +1,15 @@
 from agentic_os.kernel.hooks import KernelQueueName
 from agentic_os.kernel.system_call import (
+    ContextQuery,
+    ContextSyscall,
     LLMQuery,
     LLMSyscall,
     MemoryQuery,
     MemorySyscall,
     RobotCapabilityQuery,
     RobotCapabilitySyscall,
+    SkillQuery,
+    SkillSyscall,
     StorageQuery,
     StorageSyscall,
     ToolQuery,
@@ -36,6 +40,16 @@ def test_factory_creates_memory_storage_and_tool_syscalls():
     assert memory.queue_name == KernelQueueName.MEMORY
     assert storage.queue_name == KernelQueueName.STORAGE
     assert tool.queue_name == KernelQueueName.TOOL
+
+
+def test_factory_creates_context_and_skill_syscalls():
+    context = create_syscall("agent_a", ContextQuery(operation_type="ctx_put", params={"key": "x"}))
+    skill = create_syscall("agent_a", SkillQuery(operation_type="skill_call", skill_name="report.say"))
+
+    assert isinstance(context, ContextSyscall)
+    assert isinstance(skill, SkillSyscall)
+    assert context.queue_name == KernelQueueName.CONTEXT
+    assert skill.queue_name == KernelQueueName.SKILL
 
 
 def test_factory_creates_robot_motion_syscall_lane():

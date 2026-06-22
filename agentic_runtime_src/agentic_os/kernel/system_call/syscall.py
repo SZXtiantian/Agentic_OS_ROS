@@ -19,10 +19,18 @@ class BaseKernelSyscall(KernelSyscall):
         self.queue_name = queue_name
 
 
-def robot_capability_queue_name(query: RobotCapabilityQuery) -> str:
-    skill_name = (query.skill_name or query.operation_type).lower()
-    if skill_name.startswith("human."):
+def skill_queue_name(skill_name: str) -> str:
+    normalized = (skill_name or "").lower()
+    if normalized.startswith("human."):
         return KernelQueueName.HUMAN
-    if skill_name.startswith("perception.") or skill_name in {"robot.get_state", "robot.inspect_area"}:
+    if normalized.startswith(("robot.navigate_to", "robot.stop", "arm.", "gripper.")):
+        return KernelQueueName.ROBOT_MOTION
+    if normalized.startswith(("perception.", "world.")) or normalized in {"robot.get_state", "robot.inspect_area"}:
         return KernelQueueName.ROBOT_SENSOR
-    return KernelQueueName.ROBOT_MOTION
+    if normalized.startswith("report."):
+        return KernelQueueName.SKILL
+    return KernelQueueName.SKILL
+
+
+def robot_capability_queue_name(query: RobotCapabilityQuery) -> str:
+    return skill_queue_name(query.skill_name or query.operation_type)
