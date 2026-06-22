@@ -19,6 +19,7 @@ from agentic_runtime.permission_manager import PermissionManager
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
 from agentic_runtime.scheduler import SessionRunner, SingleRobotScheduler
 from agentic_runtime.session import SessionManager, SessionStore
+from agentic_runtime.simulation import simulated_backend_disabled
 from agentic_runtime.skill_executor.cancellation import CancellationManager
 from agentic_runtime.skill_executor.dispatcher import SkillDispatcher
 from agentic_runtime.skill_executor.executor import SkillExecutor
@@ -54,7 +55,9 @@ class RuntimeServer:
     human_channel: FileHumanQueueChannel
 
     @classmethod
-    def create(cls, mock: bool = False) -> "RuntimeServer":
+    def create(cls, mock: bool = False, bridge_client: object | None = None) -> "RuntimeServer":
+        if mock and bridge_client is None:
+            raise RuntimeError(simulated_backend_disabled("RuntimeServer.create(mock=True)")["error_code"])
         config_path = None
         if not mock and not os.environ.get("AGENTIC_RUNTIME_CONFIG"):
             candidate = Path("/opt/agentic/etc/agentic_robot.yaml")
@@ -68,7 +71,7 @@ class RuntimeServer:
         session_manager = SessionManager(session_store)
         syscall_store = SyscallStore(config.session_root)
         resource_manager = ResourceManager()
-        bridge_client = create_ros_bridge_client(config, mock=mock)
+        bridge_client = bridge_client or create_ros_bridge_client(config, mock=False)
         human_channel = FileHumanQueueChannel(config.session_root.parent / "human")
         dispatcher = SkillDispatcher(bridge_client, memory_manager, human_channel=human_channel)
         executor = SkillExecutor(

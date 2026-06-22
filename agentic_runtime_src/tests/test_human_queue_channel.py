@@ -6,6 +6,7 @@ from pathlib import Path
 
 from agentic_runtime.human_channel import FileHumanQueueChannel
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.types import AppManifest
 
 
@@ -99,7 +100,7 @@ def test_human_queue_cancel_returns_stable_codes(tmp_path):
 
 def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
     app = AppManifest(
         name="human_queue_app",
         version="0",

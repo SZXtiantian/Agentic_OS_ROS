@@ -2,11 +2,12 @@ import asyncio
 
 from agentic_runtime.app_manager import AppManager
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 
 
 def test_inspection_agent_happy_path():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("inspection_agent", place="厨房")
         assert result["result"]["success"] is True
@@ -29,7 +30,7 @@ def test_inspection_agent_happy_path():
 
 def test_camera_arm_inspection_agent_read_only_mock_path():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("camera_arm_inspection_agent", place="workspace")
         assert result["result"]["success"] is True
@@ -51,7 +52,7 @@ def test_camera_arm_inspection_agent_read_only_mock_path():
 
 def test_camera_arm_inspection_agent_motion_mock_path():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("camera_arm_inspection_agent", place="workspace", move_arm=True)
         assert result["result"]["success"] is True
@@ -63,7 +64,7 @@ def test_camera_arm_inspection_agent_motion_mock_path():
 
 def test_inspection_agent_forbidden_zone():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("inspection_agent", place="楼梯")
         assert result["result"]["success"] is False
@@ -74,7 +75,7 @@ def test_inspection_agent_forbidden_zone():
 
 def test_legacy_room_inspection_app_still_runs():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("room_inspection_app", place="厨房")
         assert result["result"]["success"] is True

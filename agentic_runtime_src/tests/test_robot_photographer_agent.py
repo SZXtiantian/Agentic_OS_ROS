@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest
 
@@ -39,7 +40,8 @@ def test_aios_manifest_and_app_policy_load():
 def test_entry_loads_and_motion_rejected_without_permission(monkeypatch):
     monkeypatch.delenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", raising=False)
     module = _load_entry()
-    agent = module.RobotPhotographerAgent(mock=True)
+    server = create_test_runtime_server()
+    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
     result = agent.run({"text": "把相机抬起来再拍一张", "mock": True})
     assert result["success"] is False
     assert result["error_code"] == "ARM_MOTION_DISABLED"
@@ -53,7 +55,7 @@ def test_read_only_robot_photographer_run_smoke(tmp_path, monkeypatch):
 
     async def run():
         module = _load_entry()
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun({"text": "拍一张照片", "mock": True})
         app_result = result["result"]
@@ -93,7 +95,8 @@ def test_read_only_robot_photographer_run_smoke(tmp_path, monkeypatch):
 def test_motion_requires_confirmation_even_with_env(monkeypatch):
     monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
     module = _load_entry()
-    agent = module.RobotPhotographerAgent(mock=True)
+    server = create_test_runtime_server()
+    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
     result = agent.run({"text": "把相机抬起来再拍一张", "allow_arm_motion": True, "mock": True})
     assert result["success"] is False
     assert result["error_code"] == "ARM_CONFIRMATION_REQUIRED"
@@ -104,7 +107,7 @@ def test_motion_allowed_with_env_flag_and_confirmation(monkeypatch):
 
     async def run():
         module = _load_entry()
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun(
             {
@@ -131,7 +134,7 @@ def test_mock_multi_angle_capture_writes_verification(tmp_path, monkeypatch):
 
     async def run():
         module = _load_entry()
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun(
             {
@@ -167,7 +170,7 @@ def test_multi_angle_verification_failure_still_runs_arm_home(tmp_path, monkeypa
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
 
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         spec = importlib.util.spec_from_file_location("robot_photographer_agent.main", APP_DIR / "main.py")
         module = importlib.util.module_from_spec(spec)
         assert spec and spec.loader
@@ -209,7 +212,7 @@ def test_multi_angle_verification_failure_still_runs_arm_home(tmp_path, monkeypa
 
 
 def test_skill_registry_includes_capture_and_recent_photos():
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
     names = {skill.name for skill in server.registry.list_skills()}
     assert "perception.capture_photo" in names
     assert "storage.list_recent_photos" in names

@@ -6,6 +6,7 @@ from agentic_os.kernel.system_call import SkillQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.types import SkillResult
 
 
@@ -69,7 +70,7 @@ def test_runtime_human_backend_uses_skill_executor_contract():
 
 def test_runtime_human_backend_does_not_inject_default_permission(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
     backend = RuntimeHumanBackend(server)
 
     result = backend.address_request(

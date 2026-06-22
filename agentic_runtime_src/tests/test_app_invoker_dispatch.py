@@ -3,6 +3,7 @@ import asyncio
 from agentic_runtime.app_invoker import AppInvoker
 from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 
 
 def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch, app_root):
@@ -10,7 +11,7 @@ def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch, app_ro
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
 
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         invoker = AppInvoker(server, AppIndex.load(app_root))
         result = await invoker.run_app(
             "robot_photographer_agent",

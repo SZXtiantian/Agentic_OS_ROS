@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from agentic_runtime.cli import build_parser as build_runtime_parser
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.kernel_service.schemas import RunAppRequest
@@ -8,6 +10,7 @@ from agentic_runtime.photo_cli import build_parser as build_photo_parser
 from agentic_runtime.ros_bridge_client.cli_client import Ros2CliBridgeClient
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from agentic_runtime.session.models import SessionRecord
 
 
@@ -30,6 +33,16 @@ def test_bridge_factory_defaults_to_cli_client():
     client = create_ros_bridge_client(RuntimeConfig.load())
 
     assert isinstance(client, Ros2CliBridgeClient)
+
+
+def test_bridge_factory_rejects_simulated_mode():
+    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+        create_ros_bridge_client(RuntimeConfig.load(), mock=True)
+
+
+def test_runtime_server_create_rejects_simulated_mode_without_test_bridge():
+    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+        RuntimeServer.create(mock=True)
 
 
 def test_session_and_kernel_request_defaults_are_real():

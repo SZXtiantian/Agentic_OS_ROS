@@ -1,11 +1,12 @@
 import asyncio
 
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 
 
 def test_inspection_agent_runs_through_kernel_session_path():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         result = await server.scheduler.run_app("inspection_agent", place="厨房", mock=True)
         assert result["result"]["success"] is True
 

@@ -9,13 +9,14 @@ from agentic_runtime.app_manager import AppManager
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext, KernelAccessDeniedError, KernelSDKResult
 from agentic_runtime.types import AppManifest, SkillResult
 
 
 def test_sdk_room_flow_and_memory():
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("inspection_agent", place="厨房")
         assert result["result"]["success"] is True
@@ -45,7 +46,7 @@ def test_sdk_capture_photo_writes_mock_evidence(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "photos"))
 
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         app = AppManifest(
             name="photo_test",
             version="0",

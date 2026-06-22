@@ -11,6 +11,7 @@ from agentic_os.kernel.scheduler import RoundRobinKernelScheduler
 from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, ToolQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest, SkillResult
 
@@ -253,7 +254,7 @@ def test_call_skill_still_uses_skill_executor():
 
 def test_runtime_server_shutdown_stops_kernel_scheduler(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
 
     server.kernel_service.start()
     assert server.kernel_service.status()["scheduler"]["active"] is True

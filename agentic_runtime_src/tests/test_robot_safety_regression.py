@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from agentic_os.kernel.system_call import RobotCapabilityQuery, ToolQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.types import AppManifest
 
 
@@ -41,7 +42,7 @@ def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
 
 def test_robot_skill_path_uses_access_safety_resource_audit_and_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
 
     class SpyAccessManager:
         def __init__(self, delegate) -> None:
@@ -81,7 +82,7 @@ def test_robot_skill_path_uses_access_safety_resource_audit_and_bridge(tmp_path,
 
 def test_same_base_motion_lock_prevents_parallel_bridge_calls(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
     server.bridge_client.navigation_sleep_s = 0.2
     app = _robot_app("parallel_motion_app")
 
@@ -156,7 +157,7 @@ def test_kernel_robot_motion_lane_is_serial(tmp_path):
 
 def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
 
     service = server.kernel_service
     service.start()
@@ -186,7 +187,7 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
 
 def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
 
     service = server.kernel_service
     service.start()

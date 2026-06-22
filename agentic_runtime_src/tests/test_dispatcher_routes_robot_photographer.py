@@ -8,6 +8,7 @@ from agentic_runtime.dispatcher.planner import DispatcherPlanner
 from agentic_runtime.dispatcher.validation import DispatcherValidator
 from agentic_runtime.nl_gateway import GatewayFlags
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 
 
 def _plan(app_root, text: str, flags=None):
@@ -52,7 +53,7 @@ def test_dispatcher_writes_task_log_and_runs_read_only_photo(tmp_path, monkeypat
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
 
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         result = await DispatcherAgent(server).arun("拍一张照片", GatewayFlags(mock=True, json=True))
         assert result["success"] is True
         assert result["selected_app_id"] == "robot_photographer_agent"
@@ -79,7 +80,7 @@ def test_show_plan_dry_run_does_not_execute_app(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_TASK_LOG_ROOT", str(tmp_path / "tasks"))
 
     async def run():
-        server = RuntimeServer.create(mock=True)
+        server = create_test_runtime_server()
         result = await DispatcherAgent(server).arun(
             "拍一组多角度照片",
             GatewayFlags(mock=True, show_plan=True, dry_run=True),

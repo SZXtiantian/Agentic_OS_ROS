@@ -3,6 +3,7 @@ import yaml
 from agentic_os.kernel.capability import CapabilityKind, CapabilityRegistry, CapabilitySpec
 from agentic_runtime.hardware_adapter import Ros2BridgeProfile
 from agentic_runtime.server import RuntimeServer
+from runtime_test_helpers import create_test_runtime_server
 
 
 def test_kernel_capability_registry_loads_task_level_capabilities(runtime_src):
@@ -46,7 +47,7 @@ def test_kernel_capability_contract_rejects_unsafe_robot_capability():
 
 
 def test_runtime_skill_registry_exposes_kernel_capabilities():
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
 
     names = [spec.name for spec in server.registry.capabilities.list()]
 
@@ -55,7 +56,7 @@ def test_runtime_skill_registry_exposes_kernel_capabilities():
 
 
 def test_bridge_profile_persists_capability_specs(tmp_path):
-    server = RuntimeServer.create(mock=True)
+    server = create_test_runtime_server()
     server.bridge_manager.bridge_root = tmp_path / "bridges" / "ros2"
     server.bridge_manager.profile_root = tmp_path / "profiles"
     server.bridge_manager.bridge_root.mkdir(parents=True, exist_ok=True)
