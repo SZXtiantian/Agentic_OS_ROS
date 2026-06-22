@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -16,7 +17,7 @@ from validation import PhotoPlanValidationError, validate_plan
 
 
 class RobotPhotographerAgent:
-    def __init__(self, agent_name: str = "robot_photographer_agent", runtime: RuntimeServer | None = None, mock: bool = True) -> None:
+    def __init__(self, agent_name: str = "robot_photographer_agent", runtime: RuntimeServer | None = None, mock: bool = False) -> None:
         self.agent_name = agent_name
         self.runtime = runtime
         self.mock = mock
@@ -30,7 +31,18 @@ class RobotPhotographerAgent:
 
     async def arun(self, task_input: Any) -> dict[str, Any]:
         task = _normalize_task(task_input)
-        runtime = self.runtime or RuntimeServer.create(mock=bool(task.get("mock", self.mock)))
+        requested_mock = bool(task.get("mock", self.mock))
+        if self.runtime is None and requested_mock:
+            return {
+                "schema_version": "1.0",
+                "success": False,
+                "plan_id": "",
+                "planner_mode": "",
+                "steps": [],
+                "error_code": SIMULATED_BACKEND_DISABLED,
+                "reason": "robot_photographer_agent mock runtime mode is disabled for production entrypoints",
+            }
+        runtime = self.runtime or RuntimeServer.create()
         try:
             plan = plan_task(task, llm_chat=getattr(runtime, "llm_chat", None))
         except Exception as exc:
@@ -65,7 +77,7 @@ class RobotPhotographerAgent:
             "robot_photographer_agent",
             plan=validated,
             task_input=task,
-            mock=bool(task.get("mock", self.mock)),
+            mock=requested_mock,
         )
 
 

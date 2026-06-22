@@ -1289,15 +1289,17 @@ def test_no_direct_ros_access():
 
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
-python -m agentic_runtime.cli run-app my_agentic_app --place 厨房 --mock
+python -m agentic_runtime.cli run-app my_agentic_app --place 厨房
 ```
+
+这个 demo 必须走真实 Runtime/provider/backend。缺 ROS2 bridge、human backend、LLM provider 或其它真实依赖时，Runtime 应返回稳定错误码并在 status/audit 中暴露原因，不能用 mock 成功替代。
 
 真实机器人 demo 也必须仍然走 Runtime：
 
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 AGENTIC_RUNTIME_CONFIG=/opt/agentic/etc/agentic_robot.yaml \
-python -m agentic_runtime.cli run-app my_agentic_app --place 厨房 --no-mock
+python -m agentic_runtime.cli run-app my_agentic_app --place 厨房
 ```
 
 不要在 README 里指导用户运行 ROS2 topic/service/action 来替代 app。
