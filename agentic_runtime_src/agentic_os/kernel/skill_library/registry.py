@@ -7,6 +7,9 @@ from typing import Any
 import yaml
 
 
+SIMULATED_BACKEND_TYPES = {"mock", "fake", "stub", "dummy"}
+
+
 @dataclass
 class SkillManifest:
     name: str
@@ -28,6 +31,10 @@ class SkillRegistry:
             return self._skills
         for path in sorted(self.root.glob("*.yaml")):
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            backend = data.get("backend") or {}
+            backend_type = str(backend.get("type") or "").lower() if isinstance(backend, dict) else ""
+            if backend_type in SIMULATED_BACKEND_TYPES:
+                raise ValueError(f"SKILL_BACKEND_SIMULATED_DISABLED: {path}: backend type '{backend_type}' is disabled")
             name = str(data.get("name") or data.get("skill") or path.stem)
             manifest = SkillManifest(
                 name=name,
@@ -54,4 +61,3 @@ class SkillRegistry:
             }
             for skill in self._skills.values()
         ]
-

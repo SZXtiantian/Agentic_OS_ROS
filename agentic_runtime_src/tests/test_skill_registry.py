@@ -37,3 +37,18 @@ def test_missing_name_fails():
 def test_missing_permissions_fails():
     with pytest.raises(SchemaInvalidError):
         validate_skill_manifest_dict({"name": "x", "version": "0", "backend": {}, "input_schema": {}, "output_schema": {}})
+
+
+def test_simulated_skill_backend_manifest_fails_fast():
+    manifest = {
+        "name": "human.ask",
+        "version": "0",
+        "input_schema": {},
+        "output_schema": {},
+        "permission_requirements": ["human.ask"],
+        "resource_requirements": {"locks": []},
+        "backend": {"type": "mock"},
+    }
+
+    with pytest.raises(SchemaInvalidError, match="simulated skill backend type 'mock' is disabled"):
+        validate_skill_manifest_dict(manifest)

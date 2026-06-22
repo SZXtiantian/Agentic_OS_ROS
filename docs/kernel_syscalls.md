@@ -31,6 +31,8 @@ Agent Apps call kernel capabilities through `ctx.kernel.*`. Public syscalls retu
 
 No default mock LLM, memory, context, storage, tool, skill, or human provider is selected. Missing external services fail with stable error codes and appear in `KernelService.status()`.
 
+Skill manifests with `backend.type` set to `mock`, `fake`, `stub`, or `dummy` are rejected during registry loading with `SKILL_BACKEND_SIMULATED_DISABLED` or manifest validation failure; they are never registered as executable runtime capabilities.
+
 Context `ctx_compact` is structural JSON truncation over stored context entries. It is not an LLM semantic summary; `status()["context"]["compact_policy"]` reports `mode: structural_truncation`, `semantic_summary: false`, and `llm_required: false`.
 
 Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_mode: lexical_fts` with `semantic: false`. Semantic/vector retrieval may only be marked available when a real embedding/vector provider is configured; otherwise `status()["storage"]["semantic_retrieval"]` reports `STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED`.
@@ -105,7 +107,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 376 passed
+# 378 passed
 scripts/run_tests.sh
-# 376 passed; Agentic OS MVP checks passed.
+# 378 passed; Agentic OS MVP checks passed.
 ```

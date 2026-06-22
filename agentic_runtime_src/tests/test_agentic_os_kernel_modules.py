@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agentic_os.kernel.device_arbitration import DeviceArbiter
 from agentic_os.kernel.memory import MemoryManager
 from agentic_os.kernel.model_library import ModelEndpoint, ModelLibrary
@@ -68,6 +70,18 @@ def test_kernel_storage_context_skill_world_and_device_modules(tmp_path):
     assert arbiter.acquire("base", "inspection_agent")["success"] is True
     assert arbiter.acquire("base", "other_agent")["error_code"] == "DEVICE_RESOURCE_BUSY"
     assert arbiter.release("base", "inspection_agent")["success"] is True
+
+
+def test_kernel_skill_registry_rejects_simulated_backend_manifest(tmp_path):
+    skill_root = tmp_path / "skills"
+    skill_root.mkdir()
+    (skill_root / "human_ask.yaml").write_text(
+        "name: human.ask\nbackend:\n  type: mock\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="SKILL_BACKEND_SIMULATED_DISABLED"):
+        SkillRegistry(skill_root).load()
 
 
 def test_kernel_tool_model_and_perception_modules():

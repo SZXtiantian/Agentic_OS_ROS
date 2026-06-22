@@ -17,6 +17,8 @@ REQUIRED_FIELDS = [
     "backend",
 ]
 
+SIMULATED_BACKEND_TYPES = {"mock", "fake", "stub", "dummy"}
+
 
 def load_skill_manifest(path: Path) -> SkillManifest:
     with path.open("r", encoding="utf-8") as f:
@@ -33,3 +35,9 @@ def validate_skill_manifest_dict(data: dict, source: str = "<memory>") -> None:
         raise SchemaInvalidError(f"{source}: permission_requirements must be a list")
     if "locks" not in data.get("resource_requirements", {"locks": []}):
         raise SchemaInvalidError(f"{source}: resource_requirements.locks is required")
+    backend = data.get("backend")
+    if not isinstance(backend, dict):
+        raise SchemaInvalidError(f"{source}: backend must be an object")
+    backend_type = str(backend.get("type") or "").lower()
+    if backend_type in SIMULATED_BACKEND_TYPES:
+        raise SchemaInvalidError(f"{source}: simulated skill backend type '{backend_type}' is disabled")
