@@ -102,11 +102,39 @@ class ToolManager:
             if operation == "tool_describe":
                 return self._kernel_response(self.describe(str(params.get("name") or params.get("tool") or "")))
             if operation == "tool_load_manifest":
-                access = self._check_access(syscall.agent_name, str(params.get("path") or ""), (), action="install", irreversible=True)
+                manifest_path = str(params.get("path") or "")
+                access = self._check_access(syscall.agent_name, manifest_path, (), action="install", irreversible=True)
                 if not access.get("success", True):
-                    return self._kernel_response(access)
-                manifest = self.load_manifest(str(params.get("path") or ""))
-                return self._kernel_response({"success": True, "tool": manifest.name, "manifest": manifest.__dict__})
+                    return self._kernel_response(
+                        self._audit_dangerous_result(
+                            "load_manifest",
+                            syscall.agent_name,
+                            manifest_path,
+                            access,
+                            manifest_path=manifest_path,
+                        )
+                    )
+                try:
+                    manifest = self.load_manifest(manifest_path)
+                except ValueError as exc:
+                    return self._kernel_response(
+                        self._audit_dangerous_result(
+                            "load_manifest",
+                            syscall.agent_name,
+                            manifest_path,
+                            {"success": False, "error_code": str(exc) or "TOOL_MANIFEST_INVALID"},
+                            manifest_path=manifest_path,
+                        )
+                    )
+                return self._kernel_response(
+                    self._audit_dangerous_result(
+                        "load_manifest",
+                        syscall.agent_name,
+                        manifest.name,
+                        {"success": True, "tool": manifest.name, "manifest": manifest.__dict__},
+                        manifest_path=manifest_path,
+                    )
+                )
             if operation == "tool_unload":
                 return self._kernel_response(self.unload(syscall.agent_name, str(params.get("name") or "")))
             if operation == "tool_register_builtin":
@@ -178,27 +206,42 @@ class ToolManager:
     def unload(self, agent_name: str, name: str) -> dict[str, Any]:
         access = self._check_access(agent_name, name, (), action="uninstall", irreversible=True)
         if not access.get("success", True):
-            return access
+            return self._audit_dangerous_result("unload", agent_name, name, access)
         if name not in self._registry:
-            return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
+            return self._audit_dangerous_result(
+                "unload",
+                agent_name,
+                name,
+                {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name},
+            )
         if name in builtin_tools(self.tool_root or Path.cwd()):
-            return {"success": False, "error_code": "TOOL_BUILTIN_UNLOAD_DENIED", "tool": name}
+            return self._audit_dangerous_result(
+                "unload",
+                agent_name,
+                name,
+                {"success": False, "error_code": "TOOL_BUILTIN_UNLOAD_DENIED", "tool": name},
+            )
         self._registry.pop(name, None)
         self._conflicts.pop(name, None)
         self._descriptions.pop(name, None)
         self._manifests.pop(name, None)
-        return {"success": True, "tool": name}
+        return self._audit_dangerous_result("unload", agent_name, name, {"success": True, "tool": name})
 
     def register_builtin(self, agent_name: str, name: str) -> dict[str, Any]:
         access = self._check_access(agent_name, name, (), action="install", irreversible=True)
         if not access.get("success", True):
-            return access
+            return self._audit_dangerous_result("register_builtin", agent_name, name, access)
         builtins = builtin_tools(self.tool_root or Path.cwd())
         if name not in builtins:
-            return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
+            return self._audit_dangerous_result(
+                "register_builtin",
+                agent_name,
+                name,
+                {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name},
+            )
         handler, description = builtins[name]
         self.register(name, handler, description=description)
-        return {"success": True, "tool": name}
+        return self._audit_dangerous_result("register_builtin", agent_name, name, {"success": True, "tool": name})
 
     def _is_forbidden(self, name: str, permissions: tuple[str, ...] = ()) -> bool:
         lowered = name.lower()
@@ -252,6 +295,41 @@ class ToolManager:
         if result.get("success", False):
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "TOOL_BACKEND_UNAVAILABLE"), metadata=result)
+
+    def _audit_dangerous_result(
+        self,
+        action: str,
+        agent_name: str,
+        tool_name: str,
+        result: dict[str, Any],
+        **metadata: Any,
+    ) -> dict[str, Any]:
+        event = {
+            "event_type": "tool.audit",
+            "agent_name": agent_name,
+            "action": action,
+            "tool": tool_name,
+            "success": bool(result.get("success", False)),
+            "error_code": str(result.get("error_code") or ""),
+            "irreversible": True,
+            "provider": "local_tool_manager",
+            **metadata,
+        }
+        self._audit_events.append(event)
+        self._audit_events = self._audit_events[-100:]
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "tool.audit",
+                agent_name=agent_name,
+                action=action,
+                tool=tool_name,
+                success=event["success"],
+                error_code=event["error_code"],
+                irreversible=True,
+                provider="local_tool_manager",
+                **metadata,
+            )
+        return result
 
     def _record_tool_event(
         self,

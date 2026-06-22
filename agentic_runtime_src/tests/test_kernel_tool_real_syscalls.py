@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.system_call import ToolQuery
 from agentic_os.kernel.tool import ToolManager
 from agentic_runtime.kernel_service import KernelService
@@ -107,6 +109,7 @@ def test_tool_load_unload_register_builtin_require_intervention(tmp_path):
             ToolQuery(operation_type="tool_register_builtin", params={"name": "calculator.add"}),
             timeout_s=1.0,
         )
+        status = service.status()
     finally:
         service.stop()
 
@@ -116,6 +119,50 @@ def test_tool_load_unload_register_builtin_require_intervention(tmp_path):
     assert unloaded.error_code == "ACCESS_INTERVENTION_REQUIRED"
     assert registered.success is False
     assert registered.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    audit_events = [event for event in status["events"]["recent"] if event["event_type"] == "tool.audit"]
+    assert [event["metadata"]["action"] for event in audit_events] == [
+        "load_manifest",
+        "unload",
+        "register_builtin",
+    ]
+    assert all(event["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED" for event in audit_events)
+
+
+def test_dangerous_tool_operations_emit_audit_events(tmp_path):
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    (tool_root / "sample.py").write_text("def run(args):\n    return {'ok': True}\n", encoding="utf-8")
+    manifest = tool_root / "sample.tool.yaml"
+    manifest.write_text(
+        """
+name: sample.tool
+entrypoint: sample:run
+sandbox:
+  mode: in_process
+""",
+        encoding="utf-8",
+    )
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = ToolManager(tool_root=tool_root, access_manager=access, event_sink=sink)
+
+    loaded = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_load_manifest", params={"path": str(manifest)})
+    )
+    unloaded = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_unload", params={"name": "sample.tool"})
+    )
+    registered = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_register_builtin", params={"name": "calculator.add"})
+    )
+
+    assert loaded["success"] is True
+    assert unloaded["success"] is True
+    assert registered["success"] is True
+    events = [event for event in sink.recent(limit=20) if event["event_type"] == "tool.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["load_manifest", "unload", "register_builtin"]
+    assert all(event["metadata"]["success"] is True for event in events)
+    assert all(event["metadata"]["irreversible"] is True for event in events)
 
 
 def test_kernel_tool_sdk_permissions_from_manifest(tmp_path):
