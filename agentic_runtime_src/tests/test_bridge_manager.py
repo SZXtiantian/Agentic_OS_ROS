@@ -113,7 +113,7 @@ def test_bridge_manager_install_profile_records_real_metadata(tmp_path, monkeypa
         installer_kwargs={"ros_setup_path": ros_setup},
     )
     profile = Ros2BridgeProfile(
-        name="ros2_mock",
+        name="ros2_default",
         source_workspace=str(source),
         capabilities=[
             {
@@ -129,7 +129,7 @@ def test_bridge_manager_install_profile_records_real_metadata(tmp_path, monkeypa
     )
     installed = manager.install_profile(profile, dry_run=True)
     status = manager.status()
-    profile_path = tmp_path / "profiles" / "ros2_mock.yaml"
+    profile_path = tmp_path / "profiles" / "ros2_default.yaml"
     payload = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
 
     assert installed["status"] == "installed_profile"
@@ -138,7 +138,7 @@ def test_bridge_manager_install_profile_records_real_metadata(tmp_path, monkeypa
     assert installed["bridge_endpoint"] == "ros2-cli://agentic-bridge"
     assert "ros2 node list" in installed["health_check_command"]
     assert status["installed"] is True
-    assert status["metadata"]["profile"] == "ros2_mock"
+    assert status["metadata"]["profile"] == "ros2_default"
     assert status["metadata"]["source_workspace"] == str(source)
     assert payload["status"] == "installed_profile"
     assert payload["installed_root"] == str(tmp_path / "bridges" / "ros2")
@@ -154,7 +154,7 @@ def test_bridge_manager_lifecycle_plan_validate_activate_rollback(tmp_path, monk
         tmp_path / "profiles",
         installer_kwargs={"ros_setup_path": ros_setup},
     )
-    profile = Ros2BridgeProfile(name="ros2_mock", source_workspace=str(source))
+    profile = Ros2BridgeProfile(name="ros2_default", source_workspace=str(source))
 
     assert manager.plan(profile)["safe_to_run"] is True
     assert manager.validate(profile)["success"] is True

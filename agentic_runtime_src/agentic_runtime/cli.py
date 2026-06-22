@@ -66,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     bridge_status = bridge_sub.add_parser("status")
     bridge_status.add_argument("--json", action="store_true")
     bridge_install = bridge_sub.add_parser("install")
-    bridge_install.add_argument("--profile", default="ros2_mock")
+    bridge_install.add_argument("--profile", default="ros2_default")
     bridge_install.add_argument("--dry-run", action="store_true")
     bridge_install.add_argument("--json", action="store_true")
     return parser

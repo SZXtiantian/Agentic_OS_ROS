@@ -73,8 +73,8 @@ def test_bridge_profile_persists_capability_specs(tmp_path):
     server.bridge_manager.bridge_root.mkdir(parents=True, exist_ok=True)
     server.bridge_manager.profile_root.mkdir(parents=True, exist_ok=True)
 
-    result = server.bridge_manager.install_profile(Ros2BridgeProfile(name="ros2_mock"))
-    profile_path = server.bridge_manager.profile_root / "ros2_mock.yaml"
+    result = server.bridge_manager.install_profile(Ros2BridgeProfile(name="ros2_default"))
+    profile_path = server.bridge_manager.profile_root / "ros2_default.yaml"
     payload = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
 
     assert result["status"] == "installed_profile"
