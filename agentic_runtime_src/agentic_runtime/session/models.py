@@ -34,10 +34,10 @@ class SessionRecord:
     result: dict[str, Any] | None = None
     error_code: str = ""
     stop_requested: bool = False
-    mock: bool = True
+    mock: bool = False
 
     @classmethod
-    def create(cls, app_id: str, task: dict[str, Any] | None = None, mock: bool = True) -> "SessionRecord":
+    def create(cls, app_id: str, task: dict[str, Any] | None = None, mock: bool = False) -> "SessionRecord":
         return cls(
             session_id=new_id("sess"),
             app_id=app_id,
@@ -61,7 +61,7 @@ class SessionRecord:
             result=data.get("result"),
             error_code=str(data.get("error_code") or ""),
             stop_requested=bool(data.get("stop_requested", False)),
-            mock=bool(data.get("mock", True)),
+            mock=bool(data.get("mock", False)),
         )
 
     def to_dict(self) -> dict[str, Any]:

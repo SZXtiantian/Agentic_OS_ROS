@@ -31,8 +31,8 @@ EXIT_WORDS = {"退出", "exit", "quit", "q", "bye"}
 
 @dataclass(frozen=True)
 class GatewayFlags:
-    real: bool = False
-    mock: bool = True
+    real: bool = True
+    mock: bool = False
     json: bool = False
     allow_arm_motion: bool = False
     assume_yes: bool = False
@@ -140,7 +140,7 @@ def print_result(result: dict[str, Any], *, as_json: bool) -> None:
 
 
 def _flags_from_args(args: argparse.Namespace) -> GatewayFlags:
-    real = bool(args.real and not args.mock)
+    real = bool(not args.mock)
     mock = not real
     return GatewayFlags(
         real=real,

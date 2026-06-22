@@ -85,7 +85,7 @@ class SkillManifest:
             safety_constraints=dict(data.get("safety_constraints", {})),
             timeout_s=int(data.get("timeout_s", 60)),
             retry_policy=dict(data.get("retry_policy", {"max_attempts": 0, "retry_on": []})),
-            backend=dict(data.get("backend", {"type": "mock"})),
+            backend=dict(data.get("backend", {"type": "unconfigured"})),
             observability=dict(data.get("observability", {"audit": True})),
         )
 

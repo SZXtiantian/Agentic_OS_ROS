@@ -10,7 +10,7 @@ class SessionManager:
     def __init__(self, store: SessionStore) -> None:
         self.store = store
 
-    def create_session(self, app_id: str, task: dict[str, Any] | None = None, mock: bool = True) -> SessionRecord:
+    def create_session(self, app_id: str, task: dict[str, Any] | None = None, mock: bool = False) -> SessionRecord:
         return self.store.save(SessionRecord.create(app_id, task=task, mock=mock))
 
     def start_session(self, session_id: str) -> SessionRecord:

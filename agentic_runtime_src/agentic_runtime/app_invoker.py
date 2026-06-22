@@ -45,7 +45,7 @@ class AppInvoker:
         app_dir = Path(entry.root)
         module = _load_module(app_dir / f"{module_name}.py", f"{entry.app_id}.{module_name}.dispatch")
         cls = getattr(module, class_name)
-        agent = cls(runtime=self.runtime, mock=bool(task_input.get("mock", True)))
+        agent = cls(runtime=self.runtime, mock=bool(task_input.get("mock", False)))
         if hasattr(agent, "arun"):
             return await agent.arun(task_input)
         result = agent.run(task_input)
@@ -55,7 +55,7 @@ class AppInvoker:
 
     async def _run_legacy_app(self, entry: AppIndexEntry, task_input: dict[str, Any]) -> dict[str, Any]:
         task = dict(task_input)
-        task.setdefault("mock", bool(task.get("mock", True)))
+        task.setdefault("mock", bool(task.get("mock", False)))
         return await self.runtime.scheduler.run_app(entry.app_id, **task)
 
 

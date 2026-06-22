@@ -2,10 +2,10 @@ runtime:
   audit_log_path: /opt/agentic/var/audit/audit.jsonl
   memory_db_path: /opt/agentic/var/memory/memory.sqlite3
   default_skill_timeout_s: 60
-  allow_mock_backends: true
+  allow_mock_backends: false
   app_root: /home/ubuntu/agentic_ws/src
   skill_root: /opt/agentic/skills
-  ros_bridge_mode: mock
+  ros_bridge_mode: cli
   daemon_host: 127.0.0.1
   daemon_port: 8765
   session_root: /opt/agentic/var/sessions

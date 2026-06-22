@@ -117,7 +117,7 @@ class KernelService:
             )
         return status
 
-    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = True) -> dict[str, Any]:
+    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False) -> dict[str, Any]:
         if self.runtime_server is None:
             return {"success": False, "error_code": "RUNTIME_SERVER_NOT_WIRED"}
         return await self.runtime_server.scheduler.run_app(app_id, place=place, mock=mock)

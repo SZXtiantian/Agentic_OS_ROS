@@ -1,8 +1,16 @@
 from agentic_runtime.nl_gateway import _flags_from_args, build_parser, _service_name_from_line
 
 
-def test_nl_gateway_parser_defaults_to_mock():
+def test_nl_gateway_parser_defaults_to_real():
     args = build_parser().parse_args(["--json", "拍一张照片"])
+    flags = _flags_from_args(args)
+    assert flags.mock is False
+    assert flags.real is True
+    assert flags.json is True
+
+
+def test_nl_gateway_parser_explicit_mock_flag():
+    args = build_parser().parse_args(["--mock", "--json", "拍一张照片"])
     flags = _flags_from_args(args)
     assert flags.mock is True
     assert flags.real is False

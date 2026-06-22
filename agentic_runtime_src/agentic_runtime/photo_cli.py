@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    real = bool(args.real and not args.mock)
+    real = bool(not args.mock)
     cli = RobotPhotoCLI(real=real, json_output=args.json, allow_arm_motion=args.allow_arm_motion, assume_yes=args.yes)
     text = " ".join(args.command).strip()
     if text:

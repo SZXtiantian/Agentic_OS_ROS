@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 @dataclass
 class RunAppRequest:
     place: str = "厨房"
-    mock: bool = True
+    mock: bool = False
     wait: bool = True
 
     def to_dict(self) -> dict:

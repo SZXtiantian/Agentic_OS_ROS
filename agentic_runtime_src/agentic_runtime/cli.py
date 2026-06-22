@@ -14,7 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     status = sub.add_parser("status")
-    status.add_argument("--mock", action="store_true", default=True)
+    status.add_argument("--mock", action="store_true", default=False)
     status.add_argument("--real", action="store_false", dest="mock")
     status.add_argument("--json", action="store_true")
 
@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
         run_app = sub.add_parser(name)
         run_app.add_argument("app_id")
         run_app.add_argument("--place", default="厨房")
-        run_app.add_argument("--mock", action="store_true", default=True)
+        run_app.add_argument("--mock", action="store_true", default=False)
         run_app.add_argument("--real", action="store_false", dest="mock")
         run_app.add_argument("--json", action="store_true")
 
@@ -118,7 +118,7 @@ def status(args) -> int:
 
 
 def sessions(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     records = server.session_manager.list_sessions(limit=args.limit)
     if args.json:
         print_json([record.to_dict() for record in records])
@@ -129,7 +129,7 @@ def sessions(args) -> int:
 
 
 def session(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     record = server.session_manager.get_session(args.session_id)
     if record is None:
         print_json({"success": False, "error_code": "SESSION_NOT_FOUND", "session_id": args.session_id})
@@ -151,7 +151,7 @@ def session(args) -> int:
 
 
 def stop(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     try:
         record = server.session_manager.stop_session(args.session_id, reason=args.reason)
     except KeyError:
@@ -167,7 +167,7 @@ def stop(args) -> int:
 
 
 def audit(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     records = server.audit_logger.recent(limit=args.limit)
     if args.json:
         print_json(records)
@@ -207,7 +207,7 @@ def task(args) -> int:
 
 
 def apps(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     records = server.app_factory.list_apps()
     if args.json:
         print_json(records)
@@ -218,7 +218,7 @@ def apps(args) -> int:
 
 
 def skills(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     records = [{"name": skill.name, "version": skill.version} for skill in server.registry.list_skills()]
     if args.json:
         print_json(records)
@@ -229,7 +229,7 @@ def skills(args) -> int:
 
 
 def refresh(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     result = server.config_manager.refresh()
     if args.json:
         print_json(result.to_dict())
@@ -245,7 +245,7 @@ def refresh(args) -> int:
 
 
 def bridge(args) -> int:
-    server = RuntimeServer.create(mock=True)
+    server = RuntimeServer.create()
     if args.bridge_command == "status":
         data = server.bridge_manager.status()
     else:

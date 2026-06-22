@@ -8,7 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from agentic_runtime.server import RuntimeServer
 
 
-def run(host: str = "127.0.0.1", port: int = 8765, mock: bool = True) -> None:
+def run(host: str = "127.0.0.1", port: int = 8765, mock: bool = False) -> None:
     runtime = RuntimeServer.create(mock=mock)
     service = runtime.kernel_service
 
@@ -46,7 +46,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="agenticd")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--mock", action="store_true", default=True)
+    parser.add_argument("--mock", action="store_true", default=False)
     args = parser.parse_args(argv)
     run(args.host, args.port, mock=args.mock)
     return 0

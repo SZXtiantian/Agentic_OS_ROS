@@ -21,7 +21,7 @@ class SessionRunner:
         self.storage_manager = storage_manager
         self.context_manager = context_manager
 
-    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = True, **kwargs: Any) -> dict[str, Any]:
+    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False, **kwargs: Any) -> dict[str, Any]:
         task = dict(kwargs)
         task.setdefault("place", place)
         session = self.session_manager.create_session(app_id, task=task, mock=mock)

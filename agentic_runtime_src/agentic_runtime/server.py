@@ -52,7 +52,7 @@ class RuntimeServer:
     llm_chat: LLMChat
 
     @classmethod
-    def create(cls, mock: bool = True) -> "RuntimeServer":
+    def create(cls, mock: bool = False) -> "RuntimeServer":
         config_path = None
         if not mock and not os.environ.get("AGENTIC_RUNTIME_CONFIG"):
             candidate = Path("/opt/agentic/etc/agentic_robot.yaml")

@@ -68,7 +68,7 @@ class SkillExecutor:
         safety_result = "not_required"
         resource_result = "not_required"
         acquired: list[str] = []
-        backend_name = str(skill.backend.get("type", "mock"))
+        backend_name = str(skill.backend.get("type", "unconfigured"))
 
         try:
             validate_input(skill.input_schema, args)

@@ -18,6 +18,7 @@ ALLOWED_TOP_LEVEL_DIRS = {
     "sdk",
     "skills",
     "tests",
+    "tools",
     "var",
 }
 ALLOWED_TOP_LEVEL_FILES = {"README.md", "setup.bash", "pytest.ini"}
