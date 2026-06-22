@@ -7,17 +7,6 @@ from agentic_os.kernel.system_call import KernelSyscall
 from agentic_runtime.types import AppManifest
 
 
-DEFAULT_ROBOT_PERMISSIONS = (
-    "robot.move",
-    "robot.stop",
-    "perception.inspect",
-    "perception.observe",
-    "perception.capture",
-    "arm.move.named",
-    "gripper.control",
-)
-
-
 class RuntimeRobotCapabilityBackend:
     """Runtime-provided safe backend for kernel robot capability syscalls."""
 
@@ -30,7 +19,7 @@ class RuntimeRobotCapabilityBackend:
         params = dict(getattr(query, "params", {}) or syscall.params or {})
         app_id = str(getattr(query, "app_id", "") or syscall.agent_name)
         session_id = str(getattr(query, "session_id", "") or getattr(query, "metadata", {}).get("session_id", "") or params.pop("session_id", "") or "kernel")
-        permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()) or DEFAULT_ROBOT_PERMISSIONS)
+        permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
         app = AppManifest(
             name=app_id,
             version="kernel",

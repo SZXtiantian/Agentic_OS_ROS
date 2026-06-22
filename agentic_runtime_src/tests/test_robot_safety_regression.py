@@ -179,3 +179,29 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
     assert result.success is True
     assert server.bridge_client.navigation_calls == [{"place": "厨房", "timeout_s": 2}]
     assert any(record["skill_name"] == "robot.navigate_to" for record in server.audit_logger.recent(limit=5))
+
+
+def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    server = RuntimeServer.create(mock=True)
+
+    service = server.kernel_service
+    service.start()
+    try:
+        result = service.execute_request(
+            "robot_kernel_app",
+            RobotCapabilityQuery(
+                operation_type="execute_skill",
+                skill_name="robot.navigate_to",
+                params={"place": "厨房", "timeout_s": 2},
+                app_id="robot_kernel_app",
+                session_id="sess_kernel_robot_denied",
+            ),
+            timeout_s=3.0,
+        )
+    finally:
+        service.stop()
+
+    assert result.success is False
+    assert result.error_code == "PERMISSION_DENIED"
+    assert server.bridge_client.navigation_calls == []

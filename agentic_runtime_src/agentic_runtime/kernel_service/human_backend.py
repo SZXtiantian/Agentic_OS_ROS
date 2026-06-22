@@ -16,7 +16,7 @@ class RuntimeHumanBackend:
         params = dict(syscall.params)
         query = getattr(syscall, "query", None)
         session_id = str(getattr(query, "session_id", "") or params.pop("session_id", "") or "kernel")
-        permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()) or ("human.ask",))
+        permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
         skill_name = str(getattr(query, "skill_name", "") or params.pop("skill_name", "") or "human.ask")
         if syscall.operation_type in {"human.status", "human_status"}:
             return self.status()

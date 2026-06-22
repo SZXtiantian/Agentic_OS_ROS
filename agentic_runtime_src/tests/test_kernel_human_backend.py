@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from agentic_os.kernel.system_call import SkillQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
+from agentic_runtime.server import RuntimeServer
 from agentic_runtime.types import SkillResult
 
 
@@ -64,3 +65,21 @@ def test_runtime_human_backend_uses_skill_executor_contract():
     assert result["result"]["data"]["answer"] == "yes"
     assert cancel["success"] is True
     assert executor.cancelled == ["sess_human"]
+
+
+def test_runtime_human_backend_does_not_inject_default_permission(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    server = RuntimeServer.create(mock=True)
+    backend = RuntimeHumanBackend(server)
+
+    result = backend.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="skill_call",
+            params={"args": {"question": "Ready?", "timeout_s": 3}},
+            query=SimpleNamespace(skill_name="human.ask", app_id="agent_a", session_id="sess_human", metadata={}),
+        )
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "PERMISSION_DENIED"
