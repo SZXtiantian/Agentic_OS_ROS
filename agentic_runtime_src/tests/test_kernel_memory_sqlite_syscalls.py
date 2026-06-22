@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.memory import MemoryManager, MemoryNote, SQLiteMemoryProvider
 from agentic_os.kernel.system_call import MemoryQuery
 from agentic_runtime.kernel_service import KernelService
@@ -119,6 +121,49 @@ def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_
     assert fetched["memory"]["content"] == "report ready"
 
 
+def test_dangerous_memory_operations_emit_audit_events(tmp_path):
+    export_path = tmp_path / "memory.jsonl"
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=access,
+        event_sink=sink,
+    )
+    manager.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
+
+    exported = manager.export("agent_a", str(export_path))
+    deleted = manager.remove("m1", "agent_a")
+    imported = manager.import_("agent_a", str(export_path))
+
+    assert exported["success"] is True
+    assert deleted["success"] is True
+    assert imported["success"] is True
+    events = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["export", "delete", "import"]
+    assert all(event["metadata"]["success"] is True for event in events)
+    assert all(event["metadata"]["irreversible"] is True for event in events)
+
+
+def test_denied_memory_delete_emits_audit_event(tmp_path):
+    sink = InMemoryKernelEventSink()
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=AccessManager(),
+        event_sink=sink,
+    )
+    manager.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
+
+    denied = manager.remove("m1", "agent_a")
+
+    assert denied["success"] is False
+    assert denied["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+    audit = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"][-1]
+    assert audit["metadata"]["action"] == "delete"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+
+
 def test_memory_export_syscall_permission_denied_is_auditable(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     service.start()
@@ -135,6 +180,11 @@ def test_memory_export_syscall_permission_denied_is_auditable(tmp_path):
     assert result.success is False
     assert result.error_code == "ACCESS_INTERVENTION_REQUIRED"
     assert any(event["event_type"] == "access.checked" for event in status["events"]["recent"])
+    assert any(
+        event["event_type"] == "memory.audit"
+        and event["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_memory_sdk_facade_uses_kernel_service(tmp_path):

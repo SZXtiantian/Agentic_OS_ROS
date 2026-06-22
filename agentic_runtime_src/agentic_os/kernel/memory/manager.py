@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
 from .base import MemoryProvider
@@ -31,10 +32,12 @@ class MemoryManager:
         two_tier_enabled: bool = False,
         storage_manager: Any | None = None,
         db_path: str | Path | None = None,
+        event_sink: KernelEventSink | None = None,
     ) -> None:
         self.provider = provider or SQLiteMemoryProvider(db_path or self._default_db_path())
         self.persistent_provider = persistent_provider
         self.access_manager = access_manager
+        self.event_sink = event_sink
         self.max_notes_per_agent = max_notes_per_agent
         self.max_blocks_per_agent = max_blocks_per_agent
         self.max_ram_tokens_per_agent = max_ram_tokens_per_agent
@@ -135,8 +138,18 @@ class MemoryManager:
                 )
             )
             if not decision.allowed:
-                return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
-        return self.provider.remove_memory(memory_id, agent_name)
+                return self._audit_dangerous_result(
+                    "delete",
+                    agent_name,
+                    {"success": False, "error_code": decision.error_code, "reason": decision.reason},
+                    memory_id=memory_id,
+                )
+        return self._audit_dangerous_result(
+            "delete",
+            agent_name,
+            self.provider.remove_memory(memory_id, agent_name),
+            memory_id=memory_id,
+        )
 
     def list(self, agent_name: str, limit: int = 100) -> dict[str, Any]:
         if not hasattr(self.provider, "list_notes"):
@@ -150,22 +163,52 @@ class MemoryManager:
     def export(self, agent_name: str, path: str) -> dict[str, Any]:
         decision = self._check_dangerous_access(agent_name, "export", path)
         if not decision.get("success", True):
-            return decision
+            return self._audit_dangerous_result("export", agent_name, decision, export_path=path)
         if not path:
-            return {"success": False, "error_code": "MEMORY_EXPORT_PATH_REQUIRED"}
+            return self._audit_dangerous_result(
+                "export",
+                agent_name,
+                {"success": False, "error_code": "MEMORY_EXPORT_PATH_REQUIRED"},
+                export_path=path,
+            )
         if hasattr(self.provider, "export_memories"):
-            return self.provider.export_memories(agent_name, path)  # type: ignore[attr-defined]
-        return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+            return self._audit_dangerous_result(
+                "export",
+                agent_name,
+                self.provider.export_memories(agent_name, path),  # type: ignore[attr-defined]
+                export_path=path,
+            )
+        return self._audit_dangerous_result(
+            "export",
+            agent_name,
+            {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"},
+            export_path=path,
+        )
 
     def import_(self, agent_name: str, path: str) -> dict[str, Any]:
         decision = self._check_dangerous_access(agent_name, "import", path)
         if not decision.get("success", True):
-            return decision
+            return self._audit_dangerous_result("import", agent_name, decision, import_path=path)
         if not path:
-            return {"success": False, "error_code": "MEMORY_IMPORT_PATH_REQUIRED"}
+            return self._audit_dangerous_result(
+                "import",
+                agent_name,
+                {"success": False, "error_code": "MEMORY_IMPORT_PATH_REQUIRED"},
+                import_path=path,
+            )
         if hasattr(self.provider, "import_memories"):
-            return self.provider.import_memories(agent_name, path)  # type: ignore[attr-defined]
-        return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+            return self._audit_dangerous_result(
+                "import",
+                agent_name,
+                self.provider.import_memories(agent_name, path),  # type: ignore[attr-defined]
+                import_path=path,
+            )
+        return self._audit_dangerous_result(
+            "import",
+            agent_name,
+            {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"},
+            import_path=path,
+        )
 
     def status(self) -> dict[str, Any]:
         if hasattr(self.provider, "status"):
@@ -222,7 +265,7 @@ class MemoryManager:
                 subject=AccessSubject(agent_name=agent_name),
                 action=action,
                 resource=AccessResource("memory", memory_id, owner_agent=agent_name),
-                irreversible=action in {"export", "import"},
+                irreversible=action in {"delete", "export", "import"},
             )
         )
         if decision.allowed:
@@ -233,6 +276,26 @@ class MemoryManager:
             "reason": decision.reason,
             "requires_intervention": decision.requires_intervention,
         }
+
+    def _audit_dangerous_result(
+        self,
+        action: str,
+        agent_name: str,
+        result: dict[str, Any],
+        **metadata: Any,
+    ) -> dict[str, Any]:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "memory.audit",
+                action=action,
+                agent_name=agent_name,
+                success=bool(result.get("success", False)),
+                error_code=str(result.get("error_code") or ""),
+                irreversible=True,
+                provider=self.provider.__class__.__name__,
+                **metadata,
+            )
+        return result
 
     def _evict_if_needed(self, owner_agent: str) -> None:
         if not hasattr(self.provider, "list_notes"):

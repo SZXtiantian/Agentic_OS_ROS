@@ -170,6 +170,7 @@ class KernelService:
             access_manager=self.access_manager,
             max_notes_per_agent=int(memory_config.get("max_notes", 100)),
             db_path=db_path,
+            event_sink=self.event_sink,
         )
 
     def _build_tool_manager(self) -> ToolManager:
