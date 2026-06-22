@@ -9,7 +9,7 @@ import yaml
 
 class CapabilityKind:
     RUNTIME_INTERNAL = "runtime_internal"
-    MOCK = "mock"
+    SIMULATED_DISABLED = "simulated_disabled"
     ROS2_TOPIC = "ros2_topic"
     ROS2_SERVICE = "ros2_service"
     ROS2_ACTION = "ros2_action"
@@ -77,6 +77,8 @@ class CapabilitySpec:
         if self.kind in {CapabilityKind.ROS2_SERVICE, CapabilityKind.ROS2_ACTION, CapabilityKind.NAV2_ACTION, CapabilityKind.MOVEIT_ACTION}:
             if self.ros2 is None or not self.ros2.name:
                 failures.append(f"{self.name}: ROS2 capability requires an interface name")
+        if self.kind == CapabilityKind.SIMULATED_DISABLED:
+            failures.append(f"{self.name}: simulated capability backend is disabled")
         if self.kind == CapabilityKind.NAV2_ACTION and not (self.ros2 and self.ros2.backend_name):
             failures.append(f"{self.name}: Nav2 capability requires backend action mapping")
         if self.name.startswith("robot.") and not self.observability.get("audit", False):
@@ -153,8 +155,8 @@ def _kind_from_backend(name: str, backend: dict[str, Any]) -> str:
         return CapabilityKind.ROS2_SERVICE
     if backend.get("topic"):
         return CapabilityKind.ROS2_TOPIC
-    if backend_type == "mock":
-        return CapabilityKind.MOCK
+    if backend_type in {"mock", "fake", "stub", "dummy"}:
+        return CapabilityKind.SIMULATED_DISABLED
     return backend_type or CapabilityKind.RUNTIME_INTERNAL
 
 

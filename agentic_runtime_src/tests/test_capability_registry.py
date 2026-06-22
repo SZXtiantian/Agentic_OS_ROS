@@ -46,6 +46,17 @@ def test_kernel_capability_contract_rejects_unsafe_robot_capability():
     assert any("interface name" in item for item in failures)
 
 
+def test_kernel_capability_registry_rejects_simulated_backend_manifest():
+    registry = CapabilityRegistry()
+
+    try:
+        registry.register_skill_manifest({"name": "robot.fake_success", "backend": {"type": "mock"}})
+    except ValueError as exc:
+        assert "simulated capability backend is disabled" in str(exc)
+    else:
+        raise AssertionError("simulated capability backend manifest must be rejected")
+
+
 def test_runtime_skill_registry_exposes_kernel_capabilities():
     server = create_test_runtime_server()
 

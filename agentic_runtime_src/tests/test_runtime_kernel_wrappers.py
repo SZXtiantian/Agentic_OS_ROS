@@ -89,7 +89,7 @@ permission_requirements: []
 resource_requirements:
   locks: []
 backend:
-  type: mock
+  type: runtime_internal
 """.strip(),
         encoding="utf-8",
     )

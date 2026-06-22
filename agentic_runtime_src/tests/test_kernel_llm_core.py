@@ -359,9 +359,9 @@ def test_openai_provider_remote_failure_returns_provider_error(monkeypatch):
 
 
 def test_model_library_router_backward_compatible():
-    models = ModelLibrary([ModelEndpoint(name="mock-vla", provider="mock", capabilities=("chat", "vla"))])
+    models = ModelLibrary([ModelEndpoint(name="real-vla", provider="openai_compatible", capabilities=("chat", "vla"))])
 
     routed = models.route("vla")
 
     assert routed["success"] is True
-    assert routed["endpoint"]["name"] == "mock-vla"
+    assert routed["endpoint"]["name"] == "real-vla"

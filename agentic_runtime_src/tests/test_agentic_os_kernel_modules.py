@@ -83,8 +83,8 @@ def test_kernel_tool_model_and_perception_modules():
     forbidden = KernelSyscall.create("inspection_agent", "tool", "robot.navigate_to", {"name": "robot.navigate_to"})
     assert tools.address_request(forbidden)["error_code"] == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"
 
-    models = ModelLibrary([ModelEndpoint(name="mock-vla", provider="mock", capabilities=("chat", "vla"))])
-    assert models.route("vla")["endpoint"]["name"] == "mock-vla"
+    models = ModelLibrary([ModelEndpoint(name="real-vla", provider="openai_compatible", capabilities=("chat", "vla"))])
+    assert models.route("vla")["endpoint"]["name"] == "real-vla"
 
     perception = PerceptionManager()
     normalized = perception.normalize_inspection("厨房", {"objects": ["table"], "anomalies": []})

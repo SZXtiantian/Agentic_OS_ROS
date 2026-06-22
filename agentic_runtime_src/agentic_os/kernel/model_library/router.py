@@ -8,7 +8,7 @@ from typing import Any
 @dataclass(frozen=True)
 class ModelEndpoint:
     name: str
-    provider: str = "mock"
+    provider: str = "unconfigured"
     enabled: bool = True
     base_url: str = ""
     capabilities: tuple[str, ...] = ("chat",)
@@ -56,4 +56,3 @@ class ModelLibrary:
 
     def list(self) -> list[dict[str, Any]]:
         return [endpoint.__dict__ for endpoint in self._endpoints]
-
