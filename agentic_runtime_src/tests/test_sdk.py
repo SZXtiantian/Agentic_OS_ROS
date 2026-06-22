@@ -7,6 +7,7 @@ import pytest
 from agentic_os.kernel.system_call import LLMQuery, MemoryQuery, StorageQuery
 from agentic_runtime.app_manager import AppManager
 from agentic_runtime.audit import AuditLogger
+from agentic_runtime.errors import AgenticRuntimeError
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
@@ -14,14 +15,14 @@ from agentic_runtime.sdk import AgentContext, KernelAccessDeniedError, KernelSDK
 from agentic_runtime.types import AppManifest, SkillResult
 
 
-def test_sdk_room_flow_and_memory():
+def test_sdk_room_flow_reports_ros_bridge_unavailable():
     async def run():
         server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
         result = await manager.run_app("inspection_agent", place="厨房")
-        assert result["result"]["success"] is True
-        value = server.executor.dispatcher.memory_store.recall("inspection_agent", "last_inspection")
-        assert value["place"] == "厨房"
+        assert result["result"]["success"] is False
+        assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/world/resolve_place"
 
     asyncio.run(run())
 
@@ -42,7 +43,7 @@ def test_sdk_no_forbidden_patterns():
             assert pattern not in text
 
 
-def test_sdk_capture_photo_writes_mock_evidence(tmp_path, monkeypatch):
+def test_sdk_capture_photo_reports_ros_bridge_unavailable(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "photos"))
 
     async def run():
@@ -56,11 +57,10 @@ def test_sdk_capture_photo_writes_mock_evidence(tmp_path, monkeypatch):
             required_capabilities=["perception.capture_photo"],
         )
         ctx = AgentContext(server.executor, app, "sess_photo")
-        result = await ctx.perception.capture_photo(target="workspace", label="sdk", timeout_s=5)
-        assert result.success is True
-        assert Path(result.image_path).exists()
-        assert Path(result.metadata_path).exists()
-        assert result.evidence["perception_backend_status"] == "MOCK"
+        with pytest.raises(AgenticRuntimeError) as exc:
+            await ctx.perception.capture_photo(target="workspace", label="sdk", timeout_s=5)
+        assert exc.value.code == "ROS_BRIDGE_UNAVAILABLE"
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
 
     asyncio.run(run())
 

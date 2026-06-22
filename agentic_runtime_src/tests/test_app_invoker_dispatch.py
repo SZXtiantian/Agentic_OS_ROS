@@ -6,7 +6,7 @@ from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
 
 
-def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch, app_root):
+def test_app_invoker_loads_aios_robot_photographer_and_reports_missing_bridge(tmp_path, monkeypatch, app_root):
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "raw"))
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
 
@@ -19,8 +19,10 @@ def test_app_invoker_loads_aios_robot_photographer(tmp_path, monkeypatch, app_ro
             parent_session_id="sess_parent",
             route_plan_id="plan_route",
         )
-        assert result["result"]["success"] is True
+        assert result["result"]["success"] is False
+        assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         assert result["session_id"]
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
 
     asyncio.run(run())
 

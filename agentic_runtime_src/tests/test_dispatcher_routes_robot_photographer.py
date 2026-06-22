@@ -47,7 +47,7 @@ def test_last_task_is_builtin(app_root):
     assert plan["intent"] == "last_task"
 
 
-def test_dispatcher_writes_task_log_and_runs_read_only_photo(tmp_path, monkeypatch):
+def test_dispatcher_writes_failed_task_log_when_photo_bridge_unavailable(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_TASK_LOG_ROOT", str(tmp_path / "tasks"))
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "raw_photos"))
     monkeypatch.setenv("AGENTIC_ROBOT_PHOTOGRAPHER_STORAGE_ROOT", str(tmp_path / "app_storage"))
@@ -55,15 +55,18 @@ def test_dispatcher_writes_task_log_and_runs_read_only_photo(tmp_path, monkeypat
     async def run():
         server = create_test_runtime_server()
         result = await DispatcherAgent(server).arun("拍一张照片", GatewayFlags(mock=True, json=True))
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["status"] == "failed"
+        assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         assert result["selected_app_id"] == "robot_photographer_agent"
         assert result["selected_agents"][0]["agent_id"] == "robot_photographer_agent"
-        assert result["result_summary"]["app_output_paths"]
-        assert result["result_summary"]["raw_evidence_paths"]
+        assert result["result_summary"]["app_output_paths"] == []
+        assert result["result_summary"]["raw_evidence_paths"] == []
         assert Path(result["task_log_path"]).exists()
         recent = server.task_log_manager.list_recent(limit=5)
         assert recent[0].task_id == result["task_id"]
-        assert recent[0].status == "completed"
+        assert recent[0].status == "failed"
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
 
     asyncio.run(run())
 

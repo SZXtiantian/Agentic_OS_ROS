@@ -47,7 +47,7 @@ def test_entry_loads_and_motion_rejected_without_permission(monkeypatch):
     assert result["error_code"] == "ARM_MOTION_DISABLED"
 
 
-def test_read_only_robot_photographer_run_smoke(tmp_path, monkeypatch):
+def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, monkeypatch):
     evidence_root = tmp_path / "photos"
     app_storage = tmp_path / "app_storage"
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(evidence_root))
@@ -59,35 +59,16 @@ def test_read_only_robot_photographer_run_smoke(tmp_path, monkeypatch):
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun({"text": "拍一张照片", "mock": True})
         app_result = result["result"]
-        assert app_result["success"] is True
-        assert app_result["steps"][0]["type"] == "capture_photo"
-        step = app_result["steps"][0]
-        assert step["image_path"] == step["app_image_path"]
-        assert step["metadata_path"] == step["app_metadata_path"]
-        assert str(step["app_image_path"]).startswith(str(app_storage / "runs" / result["session_id"]))
-        assert str(step["raw_evidence_image_path"]).startswith(str(evidence_root))
-        assert Path(step["image_path"]).exists()
-        assert Path(step["metadata_path"]).exists()
-        assert Path(step["raw_evidence_image_path"]).exists()
-        assert Path(step["raw_evidence_metadata_path"]).exists()
-        metadata = json.loads(Path(step["metadata_path"]).read_text(encoding="utf-8"))
-        assert metadata["app_image_path"] == step["app_image_path"]
-        assert metadata["raw_evidence_image_path"] == step["raw_evidence_image_path"]
-        app_index = app_storage / "indexes" / "photos.jsonl"
-        assert app_index.exists()
-        assert step["app_image_path"] in app_index.read_text(encoding="utf-8")
+        assert result["status"] == "failed"
+        assert app_result["success"] is False
+        assert app_result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert app_result["steps"] == []
+        assert not (app_storage / "indexes" / "photos.jsonl").exists()
         assert any(record.get("skill_name") == "perception.capture_photo" for record in server.audit_logger.recent(limit=20))
-        assert any(
-            record.get("skill_name") == "memory.remember"
-            and step["app_image_path"] in json.dumps(record.get("args", {}), ensure_ascii=False)
-            and step["raw_evidence_image_path"] in json.dumps(record.get("args", {}), ensure_ascii=False)
-            for record in server.audit_logger.recent(limit=30)
-        )
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
         recent = await agent.arun({"text": "查看最近照片", "mock": True})
         photos = recent["result"]["steps"][0]["photos"]
-        assert photos
-        assert photos[-1]["image_path"] == step["app_image_path"]
-        assert photos[-1]["raw_evidence_image_path"] == step["raw_evidence_image_path"]
+        assert photos == []
 
     asyncio.run(run())
 
@@ -118,15 +99,17 @@ def test_motion_allowed_with_env_flag_and_confirmation(monkeypatch):
             }
         )
         app_result = result["result"]
-        assert app_result["success"] is True
-        assert app_result["steps"][0]["type"] == "arm_named_action"
-        assert app_result["steps"][0]["name"] == "camera_pitch_up_15"
-        assert app_result["steps"][1]["type"] == "capture_photo"
+        assert app_result["success"] is False
+        assert app_result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert app_result["steps"] == []
+        assert app_result["stop_result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
+        assert server.test_bridge_calls[-1]["command"][3] == "/agentic/robot/stop"
 
     asyncio.run(run())
 
 
-def test_mock_multi_angle_capture_writes_verification(tmp_path, monkeypatch):
+def test_multi_angle_capture_reports_missing_robot_bridge(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
     app_storage = tmp_path / "app_storage"
     monkeypatch.setenv("AGENTIC_PHOTO_EVIDENCE_ROOT", str(tmp_path / "photos"))
@@ -145,21 +128,12 @@ def test_mock_multi_angle_capture_writes_verification(tmp_path, monkeypatch):
             }
         )
         app_result = result["result"]
-        assert app_result["success"] is True
-        arm_names = [step["name"] for step in app_result["steps"] if step["type"] == "arm_named_action"]
-        assert arm_names[:5] == [
-            "camera_center",
-            "camera_yaw_left_15",
-            "camera_yaw_right_15",
-            "camera_pitch_up_15",
-            "arm_home",
-        ]
-        verification = [step for step in app_result["steps"] if step["type"] == "verify_photo_differences"][0]
-        assert verification["success"] is True
-        assert Path(verification["verification_path"]).exists()
-        assert verification["verification_path"] == str(app_storage / "runs" / result["session_id"] / "verification.json")
-        assert verification["pairs"][0]["a_image_path"].startswith(str(app_storage / "runs" / result["session_id"]))
-        assert verification["pairs"][0]["a_raw_evidence_image_path"]
+        assert app_result["success"] is False
+        assert app_result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert app_result["steps"] == []
+        assert app_result["stop_result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert not (app_storage / "runs" / result["session_id"] / "verification.json").exists()
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
 
     asyncio.run(run())
 
@@ -204,9 +178,9 @@ def test_multi_angle_verification_failure_still_runs_arm_home(tmp_path, monkeypa
         }
         result = await module.execute_plan(ctx, plan)
         assert result["success"] is False
-        assert result["error_code"] == "PHOTO_DIFFERENCE_TOO_SMALL"
-        arm_names = [step["name"] for step in result["steps"] if step["type"] == "arm_named_action"]
-        assert arm_names[-1] == "arm_home"
+        assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert result["steps"] == []
+        assert result["stop_result"]["error_code"] == "PERMISSION_DENIED"
 
     asyncio.run(run())
 

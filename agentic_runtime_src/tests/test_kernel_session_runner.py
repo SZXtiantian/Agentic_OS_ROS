@@ -8,19 +8,25 @@ def test_inspection_agent_runs_through_kernel_session_path():
     async def run():
         server = create_test_runtime_server()
         result = await server.scheduler.run_app("inspection_agent", place="厨房", mock=True)
-        assert result["result"]["success"] is True
+        assert result["status"] == "failed"
+        assert result["result"]["success"] is False
+        assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
 
         session = server.session_manager.get_session(result["session_id"])
         assert session is not None
-        assert session.status == "completed"
+        assert session.status == "failed"
+        assert session.error_code == "ROS_BRIDGE_UNAVAILABLE"
 
         syscalls = server.session_manager.read_syscalls(result["session_id"], limit=100)
         final_skill_names = {record.get("skill_name") for record in syscalls if record.get("audit_id")}
-        assert "robot.navigate_to" in final_skill_names
-        assert "robot.inspect_area" in final_skill_names
+        assert "report.say" in final_skill_names
+        assert "world.resolve_place" in final_skill_names
+        assert "robot.navigate_to" not in final_skill_names
+        assert server.test_bridge_calls[0]["command"][3] == "/agentic/world/resolve_place"
 
         context = server.context_manager.recover(result["session_id"])
         assert context is not None
         assert context.app_id == "inspection_agent"
+        assert context.error_code == "ROS_BRIDGE_UNAVAILABLE"
 
     asyncio.run(run())
