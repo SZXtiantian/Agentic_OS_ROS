@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.hooks import InMemoryKernelEventSink
 from agentic_os.kernel.human import HumanInteractionManager
 from agentic_os.kernel.system_call import SkillQuery
@@ -95,6 +96,101 @@ def test_human_manager_audits_ask_and_cancel():
     assert [event["metadata"]["action"] for event in events] == ["ask", "cancel"]
     assert events[0]["metadata"]["success"] is True
     assert events[1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+
+
+def test_human_ask_requires_explicit_permission_before_backend_call():
+    class Backend:
+        calls = 0
+
+        def address_request(self, syscall):
+            self.calls += 1
+            return {"success": True, "answered": True, "answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    manager = HumanInteractionManager(backend, access_manager=AccessManager(event_sink=sink), event_sink=sink)
+
+    denied = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(app_id="agent_a", session_id="sess_human", metadata={}),
+        )
+    )
+
+    assert denied.success is False
+    assert denied.error_code == "ACCESS_DENIED"
+    assert backend.calls == 0
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ACCESS_DENIED"
+
+
+def test_human_ask_with_permission_requires_intervention_by_default():
+    class Backend:
+        calls = 0
+
+        def address_request(self, syscall):
+            self.calls += 1
+            return {"success": True, "answered": True, "answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    manager = HumanInteractionManager(backend, access_manager=AccessManager(event_sink=sink), event_sink=sink)
+
+    denied = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert denied.success is False
+    assert denied.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert backend.calls == 0
+    assert any(
+        event["event_type"] == "access.checked" and event["metadata"]["requires_intervention"] is True
+        for event in sink.recent(limit=10)
+    )
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+
+
+def test_human_ask_runs_after_operator_intervention_allows():
+    class Backend:
+        calls = 0
+
+        def address_request(self, syscall):
+            self.calls += 1
+            return {"success": True, "answered": True, "answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    manager = HumanInteractionManager(backend, access_manager=access, event_sink=sink)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is True
+    assert backend.calls == 1
+    assert any(event["event_type"] == "access.checked" for event in sink.recent(limit=10))
 
 
 def test_runtime_human_backend_uses_skill_executor_contract():

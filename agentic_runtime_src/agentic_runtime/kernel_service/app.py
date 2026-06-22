@@ -43,6 +43,7 @@ class KernelService:
         self.skill = SkillManager(skill_backend, event_sink=self.event_sink)
         self.human = HumanInteractionManager(
             RuntimeHumanBackend(runtime_server) if runtime_server is not None else None,
+            access_manager=self.access_manager,
             event_sink=self.event_sink,
         )
         self.managers = {

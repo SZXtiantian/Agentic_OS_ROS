@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 
@@ -9,8 +10,14 @@ from agentic_os.kernel.system_call import KernelResponse, KernelSyscall
 class HumanInteractionManager:
     """Scheduler-facing human interaction adapter."""
 
-    def __init__(self, human_adapter: Any | None = None, event_sink: KernelEventSink | None = None) -> None:
+    def __init__(
+        self,
+        human_adapter: Any | None = None,
+        access_manager: AccessManager | None = None,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self.human_adapter = human_adapter
+        self.access_manager = access_manager
         self.event_sink = event_sink
         self._events: list[dict[str, Any]] = []
 
@@ -34,6 +41,11 @@ class HumanInteractionManager:
             self._record(syscall, result)
             self._audit_result(syscall, result)
             return self._kernel_response(result)
+        access = self._check_ask_access(syscall)
+        if not access.get("success", True):
+            self._record(syscall, access)
+            self._audit_result(syscall, access)
+            return self._kernel_response(access)
         if hasattr(self.human_adapter, "address_request"):
             result = self.human_adapter.address_request(syscall)
             self._record(syscall, result)
@@ -79,6 +91,50 @@ class HumanInteractionManager:
             }
         )
         self._events = self._events[-100:]
+
+    def _check_ask_access(self, syscall: KernelSyscall) -> dict[str, Any]:
+        if self.access_manager is None:
+            return {"success": True}
+        query = getattr(syscall, "query", None)
+        metadata = dict(getattr(query, "metadata", {}) or {})
+        permissions = tuple(metadata.get("permissions") or syscall.params.get("permissions") or ())
+        if "human.ask" not in permissions:
+            return {
+                "success": False,
+                "error_code": "ACCESS_DENIED",
+                "reason": "human.ask requires explicit human.ask permission",
+                "requires_intervention": False,
+            }
+        session_id = str(
+            getattr(query, "session_id", "")
+            or metadata.get("session_id", "")
+            or syscall.params.get("session_id", "")
+            or "kernel"
+        )
+        app_id = str(getattr(query, "app_id", "") or syscall.agent_name)
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(
+                    agent_name=syscall.agent_name,
+                    app_id=app_id,
+                    session_id=session_id,
+                    permissions=permissions,
+                ),
+                action="execute",
+                resource=AccessResource("human", "human.ask", owner_agent=syscall.agent_name),
+                irreversible=True,
+                reason="human ask requires an operator response",
+            )
+        )
+        if decision.allowed:
+            return {"success": True}
+        return {
+            "success": False,
+            "error_code": decision.error_code,
+            "reason": decision.reason,
+            "requires_intervention": decision.requires_intervention,
+            "intervention_id": decision.intervention_id,
+        }
 
     def _audit_result(self, syscall: KernelSyscall, result: dict[str, Any]) -> None:
         if self.event_sink is not None:

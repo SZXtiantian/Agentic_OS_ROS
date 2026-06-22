@@ -45,6 +45,8 @@ Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_m
 
 Human requests are durable JSONL queue records under the runtime human channel root. Operators or integration services must append a matching response by `correlation_id`; the runtime never invents an answer.
 
+`human.ask` requires explicit `human.ask` permission in syscall metadata before the runtime backend is called. With permission present, it is still treated as an intervention-gated operation; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`.
+
 LLM status exposes provider configuration state and active `call_id`s. Cancelling an unknown LLM call returns `SYSCALL_NOT_FOUND`; cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.cancel(call_id)` cancels only the matching active runtime call in the current session; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
@@ -122,7 +124,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 388 passed, 3 skipped
+# 391 passed, 3 skipped
 scripts/run_tests.sh
-# 388 passed, 3 deselected; Agentic OS MVP checks passed.
+# 391 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
