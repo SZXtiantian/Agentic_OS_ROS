@@ -4,6 +4,8 @@ Last updated: 2026-06-23
 
 Agent Apps call kernel capabilities through `ctx.kernel.*`. Public syscalls return a `KernelResponse` shape: `success`, `data`, `response_message`, `error_code`, and `metadata`.
 
+`ctx.kernel.cancel(syscall_id)` cancels only a syscall still waiting in the kernel queue. Missing, empty, already-finished, or manager-local active calls return `SYSCALL_NOT_FOUND`; manager-specific cancellation remains available through `ctx.kernel.llm.cancel`, `ctx.kernel.skill.cancel`, `ctx.kernel.tool.cancel`, and human cancel paths where the backend supports them.
+
 ## Namespaces
 
 | Namespace | Operations |
@@ -29,6 +31,8 @@ Agent Apps call kernel capabilities through `ctx.kernel.*`. Public syscalls retu
 
 No default mock LLM, memory, context, storage, tool, skill, or human provider is selected. Missing external services fail with stable error codes and appear in `KernelService.status()`.
 
+Context `ctx_compact` is structural JSON truncation over stored context entries. It is not an LLM semantic summary; `status()["context"]["compact_policy"]` reports `mode: structural_truncation`, `semantic_summary: false`, and `llm_required: false`.
+
 Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_mode: lexical_fts` with `semantic: false`. Semantic/vector retrieval may only be marked available when a real embedding/vector provider is configured; otherwise `status()["storage"]["semantic_retrieval"]` reports `STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED`.
 
 Human requests are durable JSONL queue records under the runtime human channel root. Operators or integration services must append a matching response by `correlation_id`; the runtime never invents an answer.
@@ -47,6 +51,21 @@ High-risk operations go through access/intervention/audit:
 - external LLM provider calls.
 
 Without an operator intervention backend, high-risk operations return `ACCESS_INTERVENTION_REQUIRED`.
+
+## Audit Events
+
+Kernel hook events are visible under `KernelService.status()["events"]["recent"]`. Sensitive payload keys such as prompts, messages, content, data, tokens, secrets, and passwords are redacted or omitted.
+
+| Event | Emitted for |
+| --- | --- |
+| `context.audit` | context put/get/delete/list/snapshot/recover/compact/clear; compact events include `compact_mode: structural_truncation` |
+| `memory.audit` | memory delete/export/import success and failure |
+| `storage.audit` | storage delete/rollback/share success and failure |
+| `tool.audit` | tool manifest load, unload, and builtin registration success and failure |
+| `llm.audit` | provider attempts, provider unconfigured/errors, batch attempts, time-slice attempts, and LLM cancel requests |
+| `human.audit` | human ask/cancel requests, backend unavailable, timeout, cancellation, and answered results |
+| `skill.audit` | skill call/list/describe/status/cancel results |
+| `robot.audit` | robot motion/sensor capability results, including ROS bridge unavailable and permission-denied failures |
 
 ## Builtin Tools
 
@@ -69,7 +88,18 @@ pytest -q tests/test_kernel_tool_real_syscalls.py
 pytest -q tests/test_kernel_skill_syscalls.py
 pytest -q tests/test_kernel_llm_core.py tests/test_kernel_e2e_syscall_flow.py
 pytest -q tests/test_human_queue_channel.py tests/test_kernel_human_backend.py
+pytest -q tests/test_kernel_syscall_async.py tests/test_robot_safety_regression.py
 pytest -q tests/test_no_simulated_production_paths.py tests/test_runtime_real_defaults.py
 python scripts/check_no_runtime_rclpy_imports.py
 scripts/run_tests.sh
+```
+
+Latest full local verification for this document update baseline:
+
+```bash
+cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
+python -m pytest -q
+# 373 passed
+scripts/run_tests.sh
+# 373 passed; Agentic OS MVP checks passed.
 ```
