@@ -33,7 +33,6 @@ class RuntimeConfig:
     audit_log_path: Path
     memory_db_path: Path
     default_skill_timeout_s: int
-    allow_mock_backends: bool
     app_root: Path
     skill_root: Path
     ros_bridge_mode: str = "cli"
@@ -88,7 +87,6 @@ class RuntimeConfig:
             audit_log_path=resolve(data.get("audit_log_path"), var_root / "audit" / "audit.jsonl"),
             memory_db_path=resolve(data.get("memory_db_path"), var_root / "memory" / "memory.sqlite3"),
             default_skill_timeout_s=int(data.get("default_skill_timeout_s", 60)),
-            allow_mock_backends=bool(data.get("allow_mock_backends", False)),
             app_root=resolve(data.get("app_root"), app_root_default),
             skill_root=resolve(data.get("skill_root"), skill_root_default),
             ros_bridge_mode=str(data.get("ros_bridge_mode", "cli")),

@@ -18,7 +18,7 @@ from agentic_runtime.session.models import SessionRecord
 def test_runtime_server_create_defaults_to_real_cli_bridge():
     server = RuntimeServer.create()
 
-    assert server.config.allow_mock_backends is False
+    assert not hasattr(server.config, "allow_mock_backends")
     assert server.config.ros_bridge_mode == "cli"
     assert isinstance(server.bridge_client, Ros2CliBridgeClient)
 
@@ -26,7 +26,7 @@ def test_runtime_server_create_defaults_to_real_cli_bridge():
 def test_installed_agentic_yaml_disables_simulated_defaults(runtime_src):
     config = RuntimeConfig.load(runtime_src / "configs" / "agentic.yaml")
 
-    assert config.allow_mock_backends is False
+    assert not hasattr(config, "allow_mock_backends")
     assert config.ros_bridge_mode == "cli"
 
 

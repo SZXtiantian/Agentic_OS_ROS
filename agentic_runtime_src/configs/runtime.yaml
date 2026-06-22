@@ -2,7 +2,6 @@ runtime:
   audit_log_path: var/audit/audit.jsonl
   memory_db_path: var/memory/memory.sqlite3
   default_skill_timeout_s: 60
-  allow_mock_backends: false
   app_root: ../agentic_apps
   skill_root: skills
   ros_bridge_mode: cli

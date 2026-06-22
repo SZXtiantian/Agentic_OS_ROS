@@ -25,7 +25,7 @@
 
 当前仍需注意：
 
-- 默认 `/opt/agentic/etc/agentic.yaml` 中 `ros_bridge_mode` 仍是 `mock`。
+- 默认 `/opt/agentic/etc/agentic.yaml` 中 `ros_bridge_mode` 已收敛为 `cli`；真实 bridge 缺失时必须 fail-fast。
 - 真实 LLM 验收仍需要本机 `/opt/agentic/etc/secrets/yunwu.env` 或环境变量提供 API key，且不能把 secret 写入源码、文档或日志。
 - 自然语言入口以 `/opt/agentic/bin/agentic` 为主，`agentic photo` 保留为兼容/调试入口。
 - `perception.capture_photo` 已作为正式能力进入 Runtime/SDK/bridge/client 路径；真实执行仍依赖 bridge services 正常启动。
@@ -798,15 +798,15 @@ agenticctl status
 
 ## 15. 已知问题与风险
 
-### 15.1 默认 bridge mode 仍为 mock
+### 15.1 默认 bridge mode 为真实 CLI bridge
 
 `/opt/agentic/etc/agentic.yaml` 当前：
 
 ```yaml
-ros_bridge_mode: mock
+ros_bridge_mode: cli
 ```
 
-这对软件测试安全，但真实机器人 demo 时必须明确进入 `--real` 或启动 real bridge。
+缺少 ROS2、bridge service 或 robot/Nav2 后端时，Runtime 必须返回稳定错误码（例如 `ROS_BRIDGE_UNAVAILABLE`），不能用模拟成功路径替代真实执行。
 
 ### 15.2 setup.bash 有 ROS overlay warning
 
