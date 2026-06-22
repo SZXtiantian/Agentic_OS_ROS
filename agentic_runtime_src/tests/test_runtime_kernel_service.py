@@ -150,6 +150,7 @@ def test_kernel_service_uses_configured_llm_without_status_secret_leak(tmp_path)
                             "enabled": True,
                             "api_key": "super-secret",
                             "base_url": "https://example.test/v1",
+                            "model": "configured-chat",
                             "capabilities": ["chat", "json"],
                         }
                     ],

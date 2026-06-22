@@ -13,8 +13,14 @@ class LocalBackendProvider:
         self.config = config
 
     def complete(self, query: LLMQuery) -> KernelResponse:
+        model = str(self.config.model or "").strip()
+        if not model:
+            return KernelResponse.error(
+                LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                metadata={"backend": self.config.backend, "reason": "model not configured", "required_config": ["model"]},
+            )
         return KernelResponse(
             False,
             error_code=LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
-            metadata={"backend": self.config.backend, "model": self.config.name, "reason": "local LLM backend is not configured"},
+            metadata={"backend": self.config.backend, "model": model, "reason": "local LLM backend is not configured"},
         )

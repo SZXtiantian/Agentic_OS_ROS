@@ -164,7 +164,7 @@ def test_llm_adapter_returns_error_for_missing_provider():
 
 
 def test_optional_litellm_dependency_missing_is_structured():
-    provider = LiteLLMProvider(LLMConfig(name="x", backend="litellm"))
+    provider = LiteLLMProvider(LLMConfig(name="x", backend="litellm", model="real-model"))
 
     response = provider.complete(LLMQuery(operation_type="chat"))
 
@@ -173,7 +173,7 @@ def test_optional_litellm_dependency_missing_is_structured():
 
 
 def test_optional_huggingface_dependency_missing_is_structured():
-    provider = HuggingFaceProvider(LLMConfig(name="x", backend="huggingface"))
+    provider = HuggingFaceProvider(LLMConfig(name="x", backend="huggingface", model="real-model"))
 
     response = provider.complete(LLMQuery(operation_type="chat"))
 
@@ -353,6 +353,26 @@ def test_llm_status_reports_unconfigured_openai_provider():
     assert status["providers"][0]["error_code"] == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
     assert "base_url" in status["providers"][0]["reason"]
     assert "api_key" in status["providers"][0]["reason"]
+    assert "model" in status["providers"][0]["reason"]
+
+
+def test_llm_status_requires_explicit_model_for_configured_openai_provider():
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="needs-model",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+            )
+        ]
+    )
+
+    status = adapter.status()
+
+    assert status["state"] == "unavailable"
+    assert status["providers"][0]["error_code"] == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
+    assert "model" in status["providers"][0]["reason"]
 
 
 def test_openai_provider_missing_config_returns_unconfigured():
@@ -364,9 +384,36 @@ def test_openai_provider_missing_config_returns_unconfigured():
     assert response.error_code == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
 
 
+def test_openai_provider_missing_model_returns_unconfigured_without_network(monkeypatch):
+    provider = OpenAICompatibleProvider(
+        LLMConfig(name="needs-model", backend="openai_compatible", hostname="https://example.test/v1", api_key="test-key")
+    )
+    called = False
+
+    def urlopen_should_not_run(request, timeout):
+        nonlocal called
+        called = True
+        raise AssertionError("provider must fail before network without model")
+
+    monkeypatch.setattr("agentic_os.kernel.llm_core.provider.urllib.request.urlopen", urlopen_should_not_run)
+
+    response = provider.complete(LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hi"}]))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNCONFIGURED
+    assert response.metadata["required_config"] == ["model"]
+    assert called is False
+
+
 def test_openai_provider_remote_failure_returns_provider_error(monkeypatch):
     provider = OpenAICompatibleProvider(
-        LLMConfig(name="configured", backend="openai_compatible", hostname="https://example.test/v1", api_key="test-key")
+        LLMConfig(
+            name="configured",
+            backend="openai_compatible",
+            hostname="https://example.test/v1",
+            api_key="test-key",
+            model="real-model",
+        )
     )
 
     def raise_url_error(request, timeout):

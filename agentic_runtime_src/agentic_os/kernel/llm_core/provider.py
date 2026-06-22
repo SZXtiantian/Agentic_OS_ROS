@@ -43,6 +43,9 @@ class OpenAICompatibleProvider:
         messages = list(query.messages)
         if not messages and query.params.get("prompt"):
             messages = [{"role": "user", "content": str(query.params["prompt"])}]
+        model = _configured_model(self.config)
+        if not model:
+            return _missing_model_response()
         api_key = self.config.api_key or (os.environ.get(self.config.api_key_env) if self.config.api_key_env else "")
         if not api_key:
             return KernelResponse.error(
@@ -56,7 +59,7 @@ class OpenAICompatibleProvider:
             )
 
         payload = {
-            "model": self.config.model or self.config.name,
+            "model": model,
             "messages": messages,
             **query.params,
         }
@@ -91,6 +94,9 @@ class OpenAICompatibleProvider:
         return KernelResponse(True, response_message=normalized.to_dict(), metadata={"provider": self.config.name})
 
     def embed(self, query: LLMQuery) -> KernelResponse:
+        model = _configured_model(self.config)
+        if not model:
+            return _missing_model_response()
         api_key = self.config.api_key or (os.environ.get(self.config.api_key_env) if self.config.api_key_env else "")
         if not api_key:
             return KernelResponse.error(
@@ -103,7 +109,7 @@ class OpenAICompatibleProvider:
                 metadata={"reason": "base_url not configured", "required_config": ["base_url"]},
             )
         inputs = query.params.get("input", query.params.get("texts", query.params.get("text", "")))
-        payload = {"model": self.config.model or self.config.name, "input": inputs}
+        payload = {"model": model, "input": inputs}
         request = urllib.request.Request(
             f"{self.config.hostname.rstrip('/')}/embeddings",
             data=json.dumps(payload).encode("utf-8"),
@@ -124,7 +130,7 @@ class OpenAICompatibleProvider:
         embeddings = [item.get("embedding") for item in body.get("data", []) if isinstance(item, dict)]
         if not embeddings:
             return KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": "missing embeddings"})
-        return KernelResponse.ok({"embeddings": embeddings, "model": body.get("model", self.config.model or self.config.name)})
+        return KernelResponse.ok({"embeddings": embeddings, "model": body.get("model", model)})
 
 
 class VLLMOpenAIProvider(OpenAICompatibleProvider):
@@ -136,6 +142,9 @@ class LiteLLMProvider:
         self.config = config
 
     def complete(self, query: LLMQuery) -> KernelResponse:
+        model = _configured_model(self.config)
+        if not model:
+            return _missing_model_response()
         try:
             import litellm  # type: ignore[import-not-found]
         except ImportError:
@@ -145,7 +154,7 @@ class LiteLLMProvider:
             )
         try:
             body = litellm.completion(
-                model=self.config.model or self.config.name,
+                model=model,
                 messages=query.messages,
                 tools=query.tools,
                 response_format=query.response_format,
@@ -162,6 +171,8 @@ class HuggingFaceProvider:
         self.config = config
 
     def complete(self, query: LLMQuery) -> KernelResponse:
+        if not _configured_model(self.config):
+            return _missing_model_response()
         try:
             import transformers  # type: ignore[import-not-found]  # noqa: F401
         except ImportError:
@@ -173,3 +184,14 @@ class HuggingFaceProvider:
             LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
             metadata={"backend": self.config.backend, "reason": "local HuggingFace generation pipeline is not configured"},
         )
+
+
+def _configured_model(config: LLMConfig) -> str:
+    return str(config.model or "").strip()
+
+
+def _missing_model_response() -> KernelResponse:
+    return KernelResponse.error(
+        LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+        metadata={"reason": "model not configured", "required_config": ["model"]},
+    )

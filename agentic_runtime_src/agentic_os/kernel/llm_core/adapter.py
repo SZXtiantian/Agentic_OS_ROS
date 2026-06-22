@@ -278,6 +278,8 @@ class LLMAdapter:
                 missing.append("base_url")
             if not (config.api_key or (config.api_key_env and os.environ.get(config.api_key_env))):
                 missing.append("api_key")
+            if not str(config.model or "").strip():
+                missing.append("model")
             if missing:
                 return {
                     "state": "unavailable",
@@ -286,6 +288,12 @@ class LLMAdapter:
                 }
             return {"state": "configured", "error_code": "", "reason": ""}
         if config.backend in {"litellm", "litellm_compatible"}:
+            if not str(config.model or "").strip():
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                    "reason": "missing required config: model",
+                }
             if importlib.util.find_spec("litellm") is None:
                 return {
                     "state": "unavailable",
@@ -294,6 +302,12 @@ class LLMAdapter:
                 }
             return {"state": "configured", "error_code": "", "reason": ""}
         if config.backend in {"huggingface", "hf", "hflocal"}:
+            if not str(config.model or "").strip():
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                    "reason": "missing required config: model",
+                }
             if importlib.util.find_spec("transformers") is None:
                 return {
                     "state": "unavailable",
@@ -306,6 +320,12 @@ class LLMAdapter:
                 "reason": "local HuggingFace generation pipeline is not configured",
             }
         if config.backend == "local":
+            if not str(config.model or "").strip():
+                return {
+                    "state": "unavailable",
+                    "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
+                    "reason": "missing required config: model",
+                }
             return {
                 "state": "unavailable",
                 "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
