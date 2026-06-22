@@ -12,9 +12,9 @@ from agentic_runtime.config import find_repo_root
 from .errors import LLMError
 
 
-DEFAULT_PROVIDER = "yunwu"
-DEFAULT_BASE_URL = "https://yunwu.ai/v1"
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_PROVIDER = "openai_compatible"
+DEFAULT_BASE_URL = ""
+DEFAULT_MODEL = ""
 DEFAULT_TIMEOUT_S = 20
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_MAX_TOKENS = 800
@@ -35,10 +35,17 @@ class LLMConfig:
     def require_ready(self) -> "LLMConfig":
         if not self.enabled:
             raise LLMError("LLM_DISABLED", "LLM provider is disabled in models.yaml")
-        if not self.api_key:
-            raise LLMError("LLM_API_KEY_MISSING", "LLM API key is not configured")
         if self.provider not in {"yunwu", "openai_compatible"}:
             raise LLMError("LLM_PROVIDER_UNSUPPORTED", f"unsupported LLM provider: {self.provider}")
+        missing = []
+        if not self.base_url:
+            missing.append("base_url")
+        if not self.api_key:
+            missing.append("api_key")
+        if not self.model:
+            missing.append("model")
+        if missing:
+            raise LLMError("LLM_PROVIDER_UNCONFIGURED", f"missing required config: {', '.join(missing)}")
         return self
 
 

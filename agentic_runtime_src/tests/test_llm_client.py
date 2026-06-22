@@ -50,6 +50,27 @@ models:
     assert config.api_key == "test-secret"
 
 
+def test_llm_config_without_provider_fields_is_unconfigured(tmp_path, monkeypatch):
+    monkeypatch.delenv("AGENTIC_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("AGENTIC_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("AGENTIC_LLM_MODEL", raising=False)
+    monkeypatch.delenv("AGENTIC_LLM_API_KEY", raising=False)
+    config_path = tmp_path / "models.yaml"
+    config_path.write_text("models: {}\n", encoding="utf-8")
+
+    config = load_llm_config(config_path=config_path, secret_path=tmp_path / "missing-secret.env")
+
+    assert config.provider == "openai_compatible"
+    assert config.base_url == ""
+    assert config.model == ""
+    with pytest.raises(LLMError) as exc:
+        config.require_ready()
+    assert exc.value.code == "LLM_PROVIDER_UNCONFIGURED"
+    assert "base_url" in exc.value.reason
+    assert "api_key" in exc.value.reason
+    assert "model" in exc.value.reason
+
+
 def test_openai_compatible_client_posts_chat_completion_and_parses_object(monkeypatch):
     config = LLMConfig(api_key="test-key", base_url="https://example.test/v1", model="gpt-4o-mini")
     client = OpenAICompatibleChatClient(config=config)
@@ -83,7 +104,7 @@ def test_llmchat_facade_delegates_provider_client():
 
 
 def test_llm_client_rejects_markdown_fenced_json(monkeypatch):
-    client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key"))
+    client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key", base_url="https://example.test/v1", model="gpt-4o-mini"))
 
     def fake_urlopen(request, timeout):
         return _FakeResponse({"choices": [{"message": {"content": "```json\n{\"ok\": true}\n```"}}]})
@@ -97,7 +118,7 @@ def test_llm_client_rejects_markdown_fenced_json(monkeypatch):
 
 
 def test_llm_client_returns_structured_request_error(monkeypatch):
-    client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key"))
+    client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key", base_url="https://example.test/v1", model="gpt-4o-mini"))
 
     def fake_urlopen(request, timeout):
         raise urllib.error.URLError("network down")
