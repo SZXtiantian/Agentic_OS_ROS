@@ -15,6 +15,7 @@ from typing import Any
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.dispatcher import DispatcherAgent
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import simulated_backend_disabled
 
 
 BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_bridge.sh"))
@@ -79,6 +80,8 @@ async def run_once(user_text: str, flags: GatewayFlags) -> int:
 
 
 async def dispatch_text(user_text: str, flags: GatewayFlags) -> dict[str, Any]:
+    if flags.mock:
+        return simulated_backend_disabled("agentic natural language gateway --mock")
     if flags.real and _likely_needs_real_bridge(user_text, flags) and not _ensure_real_bridge_ready(flags):
         return {
             "success": False,

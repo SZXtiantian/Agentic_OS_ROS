@@ -15,6 +15,7 @@ from typing import Any
 
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import simulated_backend_disabled
 
 
 HELP_TEXT = """AgenticOS natural language CLI
@@ -105,6 +106,9 @@ class AgenticNaturalLanguageCLI:
         self._bridge_process: subprocess.Popen | None = None
 
     async def run_text(self, text: str) -> int:
+        if not self.real:
+            self._print_simulated_disabled()
+            return 1
         intent = parse_natural_language(text)
         if intent.action == "noop":
             return 0
@@ -290,6 +294,14 @@ class AgenticNaturalLanguageCLI:
         print("AgenticOS bridge 没有 ready，无法执行真实机器人命令。")
         print(f"日志: {BRIDGE_LOG}")
 
+    def _print_simulated_disabled(self) -> None:
+        data = simulated_backend_disabled("agentic chat --mock")
+        if self.json_output:
+            print_json(data)
+            return
+        print(data["message"])
+        print(f"error_code: {data['error_code']}")
+
     def close(self) -> None:
         if self._bridge_process is None or self._bridge_process.poll() is not None:
             return
@@ -310,6 +322,9 @@ def print_json(data: object) -> None:
 async def interactive(args: argparse.Namespace) -> int:
     cli = AgenticNaturalLanguageCLI(real=args.real, json_output=args.json, allow_arm_motion=args.allow_arm_motion)
     try:
+        if not args.real:
+            cli._print_simulated_disabled()
+            return 1
         if args.command:
             return await cli.run_text(" ".join(args.command))
         print("AgenticOS chat ready. 输入 `帮助` 查看命令，输入 `退出` 结束。")

@@ -13,6 +13,7 @@ from typing import Any
 
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import simulated_backend_disabled
 
 
 _RUNTIME_SRC = find_repo_root()
@@ -42,6 +43,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.mock:
+        data = simulated_backend_disabled("agentic photo --mock")
+        if args.json:
+            print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
+        else:
+            print(data["message"])
+            print(f"error_code: {data['error_code']}")
+        return 1
     real = bool(not args.mock)
     cli = RobotPhotoCLI(real=real, json_output=args.json, allow_arm_motion=args.allow_arm_motion, assume_yes=args.yes)
     text = " ".join(args.command).strip()
@@ -87,6 +96,10 @@ class RobotPhotoCLI:
     async def run_text(self, text: str) -> int:
         if not text:
             return 0
+        if not self.real:
+            result = simulated_backend_disabled("agentic photo runtime mock mode")
+            self._print_result(result)
+            return 1
         if self.real and not self._ensure_real_bridge_ready():
             result = {"success": False, "error_code": "AGENTIC_BRIDGE_UNAVAILABLE", "reason": "AgenticOS real bridge services are unavailable"}
             self._print_result(result)
