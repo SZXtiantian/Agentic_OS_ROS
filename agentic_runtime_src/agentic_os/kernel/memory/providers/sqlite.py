@@ -27,12 +27,14 @@ class SQLiteMemoryProvider:
         self._error = ""
         self._fts_available = True
         self._fts_error = ""
+        self._last_error: dict[str, str] = {"operation": "", "error_code": "", "reason": ""}
         try:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             self._initialize()
         except Exception as exc:
             self._available = False
             self._error = str(exc)
+            self._record_error("initialize", "MEMORY_PROVIDER_UNAVAILABLE", str(exc))
 
     def add_memory(self, note: MemoryNote) -> dict[str, Any]:
         self._require_available()
@@ -152,34 +154,81 @@ class SQLiteMemoryProvider:
         return [self._note_from_row(row) for row in rows]
 
     def export_memories(self, agent_name: str, path: str | Path) -> dict[str, Any]:
-        self._require_available()
         destination = Path(path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        notes = [note.to_dict() for note in self.list_notes(agent_name, limit=100_000)]
-        with destination.open("w", encoding="utf-8") as handle:
-            for note in notes:
-                handle.write(_json_dumps(note) + "\n")
+        try:
+            self._require_available()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            notes = [note.to_dict() for note in self.list_notes(agent_name, limit=100_000)]
+            with destination.open("w", encoding="utf-8") as handle:
+                for note in notes:
+                    handle.write(_json_dumps(note) + "\n")
+        except Exception as exc:
+            error_code = "MEMORY_PROVIDER_UNAVAILABLE" if not self._available else "MEMORY_EXPORT_FAILED"
+            return self._failure(
+                "export",
+                error_code,
+                str(exc),
+                path=str(destination),
+            )
         return {"success": True, "path": str(destination), "count": len(notes)}
 
     def import_memories(self, agent_name: str, path: str | Path) -> dict[str, Any]:
-        self._require_available()
         source = Path(path)
-        if not source.exists():
-            return {"success": False, "error_code": "MEMORY_IMPORT_NOT_FOUND", "path": str(source)}
-        count = 0
-        with source.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                if not line.strip():
-                    continue
-                payload = _json_loads(line)
-                note = self._note_from_dict(payload)
-                if note.owner_agent and note.owner_agent != agent_name:
-                    return {"success": False, "error_code": "MEMORY_ACCESS_DENIED", "memory_id": note.id}
-                note.owner_agent = agent_name
-                result = self.add_memory(note)
-                if not result.get("success", False):
-                    return result
-                count += 1
+        try:
+            self._require_available()
+            if not source.exists():
+                return self._failure(
+                    "import",
+                    "MEMORY_IMPORT_NOT_FOUND",
+                    f"memory import file not found: {source}",
+                    path=str(source),
+                )
+            count = 0
+            with source.open("r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        continue
+                    try:
+                        payload = _json_loads(line)
+                    except json.JSONDecodeError as exc:
+                        return self._failure(
+                            "import",
+                            "MEMORY_IMPORT_INVALID_JSON",
+                            f"{exc.msg} at line {line_number}",
+                            path=str(source),
+                            line_number=line_number,
+                        )
+                    if not isinstance(payload, dict):
+                        return self._failure(
+                            "import",
+                            "MEMORY_IMPORT_INVALID_RECORD",
+                            f"memory import record at line {line_number} must be a JSON object",
+                            path=str(source),
+                            line_number=line_number,
+                        )
+                    note = self._note_from_dict(payload)
+                    if note.owner_agent and note.owner_agent != agent_name:
+                        return self._failure(
+                            "import",
+                            "MEMORY_ACCESS_DENIED",
+                            f"memory {note.id} is owned by {note.owner_agent}",
+                            path=str(source),
+                            memory_id=note.id,
+                        )
+                    note.owner_agent = agent_name
+                    result = self.add_memory(note)
+                    if not result.get("success", False):
+                        self._record_error("import", str(result.get("error_code") or "MEMORY_IMPORT_FAILED"), str(result))
+                        return result
+                    count += 1
+        except Exception as exc:
+            error_code = "MEMORY_PROVIDER_UNAVAILABLE" if not self._available else "MEMORY_IMPORT_FAILED"
+            return self._failure(
+                "import",
+                error_code,
+                str(exc),
+                path=str(source),
+            )
         return {"success": True, "path": str(source), "count": count}
 
     def status(self) -> dict[str, Any]:
@@ -190,24 +239,34 @@ class SQLiteMemoryProvider:
                 "error_code": "MEMORY_PROVIDER_UNAVAILABLE",
                 "reason": self._error,
                 "path": str(self.db_path),
+                "db_path": str(self.db_path),
+                "fts_available": bool(self._fts_available),
+                "last_error": dict(self._last_error),
             }
         try:
             with self._connect() as conn:
                 count = conn.execute("SELECT COUNT(*) AS count FROM memory_notes").fetchone()["count"]
         except Exception as exc:
+            self._record_error("status", "MEMORY_PROVIDER_UNAVAILABLE", str(exc))
             return {
                 "state": "unavailable",
                 "provider": "sqlite",
                 "error_code": "MEMORY_PROVIDER_UNAVAILABLE",
                 "reason": str(exc),
                 "path": str(self.db_path),
+                "db_path": str(self.db_path),
+                "fts_available": bool(self._fts_available),
+                "last_error": dict(self._last_error),
             }
         index_state = "ready" if self._fts_available else "unavailable"
         return {
             "state": "ready",
             "provider": "sqlite",
             "path": str(self.db_path),
+            "db_path": str(self.db_path),
             "note_count": int(count),
+            "fts_available": bool(self._fts_available),
+            "last_error": dict(self._last_error),
             "index": {
                 "type": "sqlite_fts5",
                 "state": index_state,
@@ -250,6 +309,7 @@ class SQLiteMemoryProvider:
             except sqlite3.Error as exc:
                 self._fts_available = False
                 self._fts_error = str(exc)
+                self._record_error("initialize_fts", "MEMORY_INDEX_UNAVAILABLE", str(exc))
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
@@ -259,6 +319,17 @@ class SQLiteMemoryProvider:
     def _require_available(self) -> None:
         if not self._available:
             raise RuntimeError(self._error or "memory provider unavailable")
+
+    def _record_error(self, operation: str, error_code: str, reason: str) -> None:
+        self._last_error = {
+            "operation": str(operation),
+            "error_code": str(error_code),
+            "reason": str(reason),
+        }
+
+    def _failure(self, operation: str, error_code: str, reason: str, **metadata: Any) -> dict[str, Any]:
+        self._record_error(operation, error_code, reason)
+        return {"success": False, "error_code": error_code, "reason": reason, **metadata}
 
     def _upsert_fts(self, conn: sqlite3.Connection, note: MemoryNote) -> None:
         if not self._fts_available:

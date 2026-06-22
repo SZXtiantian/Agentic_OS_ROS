@@ -36,6 +36,21 @@ def test_sqlite_memory_provider_persists_and_searches_with_fts(tmp_path):
     assert reopened.status()["index"]["state"] == "ready"
 
 
+def test_sqlite_memory_status_exposes_real_provider_observability(tmp_path):
+    db_path = tmp_path / "memory.sqlite3"
+    provider = SQLiteMemoryProvider(db_path)
+
+    status = provider.status()
+
+    assert status["state"] == "ready"
+    assert status["provider"] == "sqlite"
+    assert status["path"] == str(db_path)
+    assert status["db_path"] == str(db_path)
+    assert status["fts_available"] is True
+    assert status["index"]["type"] == "sqlite_fts5"
+    assert status["last_error"] == {"operation": "", "error_code": "", "reason": ""}
+
+
 def test_memory_manager_default_is_sqlite_not_in_memory():
     manager = MemoryManager()
 
@@ -119,6 +134,48 @@ def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_
     assert exported == {"success": True, "path": str(export_path), "count": 1}
     assert imported == {"success": True, "path": str(export_path), "count": 1}
     assert fetched["memory"]["content"] == "report ready"
+
+
+def test_memory_import_invalid_json_returns_stable_error_and_audit(tmp_path):
+    import_path = tmp_path / "bad.jsonl"
+    import_path.write_text("{not-json}\n", encoding="utf-8")
+    sink = InMemoryKernelEventSink()
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=None,
+        event_sink=sink,
+    )
+
+    imported = manager.import_("agent_a", str(import_path))
+
+    assert imported["success"] is False
+    assert imported["error_code"] == "MEMORY_IMPORT_INVALID_JSON"
+    assert imported["line_number"] == 1
+    assert manager.status()["last_error"]["error_code"] == "MEMORY_IMPORT_INVALID_JSON"
+    audit = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"][-1]
+    assert audit["metadata"]["action"] == "import"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "MEMORY_IMPORT_INVALID_JSON"
+
+
+def test_memory_export_file_error_returns_stable_error_and_audit(tmp_path):
+    sink = InMemoryKernelEventSink()
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=None,
+        event_sink=sink,
+    )
+    manager.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
+
+    exported = manager.export("agent_a", str(tmp_path))
+
+    assert exported["success"] is False
+    assert exported["error_code"] == "MEMORY_EXPORT_FAILED"
+    assert manager.status()["last_error"]["error_code"] == "MEMORY_EXPORT_FAILED"
+    audit = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"][-1]
+    assert audit["metadata"]["action"] == "export"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "MEMORY_EXPORT_FAILED"
 
 
 def test_dangerous_memory_operations_emit_audit_events(tmp_path):
@@ -227,3 +284,4 @@ def test_memory_provider_unavailable_status_and_error(tmp_path):
     assert response.success is False
     assert response.error_code == "MEMORY_PROVIDER_UNAVAILABLE"
     assert manager.status()["state"] == "unavailable"
+    assert manager.status()["last_error"]["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"

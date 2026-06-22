@@ -147,7 +147,7 @@ class MemoryManager:
         return self._audit_dangerous_result(
             "delete",
             agent_name,
-            self.provider.remove_memory(memory_id, agent_name),
+            self._call_provider_dangerous("delete", self.provider.remove_memory, memory_id, agent_name),
             memory_id=memory_id,
         )
 
@@ -175,7 +175,12 @@ class MemoryManager:
             return self._audit_dangerous_result(
                 "export",
                 agent_name,
-                self.provider.export_memories(agent_name, path),  # type: ignore[attr-defined]
+                self._call_provider_dangerous(
+                    "export",
+                    self.provider.export_memories,  # type: ignore[attr-defined]
+                    agent_name,
+                    path,
+                ),
                 export_path=path,
             )
         return self._audit_dangerous_result(
@@ -200,7 +205,12 @@ class MemoryManager:
             return self._audit_dangerous_result(
                 "import",
                 agent_name,
-                self.provider.import_memories(agent_name, path),  # type: ignore[attr-defined]
+                self._call_provider_dangerous(
+                    "import",
+                    self.provider.import_memories,  # type: ignore[attr-defined]
+                    agent_name,
+                    path,
+                ),
                 import_path=path,
             )
         return self._audit_dangerous_result(
@@ -296,6 +306,38 @@ class MemoryManager:
                 **metadata,
             )
         return result
+
+    def _call_provider_dangerous(self, action: str, fn: Any, *args: Any) -> dict[str, Any]:
+        try:
+            result = fn(*args)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error_code": "MEMORY_PROVIDER_UNAVAILABLE",
+                "reason": str(exc),
+                "operation": action,
+                "provider_status": self._safe_provider_status(),
+            }
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "MEMORY_PROVIDER_RESULT_INVALID",
+                "reason": f"provider returned {type(result).__name__}",
+                "operation": action,
+                "provider_status": self._safe_provider_status(),
+            }
+        return result
+
+    def _safe_provider_status(self) -> dict[str, Any]:
+        try:
+            return self.status()
+        except Exception as exc:
+            return {
+                "state": "unavailable",
+                "provider": self.provider.__class__.__name__,
+                "error_code": "MEMORY_PROVIDER_UNAVAILABLE",
+                "reason": str(exc),
+            }
 
     def _evict_if_needed(self, owner_agent: str) -> None:
         if not hasattr(self.provider, "list_notes"):
