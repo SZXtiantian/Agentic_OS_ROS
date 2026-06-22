@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import threading
+import time
 from types import SimpleNamespace
 
 from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
@@ -54,7 +56,7 @@ def test_tool_describe_status_and_cancel_are_stable(tmp_path):
     assert described["builtin"] is True
     assert status["status"]["registered"]
     assert cancel["success"] is False
-    assert cancel["error_code"] == "TOOL_CANCEL_UNSUPPORTED"
+    assert cancel["error_code"] == "SYSCALL_NOT_FOUND"
 
 
 def test_kernel_tool_builtin_call_requires_permission_and_succeeds_with_permission(tmp_path):
@@ -86,6 +88,55 @@ def test_kernel_tool_builtin_call_requires_permission_and_succeeds_with_permissi
     assert allowed.success is True
     assert allowed.response.data["result"] == {"value": 3}
     assert allowed.metadata["queue_name"] == "tool"
+
+
+def test_tool_cancel_active_call_is_cooperative_and_audited(tmp_path):
+    sink = InMemoryKernelEventSink()
+    manager = ToolManager(tool_root=tmp_path / "tools", event_sink=sink)
+    started = threading.Event()
+
+    def slow(args):
+        cancel_event = args["_cancel_event"]
+        started.set()
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            if cancel_event.is_set():
+                return {"stopped": True}
+            time.sleep(0.01)
+        return {"stopped": False}
+
+    manager.register("slow.tool", slow)
+    result: dict[str, object] = {}
+
+    def run_tool():
+        response = manager.address_request(
+            SimpleNamespace(
+                agent_name="agent_a",
+                operation_type="tool_call",
+                params={"name": "slow.tool", "args": {}, "call_id": "tool_call_1"},
+            )
+        )
+        result.update(response.as_mapping())
+
+    thread = threading.Thread(target=run_tool)
+    thread.start()
+    assert started.wait(timeout=1.0)
+
+    status = manager.status()
+    cancel = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_cancel", params={"call_id": "tool_call_1"})
+    )
+    thread.join(timeout=1.0)
+
+    assert status["active_calls"] == [{"call_id": "tool_call_1", "agent_name": "agent_a", "tool": "slow.tool"}]
+    assert cancel["success"] is True
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_CANCELLED"
+    assert manager.status()["active_calls"] == []
+    assert any(
+        event["event_type"] == "tool.cancel_requested" and event["metadata"]["call_id"] == "tool_call_1"
+        for event in sink.recent(limit=20)
+    )
 
 
 def test_tool_load_unload_register_builtin_require_intervention(tmp_path):

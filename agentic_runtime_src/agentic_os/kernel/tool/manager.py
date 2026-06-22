@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from typing import Any, Callable
+from uuid import uuid4
 
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.hooks import KernelEventSink
@@ -20,6 +22,15 @@ ToolHandler = Callable[[dict[str, Any]], Any]
 def _forbidden_prefixes() -> tuple[str, ...]:
     direct_velocity = "_".join(["cmd", "vel"])
     return ("robot.", "arm.", "gripper.", "perception.", "ros2.", "nav2.", "moveit.", direct_velocity)
+
+
+@dataclass
+class _ActiveToolCall:
+    call_id: str
+    agent_name: str
+    tool_name: str
+    conflicts: set[str]
+    cancel_event: Event
 
 
 class ToolManager:
@@ -44,6 +55,7 @@ class ToolManager:
         self._descriptions: dict[str, str] = {}
         self._manifests: dict[str, ToolManifest] = {}
         self._active: set[str] = set()
+        self._active_calls: dict[str, _ActiveToolCall] = {}
         self._lock = Lock()
         self._audit_events: list[dict[str, Any]] = []
         self._register_builtin_tools()
@@ -95,6 +107,7 @@ class ToolManager:
                         str(params.get("name") or operation),
                         dict(params.get("args") or params.get("parameters") or {}),
                         tuple(params.get("permissions") or ()),
+                        call_id=str(params.get("call_id") or syscall.syscall_id),
                     )
                 )
             if operation == "tool_list":
@@ -142,13 +155,16 @@ class ToolManager:
             if operation == "tool_status":
                 return self._kernel_response({"success": True, "status": self.status()})
             if operation == "tool_cancel":
-                return self._kernel_response({"success": False, "error_code": "TOOL_CANCEL_UNSUPPORTED"})
+                return self._kernel_response(
+                    self.cancel(str(params.get("call_id") or params.get("syscall_id") or params.get("correlation_id") or ""))
+                )
             return self._kernel_response(
                 self.call_tool(
                     syscall.agent_name,
                     str(params.get("name") or operation),
                     dict(params.get("args") or params.get("parameters") or {}),
                     tuple(params.get("permissions") or ()),
+                    call_id=str(params.get("call_id") or syscall.syscall_id),
                 )
             )
         except ValueError as exc:
@@ -162,6 +178,7 @@ class ToolManager:
         tool_name: str,
         tool_args: dict[str, Any],
         permissions: tuple[str, ...] = (),
+        call_id: str = "",
     ) -> dict[str, Any]:
         if self._is_forbidden(tool_name):
             return {"success": False, "error_code": "TOOL_FORBIDDEN_ROBOT_CAPABILITY"}
@@ -172,20 +189,40 @@ class ToolManager:
         if handler is None:
             return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": tool_name}
         conflicts = self._conflicts.get(tool_name, {tool_name})
+        call_id = call_id or f"tool_{uuid4().hex}"
+        cancel_event = Event()
         with self._lock:
             if self._active & conflicts:
                 return {"success": False, "error_code": "TOOL_BUSY", "tool": tool_name}
             self._active.update(conflicts)
+            self._active_calls[call_id] = _ActiveToolCall(
+                call_id=call_id,
+                agent_name=agent_name,
+                tool_name=tool_name,
+                conflicts=set(conflicts),
+                cancel_event=cancel_event,
+            )
         try:
-            self._record_tool_event("tool.started", agent_name, tool_name)
-            return {"success": True, "tool": tool_name, "result": handler(tool_args)}
+            self._record_tool_event("tool.started", agent_name, tool_name, {"call_id": call_id})
+            result = handler({**tool_args, "_cancel_event": cancel_event})
+            if cancel_event.is_set():
+                self._record_tool_event("tool.cancelled", agent_name, tool_name, {"call_id": call_id})
+                return {
+                    "success": False,
+                    "error_code": "TOOL_CANCELLED",
+                    "tool": tool_name,
+                    "call_id": call_id,
+                    "result": result,
+                }
+            return {"success": True, "tool": tool_name, "call_id": call_id, "result": result}
         except Exception as exc:
-            self._record_tool_event("tool.failed", agent_name, tool_name, {"reason": str(exc)})
-            return {"success": False, "error_code": "TOOL_FAILED", "reason": str(exc), "tool": tool_name}
+            self._record_tool_event("tool.failed", agent_name, tool_name, {"reason": str(exc), "call_id": call_id})
+            return {"success": False, "error_code": "TOOL_FAILED", "reason": str(exc), "tool": tool_name, "call_id": call_id}
         finally:
-            self._record_tool_event("tool.done", agent_name, tool_name)
+            self._record_tool_event("tool.done", agent_name, tool_name, {"call_id": call_id})
             with self._lock:
                 self._active.difference_update(conflicts)
+                self._active_calls.pop(call_id, None)
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [self.describe(name) for name in sorted(self._registry)]
@@ -243,6 +280,28 @@ class ToolManager:
         self.register(name, handler, description=description)
         return self._audit_dangerous_result("register_builtin", agent_name, name, {"success": True, "tool": name})
 
+    def cancel(self, call_id: str = "") -> dict[str, Any]:
+        if not call_id:
+            return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "reason": "call_id required"}
+        with self._lock:
+            active = self._active_calls.get(call_id)
+        if active is None:
+            return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "call_id": call_id}
+        active.cancel_event.set()
+        self._record_tool_event(
+            "tool.cancel_requested",
+            active.agent_name,
+            active.tool_name,
+            {"call_id": call_id},
+        )
+        return {
+            "success": True,
+            "status": "cancel_requested",
+            "cancelled": [call_id],
+            "call_id": call_id,
+            "tool": active.tool_name,
+        }
+
     def _is_forbidden(self, name: str, permissions: tuple[str, ...] = ()) -> bool:
         lowered = name.lower()
         values = [lowered, *(permission.lower() for permission in permissions)]
@@ -281,6 +340,10 @@ class ToolManager:
         return {
             "tool_count": len(self._registry),
             "active": sorted(self._active),
+            "active_calls": [
+                {"call_id": call.call_id, "agent_name": call.agent_name, "tool": call.tool_name}
+                for call in sorted(self._active_calls.values(), key=lambda item: item.call_id)
+            ],
             "registered": sorted(self._registry),
             "mcp": self.mcp_server.status(),
             "sandbox": self.sandbox_policy.to_dict(),
@@ -347,4 +410,4 @@ class ToolManager:
             }
         )
         if self.event_sink is not None:
-            self.event_sink.emit(event_type, agent_name=agent_name, tool=tool_name, metadata=dict(metadata or {}))
+            self.event_sink.emit(event_type, agent_name=agent_name, tool=tool_name, **dict(metadata or {}))
