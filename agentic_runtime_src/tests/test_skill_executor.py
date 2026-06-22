@@ -162,6 +162,26 @@ def test_memory_remember_recall_success(tmp_path):
     asyncio.run(run())
 
 
+def test_skill_backend_response_must_explicitly_report_success(tmp_path):
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+
+        async def malformed_dispatch(*args, **kwargs):
+            return {"message": "missing success flag"}
+
+        executor.dispatcher.dispatch = malformed_dispatch
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "report.say", {"message": "hello"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "SKILL_RESULT_INVALID"
+        assert "missing success" in result.reason
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "SKILL_RESULT_INVALID"
+
+    asyncio.run(run())
+
+
 def test_forbidden_zone_requires_real_safety_backend_before_navigation(tmp_path):
     async def run():
         executor, bridge_calls, _, _ = make_executor(tmp_path)

@@ -259,7 +259,28 @@ class SkillExecutor:
         return "robot_motion"
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
-        success = bool(raw.get("success", raw.get("answered", True)))
+        if not isinstance(raw, dict):
+            return SkillResult(
+                success=False,
+                data={"raw_type": type(raw).__name__},
+                error_code="SKILL_RESULT_INVALID",
+                reason="skill backend response must be an object",
+                recoverable=True,
+                suggested_recovery=["check_backend_contract"],
+            )
+        if "success" in raw:
+            success = bool(raw["success"])
+        elif "answered" in raw:
+            success = bool(raw["answered"])
+        else:
+            return SkillResult(
+                success=False,
+                data=dict(raw),
+                error_code="SKILL_RESULT_INVALID",
+                reason="skill backend response missing success field",
+                recoverable=True,
+                suggested_recovery=["check_backend_contract"],
+            )
         if success:
             data = dict(raw)
             data.pop("success", None)
