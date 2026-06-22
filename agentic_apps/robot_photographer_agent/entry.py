@@ -20,7 +20,7 @@ class RobotPhotographerAgent:
     def __init__(self, agent_name: str = "robot_photographer_agent", runtime: RuntimeServer | None = None, mock: bool = False) -> None:
         self.agent_name = agent_name
         self.runtime = runtime
-        self.mock = mock
+        self._legacy_simulated_requested = bool(mock)
 
     def run(self, task_input: Any) -> dict[str, Any]:
         try:
@@ -31,8 +31,8 @@ class RobotPhotographerAgent:
 
     async def arun(self, task_input: Any) -> dict[str, Any]:
         task = _normalize_task(task_input)
-        requested_mock = bool(task.get("mock", self.mock))
-        if self.runtime is None and requested_mock:
+        requested_simulated = bool(task.pop("mock", False) or self._legacy_simulated_requested)
+        if self.runtime is None and requested_simulated:
             return {
                 "schema_version": "1.0",
                 "success": False,
@@ -77,7 +77,6 @@ class RobotPhotographerAgent:
             "robot_photographer_agent",
             plan=validated,
             task_input=task,
-            mock=requested_mock,
         )
 
 

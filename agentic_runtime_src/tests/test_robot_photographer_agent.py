@@ -66,6 +66,9 @@ def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, mo
         assert not (app_storage / "indexes" / "photos.jsonl").exists()
         assert any(record.get("skill_name") == "perception.capture_photo" for record in server.audit_logger.recent(limit=20))
         assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
+        session = server.session_manager.get_session(result["session_id"])
+        assert session is not None
+        assert "mock" not in session.task["task_input"]
         recent = await agent.arun({"text": "查看最近照片", "mock": True})
         photos = recent["result"]["steps"][0]["photos"]
         assert photos == []
