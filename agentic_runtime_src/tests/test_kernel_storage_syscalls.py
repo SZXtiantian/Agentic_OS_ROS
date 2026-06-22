@@ -27,6 +27,8 @@ def test_sto_write_and_retrieve(tmp_path):
     )
 
     assert result["success"] is True
+    assert result["retrieval_mode"] == "lexical_fts"
+    assert result["semantic"] is False
     assert result["matches"][0]["relative_path"] == "reports/x.md"
 
 
@@ -92,6 +94,7 @@ def test_sto_share_updates_policy_only_after_confirmation(tmp_path):
     assert allowed["success"] is True
     assert allowed["sharing_policy"]["labels"] == ["shared"]
     assert allowed["sharing_policy"]["metadata"] == {"scope": "operator"}
+    assert storage.share_policy("reports/x.md")["sharing_policy"]["metadata"] == {"scope": "operator"}
 
 
 def test_lsfs_adapter_status_implemented_true_when_enabled(tmp_path):
@@ -117,6 +120,8 @@ def test_lsfs_adapter_mount_write_retrieve_and_version(tmp_path):
     assert first["version"] == ""
     assert second["version"].endswith(".bak")
     assert second["metadata"] == {"kind": "report"}
+    assert retrieved["retrieval_mode"] == "lexical_fts"
+    assert retrieved["semantic"] is False
     assert retrieved["matches"][0]["relative_path"] == "workspace/reports/x.md"
     assert "snippet" in retrieved["matches"][0]
 

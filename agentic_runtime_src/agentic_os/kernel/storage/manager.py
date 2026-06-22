@@ -31,7 +31,6 @@ class StorageManager:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.access_manager = access_manager
-        self._shares: dict[str, dict[str, Any]] = {}
         self.index_path = self.root / ".storage_index.sqlite3"
         self._index_available = True
         self._index_error = ""
@@ -167,7 +166,7 @@ class StorageManager:
             if not indexed.get("success", False):
                 return indexed
         matches = self._search_index(query, collection_name, limit)
-        return {"success": True, "matches": matches}
+        return {"success": True, "matches": matches, "retrieval_mode": "lexical_fts", "semantic": False}
 
     def rollback(self, relative_path: str, version: str = "") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -241,8 +240,20 @@ class StorageManager:
         decision = self._check_access("share", relative_path, irreversible=True)
         if not decision.get("success", True):
             return decision
-        self._shares[relative_path] = {"labels": ["shared"], "metadata": dict(metadata or {})}
-        return {"success": True, "path": str(path), "sharing_policy": self._shares[relative_path]}
+        if not self._index_available:
+            return {"success": False, "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE", "reason": self._index_error}
+        sharing_policy = {"labels": ["shared"], "metadata": dict(metadata or {})}
+        self._save_share_policy(str(Path(relative_path)), sharing_policy)
+        return {"success": True, "path": str(path), "sharing_policy": sharing_policy, "share_registry_path": str(self.index_path)}
+
+    def share_policy(self, relative_path: str) -> dict[str, Any]:
+        self._safe_path(relative_path, allow_root=False)
+        if not self._index_available:
+            return {"success": False, "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE", "reason": self._index_error}
+        policy = self._load_share_policy(str(Path(relative_path)))
+        if policy is None:
+            return {"success": False, "error_code": "STORAGE_SHARE_NOT_FOUND", "path": relative_path}
+        return {"success": True, "path": relative_path, "sharing_policy": policy, "share_registry_path": str(self.index_path)}
 
     def status(self) -> dict[str, Any]:
         if not self._index_available:
@@ -266,7 +277,15 @@ class StorageManager:
                     "reason": str(exc),
                     "path": str(self.index_path),
                 }
+                share_registry = {
+                    "type": "sqlite",
+                    "state": "unavailable",
+                    "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE",
+                    "reason": str(exc),
+                    "path": str(self.index_path),
+                }
             else:
+                share_count = self._share_count()
                 index = {
                     "type": "sqlite_fts5",
                     "state": "ready",
@@ -275,7 +294,34 @@ class StorageManager:
                     "path": str(self.index_path),
                     "indexed_count": int(indexed_count),
                 }
-        return {"state": "ready", "provider": "local_fs", "root": str(self.root), "index": index}
+                share_registry = {
+                    "type": "sqlite",
+                    "state": "ready",
+                    "error_code": "",
+                    "reason": "",
+                    "path": str(self.index_path),
+                    "share_count": int(share_count),
+                }
+        if not self._index_available:
+            share_registry = {
+                "type": "sqlite",
+                "state": "unavailable",
+                "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE",
+                "reason": self._index_error,
+                "path": str(self.index_path),
+            }
+        return {
+            "state": "ready",
+            "provider": "local_fs",
+            "root": str(self.root),
+            "index": index,
+            "share_registry": share_registry,
+            "semantic_retrieval": {
+                "state": "unavailable",
+                "error_code": "STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED",
+                "reason": "no real embedding/vector provider configured; retrieve uses lexical SQLite FTS",
+            },
+        }
 
     def _safe_path(self, relative_path: str, *, allow_root: bool = False) -> Path:
         path = Path(relative_path or ".")
@@ -338,6 +384,12 @@ class StorageManager:
                     );
                     CREATE VIRTUAL TABLE IF NOT EXISTS storage_files_fts
                     USING fts5(relative_path UNINDEXED, collection_name UNINDEXED, content, metadata);
+                    CREATE TABLE IF NOT EXISTS storage_shares (
+                        relative_path TEXT PRIMARY KEY,
+                        labels_json TEXT NOT NULL,
+                        metadata_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
                     """
                 )
         except Exception as exc:
@@ -405,6 +457,43 @@ class StorageManager:
         with self._connect_index() as conn:
             row = conn.execute(sql, params).fetchone()
         return int(row["count"]) > 0
+
+    def _save_share_policy(self, relative_path: str, sharing_policy: dict[str, Any]) -> None:
+        labels_json = json.dumps(list(sharing_policy.get("labels") or []), ensure_ascii=False, sort_keys=True)
+        metadata_json = json.dumps(dict(sharing_policy.get("metadata") or {}), ensure_ascii=False, sort_keys=True)
+        updated_at = datetime.now(timezone.utc).isoformat()
+        with self._connect_index() as conn:
+            conn.execute(
+                """
+                INSERT INTO storage_shares(relative_path, labels_json, metadata_json, updated_at)
+                VALUES(?, ?, ?, ?)
+                ON CONFLICT(relative_path) DO UPDATE SET
+                    labels_json=excluded.labels_json,
+                    metadata_json=excluded.metadata_json,
+                    updated_at=excluded.updated_at
+                """,
+                (relative_path, labels_json, metadata_json, updated_at),
+            )
+
+    def _load_share_policy(self, relative_path: str) -> dict[str, Any] | None:
+        with self._connect_index() as conn:
+            row = conn.execute(
+                "SELECT labels_json, metadata_json FROM storage_shares WHERE relative_path=?",
+                (relative_path,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "labels": list(json.loads(row["labels_json"] or "[]")),
+            "metadata": dict(json.loads(row["metadata_json"] or "{}")),
+        }
+
+    def _share_count(self) -> int:
+        if not self._index_available:
+            return 0
+        with self._connect_index() as conn:
+            row = conn.execute("SELECT COUNT(*) AS count FROM storage_shares").fetchone()
+        return int(row["count"])
 
     def _search_index(self, query: str, collection_name: str, limit: int) -> list[dict[str, Any]]:
         query_text = self._fts_query(query)

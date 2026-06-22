@@ -28,10 +28,14 @@ def test_storage_write_indexes_and_retrieves_with_sqlite_fts(tmp_path):
 
     assert write["success"] is True
     assert retrieved["success"] is True
+    assert retrieved["retrieval_mode"] == "lexical_fts"
+    assert retrieved["semantic"] is False
     assert retrieved["matches"][0]["relative_path"] == "reports/a.md"
     assert retrieved["matches"][0]["metadata"]["kind"] == "report"
     assert status["index"]["state"] == "ready"
     assert status["index"]["indexed_count"] == 1
+    assert status["semantic_retrieval"]["state"] == "unavailable"
+    assert status["semantic_retrieval"]["error_code"] == "STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED"
 
 
 def test_storage_stat_history_and_specific_rollback(tmp_path):
@@ -50,6 +54,26 @@ def test_storage_stat_history_and_specific_rollback(tmp_path):
     assert history["versions"][0]["version"] == second["version"]
     assert rollback["success"] is True
     assert read["content"] == "old"
+
+
+def test_storage_share_registry_persists_across_manager_reopen(tmp_path):
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    root = tmp_path / "storage"
+    storage = StorageManager(root, access_manager=access)
+    storage.write("reports/a.md", "share me")
+
+    shared = storage.share("reports/a.md", {"scope": "operator"})
+    reopened = StorageManager(root)
+    policy = reopened.share_policy("reports/a.md")
+    status = reopened.status()
+
+    assert shared["success"] is True
+    assert shared["share_registry_path"] == str(root / ".storage_index.sqlite3")
+    assert policy["success"] is True
+    assert policy["sharing_policy"]["labels"] == ["shared"]
+    assert policy["sharing_policy"]["metadata"] == {"scope": "operator"}
+    assert status["share_registry"]["state"] == "ready"
+    assert status["share_registry"]["share_count"] == 1
 
 
 def test_storage_syscall_roundtrip_and_status(tmp_path):
