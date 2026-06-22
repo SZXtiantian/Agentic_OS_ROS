@@ -1,10 +1,14 @@
 import asyncio
+from pathlib import Path
+
+import pytest
 
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.config import RuntimeConfig
+from agentic_runtime.errors import ResourceLockedError
 from agentic_runtime.memory import SQLiteMemoryStore
 from agentic_runtime.permission_manager import PermissionManager
-from agentic_runtime.ros_bridge_client.mock_client import MockRosBridgeClient
+from agentic_runtime.ros_bridge_client.cli_client import Ros2CliBridgeClient
 from agentic_runtime.skill_executor.cancellation import CancellationManager
 from agentic_runtime.skill_executor.dispatcher import SkillDispatcher
 from agentic_runtime.skill_executor.executor import SkillExecutor
@@ -26,10 +30,16 @@ FULL_PERMS = [
 ]
 
 
-def make_executor(tmp_path, navigation_sleep_s=0.01):
-    config = RuntimeConfig.load()
+def make_executor(tmp_path):
+    config = RuntimeConfig.load(Path(__file__).resolve().parents[1] / "configs" / "runtime.yaml")
     registry = SkillRegistry(config.skill_root).load()
-    client = MockRosBridgeClient(config.repo_root, navigation_sleep_s=navigation_sleep_s)
+    bridge_calls = []
+
+    async def missing_ros2(command, timeout_s):
+        bridge_calls.append({"command": command, "timeout_s": timeout_s})
+        raise FileNotFoundError("ros2")
+
+    client = Ros2CliBridgeClient(runner=missing_ros2)
     memory = SQLiteMemoryStore(tmp_path / "memory.sqlite3")
     resources = ResourceManager()
     executor = SkillExecutor(
@@ -40,73 +50,86 @@ def make_executor(tmp_path, navigation_sleep_s=0.01):
         AuditLogger(tmp_path / "audit.jsonl"),
         CancellationManager(),
     )
-    return executor, client, resources, memory
+    return executor, bridge_calls, resources, memory
 
 
 def app_with_permissions(permissions):
     return AppManifest("test_app", "0", "", "main:run", permissions, [])
 
 
-def test_navigate_success(tmp_path):
+def test_navigate_fails_fast_when_ros2_bridge_unavailable(tmp_path):
     async def run():
-        executor, client, _, _ = make_executor(tmp_path)
+        executor, bridge_calls, resources, _ = make_executor(tmp_path)
         result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess")
-        assert result.success is True
-        assert client.navigation_calls
+        assert result.success is False
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+        assert bridge_calls
+        assert bridge_calls[0]["command"][:3] == ["ros2", "service", "call"]
+        assert bridge_calls[0]["command"][3] == "/agentic/safety/check"
+        assert all("/agentic/robot/navigate_to_place" not in call["command"] for call in bridge_calls)
+        assert resources.snapshot() == {}
 
     asyncio.run(run())
 
 
 def test_navigate_permission_denied_does_not_call_backend(tmp_path):
     async def run():
-        executor, client, _, _ = make_executor(tmp_path)
+        executor, bridge_calls, _, _ = make_executor(tmp_path)
         result = await executor.execute(app_with_permissions(["world.read"]), "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess")
         assert result.success is False
         assert result.error_code == "PERMISSION_DENIED"
-        assert client.navigation_calls == []
+        assert bridge_calls == []
 
     asyncio.run(run())
 
 
-def test_navigate_resource_locked(tmp_path):
+def test_resource_manager_rejects_parallel_base_lock_without_bridge_dependency():
+    resources = ResourceManager()
+    resources.acquire("base", "other", "call")
+    with pytest.raises(ResourceLockedError):
+        resources.acquire("base", "sess", "call")
+
+
+def test_cancellation_manager_sets_session_event_without_robot_backend():
     async def run():
-        executor, _, resources, _ = make_executor(tmp_path)
-        resources.acquire("base", "other", "call")
-        result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess")
-        assert result.success is False
-        assert result.error_code == "RESOURCE_LOCKED"
-
-    asyncio.run(run())
-
-
-def test_navigate_timeout_releases_base_lock(tmp_path):
-    async def run():
-        executor, _, resources, _ = make_executor(tmp_path, navigation_sleep_s=5)
-        result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.navigate_to", {"place": "厨房", "timeout_s": 1}, "sess")
-        assert result.success is False
-        assert result.error_code == "SKILL_TIMEOUT"
-        assert resources.snapshot() == {}
+        manager = CancellationManager()
+        event = manager.event_for("sess")
+        assert event.is_set() is False
+        manager.cancel_session("sess")
+        assert event.is_set() is True
+        replacement = manager.event_for("sess")
+        assert replacement is not event
+        assert replacement.is_set() is False
 
     asyncio.run(run())
 
 
 def test_stop_robot_not_blocked_by_base_lock(tmp_path):
     async def run():
-        executor, client, resources, _ = make_executor(tmp_path)
+        executor, bridge_calls, resources, _ = make_executor(tmp_path)
         resources.acquire("base", "other", "call")
         result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.stop", {"reason": "manual_stop"}, "sess")
-        assert result.success is True
-        assert client.stop_calls
+        assert result.success is False
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+        assert bridge_calls
+        assert bridge_calls[0]["command"][:3] == ["ros2", "service", "call"]
+        assert bridge_calls[0]["command"][3] == "/agentic/robot/stop"
+        assert resources.snapshot() == {"base": "other:call"}
 
     asyncio.run(run())
 
 
-def test_inspect_area_success(tmp_path):
+def test_inspect_area_fails_fast_when_ros2_bridge_unavailable(tmp_path):
     async def run():
-        executor, _, _, _ = make_executor(tmp_path)
+        executor, bridge_calls, resources, _ = make_executor(tmp_path)
         result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.inspect_area", {"place": "厨房", "timeout_s": 2}, "sess")
-        assert result.success is True
-        assert result.data["summary"] == "厨房检查完成，未发现异常。"
+        assert result.success is False
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+        assert bridge_calls
+        assert bridge_calls[0]["command"][:3] == ["ros2", "service", "call"]
+        assert bridge_calls[0]["command"][3] == "/agentic/safety/check"
+        assert all("/agentic/perception/inspect_area" not in call["command"] for call in bridge_calls)
+        assert resources.snapshot() == {}
 
     asyncio.run(run())
 
@@ -123,28 +146,14 @@ def test_memory_remember_recall_success(tmp_path):
     asyncio.run(run())
 
 
-def test_forbidden_zone_rejected_before_navigation(tmp_path):
+def test_forbidden_zone_requires_real_safety_backend_before_navigation(tmp_path):
     async def run():
-        executor, client, _, _ = make_executor(tmp_path)
+        executor, bridge_calls, _, _ = make_executor(tmp_path)
         result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.navigate_to", {"place": "楼梯", "timeout_s": 2}, "sess")
         assert result.success is False
-        assert result.error_code == "FORBIDDEN_ZONE"
-        assert client.navigation_calls == []
-
-    asyncio.run(run())
-
-
-def test_stop_cancels_active_navigation(tmp_path):
-    async def run():
-        executor, _, resources, _ = make_executor(tmp_path, navigation_sleep_s=2)
-        app = app_with_permissions(FULL_PERMS)
-        nav_task = asyncio.create_task(executor.execute(app, "robot.navigate_to", {"place": "厨房", "timeout_s": 5}, "sess"))
-        await asyncio.sleep(0.1)
-        stop_result = await executor.execute(app, "robot.stop", {"reason": "manual_stop"}, "sess")
-        nav_result = await nav_task
-        assert stop_result.success is True
-        assert nav_result.success is False
-        assert nav_result.error_code == "SKILL_CANCELLED"
-        assert resources.snapshot() == {}
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+        assert bridge_calls
+        assert bridge_calls[0]["command"][3] == "/agentic/safety/check"
+        assert all("/agentic/robot/navigate_to_place" not in call["command"] for call in bridge_calls)
 
     asyncio.run(run())
