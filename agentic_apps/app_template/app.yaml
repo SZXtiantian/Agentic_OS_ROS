@@ -4,8 +4,17 @@ description: Template for Agentic OS apps.
 entrypoint: main:run
 permissions:
   - report.say
+  - memory.write
+  - memory.read
+  - storage.read
+  - storage.write
+  - tool.execute.calculator.add
 required_capabilities:
   - report.say
+  - kernel.context
+  - kernel.memory
+  - kernel.storage
+  - calculator.add
 safety_policy:
   allow_autonomous_navigation: false
   allow_manipulation: false
