@@ -46,6 +46,16 @@ class MalformedProvider:
         return {"success": True, "content": "not a KernelResponse"}
 
 
+class NonBooleanSuccessProvider:
+    def complete(self, query: LLMQuery) -> KernelResponse:
+        return KernelResponse("true", response_message={"content": "fake success"})
+
+
+class MissingErrorCodeProvider:
+    def complete(self, query: LLMQuery) -> KernelResponse:
+        return KernelResponse(False, metadata={"reason": "provider failed without code"})
+
+
 class JSONProvider:
     def __init__(self, content: str) -> None:
         self.content = content
@@ -86,6 +96,15 @@ class RaisingBatchProvider(BatchLLMProvider):
     def complete_batch(self, queries: list[LLMQuery]):
         self.batches.append(list(queries))
         raise RuntimeError("batch provider crashed")
+
+
+class InvalidKernelResponseBatchProvider(BatchLLMProvider):
+    def complete_batch(self, queries: list[LLMQuery]):
+        self.batches.append(list(queries))
+        return [
+            KernelResponse("true", response_message={"content": "fake success"}),
+            KernelResponse(False, metadata={"reason": "missing code"}),
+        ]
 
 
 class BlockingProvider:
@@ -210,6 +229,38 @@ def test_llm_provider_non_kernel_response_is_rejected():
     assert response.metadata["reason"] == "provider complete returned dict"
 
 
+def test_llm_provider_success_field_must_be_bool_and_audits():
+    sink = InMemoryKernelEventSink()
+    adapter = LLMAdapter(
+        [LLMConfig(name="bad-success", backend="openai_compatible")],
+        providers={"bad-success": NonBooleanSuccessProvider()},
+        event_sink=sink,
+    )
+
+    response = adapter.complete(LLMQuery(operation_type="chat"))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
+    assert response.metadata["success_type"] == "str"
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "llm.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
+
+
+def test_llm_provider_failure_without_error_code_is_stable_error():
+    adapter = LLMAdapter(
+        [LLMConfig(name="missing-code", backend="openai_compatible")],
+        providers={"missing-code": MissingErrorCodeProvider()},
+    )
+
+    response = adapter.complete(LLMQuery(operation_type="chat"))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_ERROR
+    assert response.metadata["reason"] == "provider complete failed without error_code"
+    assert response.metadata["provider_metadata"] == {"reason": "provider failed without code"}
+
+
 def test_llm_batch_provider_malformed_items_are_rejected_per_item():
     provider = MalformedBatchProvider()
     adapter = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
@@ -220,6 +271,19 @@ def test_llm_batch_provider_malformed_items_are_rejected_per_item():
     assert responses[1].error_code == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
     assert responses[1].metadata["reason"] == "provider complete_batch returned dict"
     assert responses[2].error_code == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
+
+
+def test_llm_batch_provider_kernel_response_contract_is_enforced_per_item():
+    provider = InvalidKernelResponseBatchProvider()
+    adapter = LLMAdapter([LLMConfig(name="batch", backend="openai_compatible")], providers={"batch": provider})
+
+    responses = adapter.complete_batch([LLMQuery(operation_type="chat") for _ in range(2)])
+
+    assert [response.success for response in responses] == [False, False]
+    assert responses[0].error_code == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
+    assert responses[0].metadata["success_type"] == "str"
+    assert responses[1].error_code == LLMCoreErrorCode.PROVIDER_ERROR
+    assert responses[1].metadata["reason"] == "provider complete_batch failed without error_code"
 
 
 def test_llm_batch_provider_exception_returns_stable_errors():

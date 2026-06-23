@@ -141,7 +141,7 @@ class LLMAdapter:
             provider = self._provider_for(config)
             response = enforce_json_response(query.response_format, self._complete_with_provider(provider, query))
             self._audit_provider_result(query, config, response)
-            if response.success:
+            if response.success is True:
                 response.metadata.setdefault("model", config.name)
                 return response
             last_response = response
@@ -176,7 +176,7 @@ class LLMAdapter:
                 response.metadata.setdefault("model", config.name)
             for query, response in zip(queries, responses, strict=False):
                 self._audit_provider_result(query, config, response, batch=True)
-            if any(response.success for response in responses):
+            if any(response.success is True for response in responses):
                 return _normalize_batch_length(responses, len(queries))
             last_responses = responses
         return _normalize_batch_length(
@@ -203,6 +203,7 @@ class LLMAdapter:
         provider = self._provider_for(config)
         if hasattr(provider, "complete_with_time_slice"):
             response, next_snapshot = provider.complete_with_time_slice(query, time_slice_s, snapshot)
+            response = self._normalize_provider_response(response, operation="complete_with_time_slice")
             response.metadata.setdefault("model", config.name)
             self._audit_provider_result(query, config, response, time_slice=True)
             return response, next_snapshot
@@ -258,6 +259,22 @@ class LLMAdapter:
 
     def _normalize_provider_response(self, result: Any, *, operation: str) -> KernelResponse:
         if isinstance(result, KernelResponse):
+            if not isinstance(result.success, bool):
+                return KernelResponse.error(
+                    LLMCoreErrorCode.PROVIDER_RESULT_INVALID,
+                    metadata={
+                        "reason": f"provider {operation} response success field must be boolean",
+                        "success_type": type(result.success).__name__,
+                    },
+                )
+            if result.success is False and not result.error_code:
+                return KernelResponse.error(
+                    LLMCoreErrorCode.PROVIDER_ERROR,
+                    metadata={
+                        "reason": f"provider {operation} failed without error_code",
+                        "provider_metadata": dict(result.metadata),
+                    },
+                )
             return result
         return KernelResponse.error(
             LLMCoreErrorCode.PROVIDER_RESULT_INVALID,
@@ -312,7 +329,7 @@ class LLMAdapter:
     def _status_response(self, call_id: str = "") -> KernelResponse:
         status = self.status(call_id=call_id)
         if call_id:
-            if status.get("success", False):
+            if status.get("success") is True:
                 return KernelResponse.ok(status, data=status)
             return KernelResponse.error(str(status.get("error_code") or "SYSCALL_NOT_FOUND"), metadata=status)
         return KernelResponse.ok({"status": status}, data={"status": status})
@@ -486,7 +503,7 @@ class LLMAdapter:
             request_id=query.request_id,
             provider_name=config.name if config is not None else "",
             backend=config.backend if config is not None else "",
-            success=response.success,
+            success=response.success is True,
             error_code=response.error_code,
             external_provider=config.backend if config is not None else "",
             **metadata,
@@ -500,7 +517,7 @@ class LLMAdapter:
             action="cancel",
             operation_type="llm_cancel",
             call_id=call_id,
-            success=response.success,
+            success=response.success is True,
             error_code=response.error_code,
             external_provider="",
         )
@@ -513,7 +530,7 @@ class LLMAdapter:
             action="status",
             operation_type="llm_status",
             call_id=call_id,
-            success=bool(result.get("success", False)),
+            success=result.get("success") is True,
             error_code=str(result.get("error_code") or ""),
             external_provider="",
         )

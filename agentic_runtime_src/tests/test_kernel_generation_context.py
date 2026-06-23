@@ -1,7 +1,7 @@
 from agentic_os.kernel.context import GenerationSnapshot, SessionContextManager, SimpleGenerationContextManager
 from agentic_os.kernel.access import AccessManager
 from agentic_os.kernel.hooks import KernelQueueName, KernelQueueStore
-from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
+from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig, LLMCoreErrorCode
 from agentic_os.kernel.scheduler import RoundRobinKernelScheduler, SchedulerLaneSpec
 from agentic_os.kernel.system_call import KernelResponse, LLMQuery, RobotCapabilityQuery, SyscallExecutor
 
@@ -131,6 +131,24 @@ def test_llm_adapter_time_slice_marks_non_preemptible_provider():
 
     assert response.success is True
     assert response.metadata["non_preemptible_llm_call"] is True
+    assert snapshot is None
+
+
+def test_llm_time_slice_provider_success_field_must_be_bool():
+    class Provider:
+        def complete(self, query):
+            return KernelResponse.ok({"text": "done"})
+
+        def complete_with_time_slice(self, query, time_slice_s, snapshot=None):
+            return KernelResponse("true", response_message={"text": "fake success"}), None
+
+    adapter = LLMAdapter([LLMConfig(name="configured", backend="openai_compatible")], providers={"configured": Provider()})
+
+    response, snapshot = adapter.complete_with_time_slice(LLMQuery(operation_type="chat"), time_slice_s=0.001)
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_RESULT_INVALID
+    assert response.metadata["success_type"] == "str"
     assert snapshot is None
 
 
