@@ -92,6 +92,45 @@ def test_robot_manager_rejects_malformed_backend_result():
     assert audit["metadata"]["error_code"] == "ROBOT_RESULT_INVALID"
 
 
+def test_robot_manager_success_field_must_be_boolean():
+    class Backend:
+        def execute_capability(self, syscall):
+            return {"success": "false", "error_code": "", "reason": "string success"}
+
+    sink = InMemoryKernelEventSink()
+    manager = RobotCapabilityManager(Backend(), event_sink=sink)
+    request = RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.navigate_to")
+    created = create_syscall("agent_a", request)
+
+    result = manager.address_request(created)
+
+    assert result["success"] is False
+    assert result["error_code"] == "ROBOT_RESULT_INVALID"
+    assert "success field must be boolean" in result["reason"]
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "robot.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "ROBOT_RESULT_INVALID"
+
+
+def test_robot_manager_failure_without_error_code_gets_stable_code():
+    class Backend:
+        def execute_capability(self, syscall):
+            return {"success": False, "reason": "backend refused without code"}
+
+    sink = InMemoryKernelEventSink()
+    manager = RobotCapabilityManager(Backend(), event_sink=sink)
+    request = RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.navigate_to")
+    created = create_syscall("agent_a", request)
+
+    result = manager.address_request(created)
+
+    assert result["success"] is False
+    assert result["error_code"] == "ROBOT_BACKEND_FAILED"
+    assert result["reason"] == "backend refused without code"
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "robot.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ROBOT_BACKEND_FAILED"
+
+
 def test_robot_manager_rejects_non_object_backend_result():
     class Backend:
         def execute_capability(self, syscall):

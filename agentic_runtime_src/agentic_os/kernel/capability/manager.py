@@ -91,6 +91,19 @@ class RobotCapabilityManager:
                 "reason": "robot backend response missing success field",
                 "data": dict(result),
             }
+        if not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "ROBOT_RESULT_INVALID",
+                "skill_name": skill_name,
+                "reason": "robot backend response success field must be boolean",
+                "data": dict(result),
+            }
+        if not result["success"] and not result.get("error_code"):
+            normalized = dict(result)
+            normalized["error_code"] = "ROBOT_BACKEND_FAILED"
+            normalized.setdefault("reason", "robot backend failed without error_code")
+            return normalized
         return result
 
     def _audit_result(self, syscall: KernelSyscall, result: dict[str, Any]) -> None:

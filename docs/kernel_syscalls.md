@@ -71,7 +71,7 @@ Legacy SDK/runtime `ctx.human.ask` also runs through `SkillExecutor` access/inte
 
 Runtime robot motion skills such as `robot.navigate_to`, `robot.inspect_area`, `arm.move_named`, and `gripper.set` require both explicit robot permissions and operator intervention before safety checks or ROS bridge calls run. Without an intervention backend they fail with `ACCESS_INTERVENTION_REQUIRED` and emit audit/status evidence; `robot.stop` remains permission-gated but is not delayed by intervention.
 If a `SkillExecutor` is constructed without a kernel `AccessManager`, managed robot/perception/gripper skills fail fast with `ACCESS_MANAGER_UNAVAILABLE` before any safety or ROS bridge call; production `RuntimeServer.create()` wires the shared access manager into the executor.
-Robot capability backends must return an object with explicit `success`; malformed or non-object backend results fail as `ROBOT_RESULT_INVALID` and emit `robot.audit`.
+Robot capability backends must return an object with explicit boolean `success`; malformed, non-object, or non-boolean backend results fail as `ROBOT_RESULT_INVALID` and emit `robot.audit`. Backend failures without an `error_code` are normalized to `ROBOT_BACKEND_FAILED`.
 
 LLM status exposes provider configuration state and active `call_id`s. `llm_status(call_id=...)` and `llm_cancel` inspect the LLM active-call registry; unknown call IDs return `SYSCALL_NOT_FOUND`. Cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
@@ -166,7 +166,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 505 passed, 3 skipped
+# 507 passed, 3 skipped
 scripts/run_tests.sh
-# 505 passed, 3 deselected; Agentic OS MVP checks passed.
+# 507 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
