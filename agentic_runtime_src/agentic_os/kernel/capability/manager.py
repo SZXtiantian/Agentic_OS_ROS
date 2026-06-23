@@ -47,19 +47,19 @@ class RobotCapabilityManager:
             self._audit_result(syscall, result)
             return result
         if hasattr(self.skill_adapter, "execute_capability"):
-            result = self.skill_adapter.execute_capability(syscall)
+            result = self._normalize_result(self.skill_adapter.execute_capability(syscall), syscall)
             self._audit_result(syscall, result)
             return result
         if hasattr(self.skill_adapter, "address_request"):
-            result = self.skill_adapter.address_request(syscall)
+            result = self._normalize_result(self.skill_adapter.address_request(syscall), syscall)
             self._audit_result(syscall, result)
             return result
         if hasattr(self.skill_adapter, "execute_syscall"):
-            result = self.skill_adapter.execute_syscall(syscall)
+            result = self._normalize_result(self.skill_adapter.execute_syscall(syscall), syscall)
             self._audit_result(syscall, result)
             return result
         if callable(self.skill_adapter):
-            result = self.skill_adapter(syscall)
+            result = self._normalize_result(self.skill_adapter(syscall), syscall)
             self._audit_result(syscall, result)
             return result
         result = {
@@ -73,6 +73,25 @@ class RobotCapabilityManager:
     def _skill_name(self, syscall: KernelSyscall) -> str:
         query = getattr(syscall, "query", None)
         return str(getattr(query, "skill_name", "") or syscall.params.get("skill_name") or syscall.operation_type)
+
+    def _normalize_result(self, result: Any, syscall: KernelSyscall) -> dict[str, Any]:
+        skill_name = self._skill_name(syscall)
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "ROBOT_RESULT_INVALID",
+                "skill_name": skill_name,
+                "reason": f"robot backend returned {type(result).__name__}",
+            }
+        if "success" not in result:
+            return {
+                "success": False,
+                "error_code": "ROBOT_RESULT_INVALID",
+                "skill_name": skill_name,
+                "reason": "robot backend response missing success field",
+                "data": dict(result),
+            }
+        return result
 
     def _audit_result(self, syscall: KernelSyscall, result: dict[str, Any]) -> None:
         if self.event_sink is not None:
