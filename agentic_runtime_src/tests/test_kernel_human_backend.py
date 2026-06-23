@@ -438,6 +438,59 @@ def test_human_manager_rejects_non_object_backend_result():
     assert audit["metadata"]["error_code"] == "HUMAN_RESULT_INVALID"
 
 
+def test_human_manager_rejects_backend_response_missing_success_and_answered():
+    class Backend:
+        def address_request(self, syscall):
+            return {"answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    manager = HumanInteractionManager(Backend(), access_manager=access, event_sink=sink)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    assert result.metadata["data"] == {"answer": "yes"}
+
+
+def test_human_manager_rejects_non_boolean_success_field():
+    class Backend:
+        def address_request(self, syscall):
+            return {"success": "yes", "answered": True, "answer": "yes"}
+
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = HumanInteractionManager(Backend(), access_manager=access)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    assert result.metadata["reason"] == "human backend response success field must be bool"
+
+
 def test_runtime_human_backend_uses_skill_executor_contract():
     executor = RuntimeCompatibleExecutor()
     backend = RuntimeHumanBackend(SimpleNamespace(executor=executor, registry=SimpleNamespace()))

@@ -246,6 +246,22 @@ class HumanInteractionManager:
             normalized["success"] = answered
             if not answered and not normalized.get("error_code"):
                 normalized["error_code"] = "HUMAN_UNANSWERED"
+        if "success" not in normalized:
+            return {
+                "success": False,
+                "answered": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human backend response missing success field",
+                "data": normalized,
+            }
+        if not isinstance(normalized.get("success"), bool):
+            return {
+                "success": False,
+                "answered": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human backend response success field must be bool",
+                "data": normalized,
+            }
         return normalized
 
     def _status_has_active_call(self, status: dict[str, Any], call_id: str) -> bool:
