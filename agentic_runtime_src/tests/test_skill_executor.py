@@ -303,6 +303,63 @@ def test_skill_backend_response_must_explicitly_report_success(tmp_path):
     asyncio.run(run())
 
 
+def test_skill_backend_success_field_must_be_boolean(tmp_path):
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+
+        async def malformed_dispatch(*args, **kwargs):
+            return {"success": "false", "message": "string success must not pass"}
+
+        executor.dispatcher.dispatch = malformed_dispatch
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "report.say", {"message": "hello"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "SKILL_RESULT_INVALID"
+        assert "success field must be boolean" in result.reason
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "SKILL_RESULT_INVALID"
+
+    asyncio.run(run())
+
+
+def test_skill_backend_answered_field_must_be_boolean(tmp_path):
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+
+        async def malformed_dispatch(*args, **kwargs):
+            return {"answered": "false", "answer": ""}
+
+        executor.dispatcher.dispatch = malformed_dispatch
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "report.say", {"message": "hello"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "SKILL_RESULT_INVALID"
+        assert "answered field must be boolean" in result.reason
+
+    asyncio.run(run())
+
+
+def test_skill_backend_failure_without_error_code_gets_stable_code(tmp_path):
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+
+        async def failed_dispatch(*args, **kwargs):
+            return {"success": False, "reason": "backend refused without code"}
+
+        executor.dispatcher.dispatch = failed_dispatch
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "report.say", {"message": "hello"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "SKILL_BACKEND_FAILED"
+        assert result.reason == "backend refused without code"
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "SKILL_BACKEND_FAILED"
+
+    asyncio.run(run())
+
+
 def test_forbidden_zone_requires_real_safety_backend_before_navigation(tmp_path):
     async def run():
         executor, bridge_calls, _, _ = make_executor(tmp_path)

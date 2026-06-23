@@ -291,9 +291,13 @@ class SkillExecutor:
                 suggested_recovery=["check_backend_contract"],
             )
         if "success" in raw:
-            success = bool(raw["success"])
+            if not isinstance(raw["success"], bool):
+                return self._invalid_backend_result(raw, "skill backend response success field must be boolean")
+            success = raw["success"]
         elif "answered" in raw:
-            success = bool(raw["answered"])
+            if not isinstance(raw["answered"], bool):
+                return self._invalid_backend_result(raw, "skill backend response answered field must be boolean")
+            success = raw["answered"]
         else:
             return SkillResult(
                 success=False,
@@ -307,13 +311,24 @@ class SkillExecutor:
             data = dict(raw)
             data.pop("success", None)
             return SkillResult(success=True, data=data)
+        error_code = str(raw.get("error_code") or "SKILL_BACKEND_FAILED")
         return SkillResult(
             success=False,
             data=dict(raw),
-            error_code=str(raw.get("error_code", "UNEXPECTED_ERROR")),
+            error_code=error_code,
             reason=str(raw.get("reason", raw.get("message", "skill failed"))),
             recoverable=True,
             suggested_recovery=["retry", "ask_human", "cancel"],
+        )
+
+    def _invalid_backend_result(self, raw: dict[str, Any], reason: str) -> SkillResult:
+        return SkillResult(
+            success=False,
+            data=dict(raw),
+            error_code="SKILL_RESULT_INVALID",
+            reason=reason,
+            recoverable=True,
+            suggested_recovery=["check_backend_contract"],
         )
 
     def _status_for_error(self, error_code: str) -> str:
