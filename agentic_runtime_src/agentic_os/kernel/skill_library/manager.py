@@ -61,34 +61,39 @@ class SkillManager:
     ) -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable(skill_name, "runtime skill backend not configured")
-        return self.backend.call(skill_name, args, app_id=app_id, session_id=session_id, permissions=permissions, call_id=call_id)
+        return self._normalize_response(
+            self.backend.call(skill_name, args, app_id=app_id, session_id=session_id, permissions=permissions, call_id=call_id),
+            "skill_call",
+            skill_name,
+        )
 
     def list(self) -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable("", "runtime skill backend not configured")
-        return self.backend.list()
+        return self._normalize_response(self.backend.list(), "skill_list", "")
 
     def describe(self, skill_name: str) -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable(skill_name, "runtime skill backend not configured")
-        return self.backend.describe(skill_name)
+        return self._normalize_response(self.backend.describe(skill_name), "skill_describe", skill_name)
 
     def status(self, call_id: str = "") -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable("", "runtime skill backend not configured")
-        status = self.backend.status()
-        if status.get("success", False):
-            active_calls = list(status.get("active_calls") or [])
-            if call_id and not any(str(call.get("call_id") or "") == call_id for call in active_calls if isinstance(call, dict)):
-                return {
-                    "success": False,
-                    "error_code": "SYSCALL_NOT_FOUND",
-                    "reason": "skill call_id is not active",
-                    "call_id": call_id,
-                    "active_calls": active_calls,
-                }
-            status["call_id"] = call_id
-            status["recent_events"] = list(self._events[-20:])
+        status = self._normalize_response(self.backend.status(), "skill_status", "")
+        if self._success_state(status) is not True:
+            return status
+        active_calls = list(status.get("active_calls") or [])
+        if call_id and not any(str(call.get("call_id") or "") == call_id for call in active_calls if isinstance(call, dict)):
+            return {
+                "success": False,
+                "error_code": "SYSCALL_NOT_FOUND",
+                "reason": "skill call_id is not active",
+                "call_id": call_id,
+                "active_calls": active_calls,
+            }
+        status["call_id"] = call_id
+        status["recent_events"] = list(self._events[-20:])
         return status
 
     def cancel(self, session_id: str, call_id: str = "") -> dict[str, Any]:
@@ -96,7 +101,7 @@ class SkillManager:
             return self._unavailable("", "runtime skill backend not configured")
         if not call_id:
             return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "reason": "call_id required", "session_id": session_id}
-        return self.backend.cancel(session_id, call_id=call_id)
+        return self._normalize_response(self.backend.cancel(session_id, call_id=call_id), "skill_cancel", "")
 
     def _unavailable(self, skill_name: str, reason: str) -> dict[str, Any]:
         return {
@@ -111,11 +116,20 @@ class SkillManager:
             {
                 "operation_type": operation,
                 "skill_name": skill_name,
-                "success": bool(response.get("success", False)),
+                "success": self._success_state(response) is True,
                 "error_code": str(response.get("error_code", "")),
             }
         )
         self._events = self._events[-100:]
+
+    @staticmethod
+    def _success_state(response: dict[str, Any]) -> bool | None:
+        if not isinstance(response, dict) or "success" not in response:
+            return None
+        success = response["success"]
+        if isinstance(success, bool):
+            return success
+        return None
 
     def _normalize_response(self, response: Any, operation: str, skill_name: str) -> dict[str, Any]:
         if not isinstance(response, dict):
@@ -136,6 +150,16 @@ class SkillManager:
                 "skill_name": skill_name,
                 "data": dict(response),
             }
+        if not isinstance(response.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "SKILL_RESULT_INVALID",
+                "reason": "skill backend response success field must be boolean",
+                "operation": operation,
+                "skill_name": skill_name,
+                "success_type": type(response.get("success")).__name__,
+                "data": dict(response),
+            }
         return response
 
     def _audit_result(self, operation: str, skill_name: str, session_id: str, response: dict[str, Any]) -> None:
@@ -145,12 +169,13 @@ class SkillManager:
                 operation_type=operation,
                 skill_name=skill_name,
                 session_id=session_id,
-                success=bool(response.get("success", False)),
+                success=self._success_state(response) is True,
                 error_code=str(response.get("error_code") or ""),
+                reason=str(response.get("reason") or ""),
                 backend=self.backend.__class__.__name__ if self.backend is not None else "",
             )
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        if self._success_state(result) is True:
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "SKILL_BACKEND_UNAVAILABLE"), metadata=result)

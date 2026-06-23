@@ -85,7 +85,7 @@ LLM provider implementations must return `KernelResponse`; provider exceptions r
 
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.status(call_id=...)` and `ctx.kernel.skill.cancel(call_id)` inspect the runtime active-call registry; empty or missing call IDs and unknown active calls return `SYSCALL_NOT_FOUND` instead of reporting session-level cancel success.
 
-Runtime skill backend responses must explicitly include a boolean `success` or, for human replies, a boolean `answered`; string booleans are rejected as `SKILL_RESULT_INVALID`. Failed skill backend results without an `error_code` are normalized to `SKILL_BACKEND_FAILED` so audit/status records never carry an empty failure code. The kernel skill manager also rejects non-object responses or responses missing `success` with `SKILL_RESULT_INVALID`; these failures are audited instead of being treated as successful.
+Runtime skill backend responses must explicitly include a boolean `success` or, for human replies, a boolean `answered`; string booleans are rejected as `SKILL_RESULT_INVALID`. Failed skill backend results without an `error_code` are normalized to `SKILL_BACKEND_FAILED` so audit/status records never carry an empty failure code. The kernel skill manager also rejects non-object responses, responses missing `success`, and non-boolean `success` fields from call/list/describe/status/cancel with `SKILL_RESULT_INVALID`; these failures are audited instead of being treated as successful.
 
 Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.status(call_id=...)` and `human.cancel` inspect the active human/skill registry; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 Human cancel requires an explicit `call_id`; empty IDs return `SYSCALL_NOT_FOUND` before backend dispatch, and backends without a cancel contract return `HUMAN_BACKEND_UNAVAILABLE`.
@@ -171,7 +171,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 523 passed, 3 skipped
+# 525 passed, 3 skipped
 scripts/run_tests.sh
-# 523 passed, 3 deselected; Agentic OS MVP checks passed.
+# 525 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

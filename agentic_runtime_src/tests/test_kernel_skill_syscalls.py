@@ -123,6 +123,32 @@ def test_skill_manager_rejects_non_object_backend_response():
     assert response.metadata["raw_type"] == "str"
 
 
+def test_skill_manager_rejects_non_boolean_backend_success_and_audits():
+    from agentic_os.kernel.hooks import InMemoryKernelEventSink
+
+    class BadBackend:
+        def call(self, *args, **kwargs):
+            return {"success": "true", "result": {"message": "fake success"}}
+
+    sink = InMemoryKernelEventSink()
+    manager = SkillManager(BadBackend(), event_sink=sink)
+    response = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="skill_call",
+            params={"skill_name": "report.say", "args": {"message": "hi"}},
+        )
+    )
+
+    assert response.success is False
+    assert response.error_code == "SKILL_RESULT_INVALID"
+    assert response.metadata["success_type"] == "str"
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "SKILL_RESULT_INVALID"
+    assert audit["metadata"]["reason"] == "skill backend response success field must be boolean"
+
+
 def test_skill_manager_rejects_backend_response_without_success_and_audits():
     from agentic_os.kernel.hooks import InMemoryKernelEventSink
 
@@ -139,6 +165,26 @@ def test_skill_manager_rejects_backend_response_without_success_and_audits():
     assert response.success is False
     assert response.error_code == "SKILL_RESULT_INVALID"
     assert response.metadata["data"] == {"state": "ready"}
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
+    assert audit["metadata"]["error_code"] == "SKILL_RESULT_INVALID"
+
+
+def test_skill_status_rejects_non_boolean_success_before_call_id_lookup():
+    from agentic_os.kernel.hooks import InMemoryKernelEventSink
+
+    class BadBackend:
+        def status(self):
+            return {"success": "true", "state": "ready", "active_calls": []}
+
+    sink = InMemoryKernelEventSink()
+    manager = SkillManager(BadBackend(), event_sink=sink)
+    response = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="skill_status", params={"call_id": "missing"})
+    )
+
+    assert response.success is False
+    assert response.error_code == "SKILL_RESULT_INVALID"
+    assert response.metadata["success_type"] == "str"
     audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
     assert audit["metadata"]["error_code"] == "SKILL_RESULT_INVALID"
 
