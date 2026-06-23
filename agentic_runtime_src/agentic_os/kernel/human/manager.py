@@ -32,7 +32,10 @@ class HumanInteractionManager:
             self._audit_result(syscall, result)
             return self._kernel_response(result)
         if syscall.operation_type in {"human.status", "human_status"}:
-            return self._kernel_response(self.status())
+            result = self.status(str(syscall.params.get("call_id") or syscall.params.get("correlation_id") or ""))
+            self._record(syscall, result)
+            self._audit_result(syscall, result)
+            return self._kernel_response(result)
         if syscall.operation_type in {"human.cancel", "human_cancel"} and hasattr(self.human_adapter, "cancel"):
             result = self.human_adapter.cancel(
                 str(syscall.params.get("session_id") or "kernel"),
@@ -66,7 +69,7 @@ class HumanInteractionManager:
         self._audit_result(syscall, result)
         return self._kernel_response(result)
 
-    def status(self) -> dict[str, Any]:
+    def status(self, call_id: str = "") -> dict[str, Any]:
         if self.human_adapter is None:
             return {
                 "success": False,
@@ -79,6 +82,27 @@ class HumanInteractionManager:
             status = self.human_adapter.status()
         else:
             status = {"success": True, "state": "ready", "backend": self.human_adapter.__class__.__name__}
+        if not isinstance(status, dict):
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": f"human backend status returned {type(status).__name__}",
+                "call_id": call_id,
+                "recent_events": list(self._events[-20:]),
+            }
+        if call_id and status.get("success", False) and not self._status_has_active_call(status, call_id):
+            return {
+                "success": False,
+                "state": str(status.get("state") or "ready"),
+                "error_code": "SYSCALL_NOT_FOUND",
+                "reason": "human call_id is not active",
+                "call_id": call_id,
+                "active": self._active_human_call_ids(status),
+                "recent_events": list(self._events[-20:]),
+            }
+        if call_id:
+            status["call_id"] = call_id
         status["recent_events"] = list(self._events[-20:])
         return status
 
@@ -143,7 +167,12 @@ class HumanInteractionManager:
 
     def _audit_result(self, syscall: KernelSyscall, result: dict[str, Any]) -> None:
         if self.event_sink is not None:
-            action = "cancel" if syscall.operation_type in {"human.cancel", "human_cancel"} else "ask"
+            if syscall.operation_type in {"human.cancel", "human_cancel"}:
+                action = "cancel"
+            elif syscall.operation_type in {"human.status", "human_status"}:
+                action = "status"
+            else:
+                action = "ask"
             self.event_sink.emit(
                 "human.audit",
                 action=action,
@@ -170,6 +199,26 @@ class HumanInteractionManager:
             if not answered and not normalized.get("error_code"):
                 normalized["error_code"] = "HUMAN_UNANSWERED"
         return normalized
+
+    def _status_has_active_call(self, status: dict[str, Any], call_id: str) -> bool:
+        return call_id in self._active_human_call_ids(status)
+
+    def _active_human_call_ids(self, status: dict[str, Any]) -> list[str]:
+        active: set[str] = set()
+        for item in status.get("active") or ():
+            active.add(str(item))
+        human_channel = status.get("human_channel")
+        if isinstance(human_channel, dict):
+            for item in human_channel.get("active") or ():
+                active.add(str(item))
+        for item in status.get("active_calls") or ():
+            if isinstance(item, dict):
+                call_id = str(item.get("call_id") or item.get("correlation_id") or "")
+                if call_id:
+                    active.add(call_id)
+            elif item:
+                active.add(str(item))
+        return sorted(active)
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
         if result.get("success", False):

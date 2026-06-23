@@ -104,6 +104,45 @@ def test_human_manager_audits_ask_and_cancel():
     assert events[1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
 
 
+def test_human_status_requires_active_call_id_and_audits():
+    class Backend:
+        def status(self):
+            return {
+                "success": True,
+                "state": "ready",
+                "backend": "test_backend",
+                "human_channel": {"active": ["human_1"]},
+                "active_calls": [{"session_id": "sess_human", "call_id": "human_2"}],
+            }
+
+    sink = InMemoryKernelEventSink()
+    manager = HumanInteractionManager(Backend(), event_sink=sink)
+
+    active = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_status",
+            params={"session_id": "sess_human", "call_id": "human_2"},
+        )
+    )
+    missing = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_status",
+            params={"session_id": "sess_human", "call_id": "missing"},
+        )
+    )
+
+    assert active.success is True
+    assert active.data["call_id"] == "human_2"
+    assert missing.success is False
+    assert missing.error_code == "SYSCALL_NOT_FOUND"
+    assert missing.metadata["active"] == ["human_1", "human_2"]
+    events = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["status", "status"]
+    assert events[-1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+
+
 def test_human_ask_requires_access_manager_before_backend_call():
     class Backend:
         calls = 0
