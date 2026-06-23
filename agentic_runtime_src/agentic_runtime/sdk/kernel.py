@@ -336,9 +336,12 @@ class KernelStorageAPI(_KernelBaseAPI):
 
 
 class KernelToolAPI(_KernelBaseAPI):
+    def _permissions(self, metadata: dict[str, Any]) -> tuple[str, ...]:
+        return tuple(metadata.pop("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ()))))
+
     async def call(self, name: str, args: dict | None = None, **metadata):
         timeout_s = metadata.pop("timeout_s", None)
-        permissions = tuple(metadata.pop("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ()))))
+        permissions = self._permissions(metadata)
         query = ToolQuery(
             operation_type="tool_call",
             params={"name": name, "args": dict(args or {}), "permissions": permissions, **metadata},
@@ -353,17 +356,23 @@ class KernelToolAPI(_KernelBaseAPI):
         query = ToolQuery(operation_type="tool_describe", params={"name": name})
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
-    async def load_manifest(self, path: str, **kwargs):
-        query = ToolQuery(operation_type="tool_load_manifest", params={"path": path})
-        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+    async def load_manifest(self, path: str, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
+        permissions = self._permissions(metadata)
+        query = ToolQuery(operation_type="tool_load_manifest", params={"path": path, "permissions": permissions, **metadata})
+        return self._execute(query, timeout_s=timeout_s)
 
-    async def unload(self, name: str, **kwargs):
-        query = ToolQuery(operation_type="tool_unload", params={"name": name})
-        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+    async def unload(self, name: str, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
+        permissions = self._permissions(metadata)
+        query = ToolQuery(operation_type="tool_unload", params={"name": name, "permissions": permissions, **metadata})
+        return self._execute(query, timeout_s=timeout_s)
 
-    async def register_builtin(self, name: str, **kwargs):
-        query = ToolQuery(operation_type="tool_register_builtin", params={"name": name})
-        return self._execute(query, timeout_s=kwargs.get("timeout_s"))
+    async def register_builtin(self, name: str, **metadata):
+        timeout_s = metadata.pop("timeout_s", None)
+        permissions = self._permissions(metadata)
+        query = ToolQuery(operation_type="tool_register_builtin", params={"name": name, "permissions": permissions, **metadata})
+        return self._execute(query, timeout_s=timeout_s)
 
     async def status(self, **kwargs):
         query = ToolQuery(operation_type="tool_status", params={})

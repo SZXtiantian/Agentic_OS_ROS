@@ -70,7 +70,9 @@ High-risk operations go through access/intervention/audit:
 - `human.ask`.
 - external LLM provider calls.
 
-Without an operator intervention backend, high-risk operations return `ACCESS_INTERVENTION_REQUIRED`.
+Tool management never receives implicit admin rights from the manager. `tool.load_manifest` requires `tool.install` or `tool.load_manifest`, `tool.unload` requires `tool.uninstall` or `tool.unload`, and `tool.register_builtin` requires `tool.register_builtin`; `tool.manage` grants all three management actions. Missing permissions return `ACCESS_DENIED`. With permission present, these operations are still intervention-gated and emit `tool.audit`.
+
+Without an operator intervention backend, high-risk operations that pass the permission check return `ACCESS_INTERVENTION_REQUIRED`.
 
 ## Audit Events
 

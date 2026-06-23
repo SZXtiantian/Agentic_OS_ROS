@@ -139,7 +139,7 @@ def test_tool_cancel_active_call_is_cooperative_and_audited(tmp_path):
     )
 
 
-def test_tool_load_unload_register_builtin_require_intervention(tmp_path):
+def test_tool_load_unload_register_builtin_without_permission_are_denied(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     manifest = service.tool.tool_root / "sample.yaml"
     manifest.write_text("name: sample.tool\nentrypoint: sample:run\n", encoding="utf-8")
@@ -158,6 +158,55 @@ def test_tool_load_unload_register_builtin_require_intervention(tmp_path):
         registered = service.execute_request(
             "agent_a",
             ToolQuery(operation_type="tool_register_builtin", params={"name": "calculator.add"}),
+            timeout_s=1.0,
+        )
+        status = service.status()
+    finally:
+        service.stop()
+
+    assert loaded.success is False
+    assert loaded.error_code == "ACCESS_DENIED"
+    assert unloaded.success is False
+    assert unloaded.error_code == "ACCESS_DENIED"
+    assert registered.success is False
+    assert registered.error_code == "ACCESS_DENIED"
+    audit_events = [event for event in status["events"]["recent"] if event["event_type"] == "tool.audit"]
+    assert [event["metadata"]["action"] for event in audit_events] == [
+        "load_manifest",
+        "unload",
+        "register_builtin",
+    ]
+    assert all(event["metadata"]["error_code"] == "ACCESS_DENIED" for event in audit_events)
+
+
+def test_tool_load_unload_register_builtin_with_permission_require_intervention(tmp_path):
+    service = KernelService(config=make_config(tmp_path))
+    manifest = service.tool.tool_root / "sample.yaml"
+    manifest.write_text("name: sample.tool\nentrypoint: sample:run\n", encoding="utf-8")
+    service.start()
+    try:
+        loaded = service.execute_request(
+            "agent_a",
+            ToolQuery(
+                operation_type="tool_load_manifest",
+                params={"path": str(manifest), "permissions": ["tool.install"]},
+            ),
+            timeout_s=1.0,
+        )
+        unloaded = service.execute_request(
+            "agent_a",
+            ToolQuery(
+                operation_type="tool_unload",
+                params={"name": "calculator.add", "permissions": ["tool.uninstall"]},
+            ),
+            timeout_s=1.0,
+        )
+        registered = service.execute_request(
+            "agent_a",
+            ToolQuery(
+                operation_type="tool_register_builtin",
+                params={"name": "calculator.add", "permissions": ["tool.register_builtin"]},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -198,13 +247,25 @@ sandbox:
     manager = ToolManager(tool_root=tool_root, access_manager=access, event_sink=sink)
 
     loaded = manager.address_request(
-        SimpleNamespace(agent_name="agent_a", operation_type="tool_load_manifest", params={"path": str(manifest)})
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_load_manifest",
+            params={"path": str(manifest), "permissions": ["tool.install"]},
+        )
     )
     unloaded = manager.address_request(
-        SimpleNamespace(agent_name="agent_a", operation_type="tool_unload", params={"name": "sample.tool"})
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_unload",
+            params={"name": "sample.tool", "permissions": ["tool.uninstall"]},
+        )
     )
     registered = manager.address_request(
-        SimpleNamespace(agent_name="agent_a", operation_type="tool_register_builtin", params={"name": "calculator.add"})
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_register_builtin",
+            params={"name": "calculator.add", "permissions": ["tool.register_builtin"]},
+        )
     )
 
     assert loaded["success"] is True
@@ -218,6 +279,8 @@ sandbox:
 
 def test_kernel_tool_sdk_permissions_from_manifest(tmp_path):
     service = KernelService(config=make_config(tmp_path))
+    manifest = service.tool.tool_root / "sample.yaml"
+    manifest.write_text("name: sample.tool\nentrypoint: sample:run\n", encoding="utf-8")
 
     class Executor:
         kernel_service = service
@@ -232,9 +295,14 @@ def test_kernel_tool_sdk_permissions_from_manifest(tmp_path):
             ctx = AgentContext(Executor(), app, "sess_tool")
             result = await ctx.kernel.tool.call("calculator.add", {"a": 4, "b": 6}, timeout_s=1.0)
             described = await ctx.kernel.tool.describe("calculator.add", timeout_s=1.0)
+            manager_app = AppManifest("tool_manager_app", "0", "", "main:run", ["tool.install"], [])
+            manager_ctx = AgentContext(Executor(), manager_app, "sess_tool_manage")
+            manager_result = await manager_ctx.kernel.tool.load_manifest(str(manifest), timeout_s=1.0)
             assert result.success is True
             assert result.response.data["result"] == {"value": 10}
             assert described.response.data["tool"] == "calculator.add"
+            assert manager_result.success is False
+            assert manager_result.error_code == "ACCESS_INTERVENTION_REQUIRED"
         finally:
             service.stop()
 

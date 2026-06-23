@@ -110,6 +110,33 @@ def test_external_llm_call_requires_permission_then_intervention():
     assert allowed.requires_intervention is True
 
 
+def test_tool_management_requires_permission_then_intervention():
+    request_without_permission = AccessRequest(
+        subject=AccessSubject(agent_name="agent_a"),
+        action="install",
+        resource=AccessResource("tool", "sample.tool"),
+        irreversible=True,
+    )
+    denied = AccessManager().check(request_without_permission)
+
+    request_with_permission = AccessRequest(
+        subject=AccessSubject(agent_name="agent_a", permissions=("tool.install",)),
+        action="install",
+        resource=AccessResource("tool", "sample.tool"),
+        irreversible=True,
+    )
+    intervention = AccessManager().check(request_with_permission)
+    allowed = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider()).check(request_with_permission)
+
+    assert denied.allowed is False
+    assert denied.error_code == "ACCESS_DENIED"
+    assert intervention.allowed is False
+    assert intervention.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert intervention.requires_intervention is True
+    assert allowed.allowed is True
+    assert allowed.requires_intervention is True
+
+
 def test_audit_delete_always_forbidden():
     manager = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
     decision = manager.check(

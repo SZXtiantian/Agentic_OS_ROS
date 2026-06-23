@@ -21,6 +21,7 @@ HIGH_RISK_OPERATIONS = {
 }
 SHARED_READ_LABELS = {"shared", "app_shared", "operator_shared"}
 ROBOT_MOTION_PREFIXES = ("robot.", "arm.", "gripper.", "nav2.", "moveit.", "cmd_vel")
+TOOL_MANAGEMENT_ACTIONS = {"install", "uninstall", "register_builtin"}
 
 
 @dataclass(frozen=True)
@@ -126,6 +127,15 @@ class DefaultAccessPolicy:
                 )
             return AccessDecision(allowed=True, reason="external LLM provider access allowed")
 
+        if resource_type == "tool" and action in TOOL_MANAGEMENT_ACTIONS:
+            if not self._has_tool_management_permission(request.subject, action, request.resource):
+                return AccessDecision(
+                    allowed=False,
+                    error_code="ACCESS_DENIED",
+                    reason=f"tool {action} requires explicit tool management permission",
+                )
+            return AccessDecision(allowed=True, reason=f"tool {action} permission allowed")
+
         if "admin" in groups:
             return AccessDecision(allowed=True, reason="admin access allowed")
 
@@ -199,6 +209,25 @@ class DefaultAccessPolicy:
             }
             & permissions
         )
+
+    def _has_tool_management_permission(
+        self,
+        subject: AccessSubject,
+        action: str,
+        resource: AccessResource,
+    ) -> bool:
+        permissions = set(subject.permissions)
+        resource_id = resource.resource_id
+        candidates = {
+            "tool.manage",
+            f"tool.{action}",
+            f"tool.{action}.{resource_id}",
+        }
+        if action == "install":
+            candidates.update({"tool.load_manifest", f"tool.load_manifest.{resource_id}"})
+        if action == "uninstall":
+            candidates.update({"tool.unload", f"tool.unload.{resource_id}"})
+        return bool(candidates & permissions)
 
 
 def operation_key(request: AccessRequest) -> str:

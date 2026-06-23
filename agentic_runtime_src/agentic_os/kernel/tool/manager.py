@@ -76,7 +76,14 @@ class ToolManager:
         conflict_set.add(name)
         self._conflicts[name] = conflict_set
 
-    def load_manifest(self, path: str | Path) -> ToolManifest:
+    def load_manifest(
+        self,
+        path: str | Path,
+        *,
+        agent_name: str = "installer",
+        permissions: tuple[str, ...] = (),
+        check_access: bool = True,
+    ) -> ToolManifest:
         if self.loader is None or self.tool_root is None:
             raise ValueError("TOOL_ROOT_NOT_CONFIGURED")
         manifest_path = Path(path).resolve()
@@ -85,9 +92,10 @@ class ToolManager:
         manifest = ToolManifest.from_yaml(manifest_path)
         if self._is_forbidden(manifest.name, manifest.permissions):
             raise ValueError("TOOL_FORBIDDEN_ROBOT_CAPABILITY")
-        access = self._check_access("installer", manifest.name, tuple(manifest.permissions), action="install")
-        if not access.get("success", True):
-            raise ValueError(str(access.get("error_code") or "TOOL_INSTALL_DENIED"))
+        if check_access:
+            access = self._check_access(agent_name, manifest.name, permissions, action="install", irreversible=True)
+            if not access.get("success", True):
+                raise ValueError(str(access.get("error_code") or "TOOL_INSTALL_DENIED"))
         sandbox = self.sandbox_policy.validate(manifest.sandbox)
         if not sandbox.get("success", False):
             raise ValueError(str(sandbox.get("error_code") or "TOOL_SANDBOX_DENIED"))
@@ -116,7 +124,8 @@ class ToolManager:
                 return self._kernel_response(self.describe(str(params.get("name") or params.get("tool") or "")))
             if operation == "tool_load_manifest":
                 manifest_path = str(params.get("path") or "")
-                access = self._check_access(syscall.agent_name, manifest_path, (), action="install", irreversible=True)
+                permissions = tuple(params.get("permissions") or ())
+                access = self._check_access(syscall.agent_name, manifest_path, permissions, action="install", irreversible=True)
                 if not access.get("success", True):
                     return self._kernel_response(
                         self._audit_dangerous_result(
@@ -128,7 +137,12 @@ class ToolManager:
                         )
                     )
                 try:
-                    manifest = self.load_manifest(manifest_path)
+                    manifest = self.load_manifest(
+                        manifest_path,
+                        agent_name=syscall.agent_name,
+                        permissions=permissions,
+                        check_access=False,
+                    )
                 except ValueError as exc:
                     return self._kernel_response(
                         self._audit_dangerous_result(
@@ -149,9 +163,21 @@ class ToolManager:
                     )
                 )
             if operation == "tool_unload":
-                return self._kernel_response(self.unload(syscall.agent_name, str(params.get("name") or "")))
+                return self._kernel_response(
+                    self.unload(
+                        syscall.agent_name,
+                        str(params.get("name") or ""),
+                        tuple(params.get("permissions") or ()),
+                    )
+                )
             if operation == "tool_register_builtin":
-                return self._kernel_response(self.register_builtin(syscall.agent_name, str(params.get("name") or "")))
+                return self._kernel_response(
+                    self.register_builtin(
+                        syscall.agent_name,
+                        str(params.get("name") or ""),
+                        tuple(params.get("permissions") or ()),
+                    )
+                )
             if operation == "tool_status":
                 return self._kernel_response({"success": True, "status": self.status()})
             if operation == "tool_cancel":
@@ -240,8 +266,8 @@ class ToolManager:
             "builtin": manifest is None,
         }
 
-    def unload(self, agent_name: str, name: str) -> dict[str, Any]:
-        access = self._check_access(agent_name, name, (), action="uninstall", irreversible=True)
+    def unload(self, agent_name: str, name: str, permissions: tuple[str, ...] = ()) -> dict[str, Any]:
+        access = self._check_access(agent_name, name, permissions, action="uninstall", irreversible=True)
         if not access.get("success", True):
             return self._audit_dangerous_result("unload", agent_name, name, access)
         if name not in self._registry:
@@ -264,8 +290,8 @@ class ToolManager:
         self._manifests.pop(name, None)
         return self._audit_dangerous_result("unload", agent_name, name, {"success": True, "tool": name})
 
-    def register_builtin(self, agent_name: str, name: str) -> dict[str, Any]:
-        access = self._check_access(agent_name, name, (), action="install", irreversible=True)
+    def register_builtin(self, agent_name: str, name: str, permissions: tuple[str, ...] = ()) -> dict[str, Any]:
+        access = self._check_access(agent_name, name, permissions, action="register_builtin", irreversible=True)
         if not access.get("success", True):
             return self._audit_dangerous_result("register_builtin", agent_name, name, access)
         builtins = builtin_tools(self.tool_root or Path.cwd())
@@ -318,10 +344,9 @@ class ToolManager:
     ) -> dict[str, Any]:
         if self.access_manager is None:
             return {"success": True}
-        groups = ("admin",) if action in {"install", "uninstall"} else ()
         decision = self.access_manager.check(
             AccessRequest(
-                subject=AccessSubject(agent_name=agent_name, groups=groups, permissions=permissions),
+                subject=AccessSubject(agent_name=agent_name, permissions=permissions),
                 action=action,
                 resource=AccessResource("tool", tool_name),
                 irreversible=irreversible,
