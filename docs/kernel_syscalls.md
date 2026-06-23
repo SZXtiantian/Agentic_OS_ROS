@@ -110,6 +110,7 @@ High-risk operations go through access/intervention/audit:
 - external LLM provider calls.
 
 Tool management never receives implicit admin rights from the manager. `tool.load_manifest` requires `tool.install` or `tool.load_manifest`, `tool.unload` requires `tool.uninstall` or `tool.unload`, and `tool.register_builtin` requires `tool.register_builtin`; `tool.manage` grants all three management actions. Direct manager construction without a kernel access manager returns `ACCESS_MANAGER_UNAVAILABLE` before registry changes. Missing permissions return `ACCESS_DENIED`. With permission present, these operations are still intervention-gated and emit `tool.audit`.
+Tool access decisions, sandbox validation results, handler responses with explicit `success`, dangerous-management audit records, and public tool `KernelResponse` conversion require boolean `success`; malformed access/sandbox responses return `TOOL_ACCESS_RESULT_INVALID` or `TOOL_SANDBOX_RESULT_INVALID`, and non-boolean tool success fields return `TOOL_RESULT_INVALID`.
 
 Without an operator intervention backend, high-risk operations that pass the permission check return `ACCESS_INTERVENTION_REQUIRED`.
 Memory delete/export/import also require a kernel access manager; direct manager construction without one returns `ACCESS_MANAGER_UNAVAILABLE` and audits the rejected operation before touching the provider.
@@ -171,7 +172,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 525 passed, 3 skipped
+# 528 passed, 3 skipped
 scripts/run_tests.sh
-# 525 passed, 3 deselected; Agentic OS MVP checks passed.
+# 528 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

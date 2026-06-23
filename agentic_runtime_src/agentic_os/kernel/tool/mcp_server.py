@@ -47,7 +47,7 @@ class MCPToolServer:
         try:
             result = handler(dict(args or {}))
             normalized = self._normalize_handler_result(name, result)
-            if not normalized.get("success", False):
+            if normalized.get("success") is not True:
                 return normalized
             return {"success": True, "tool": name, "result": result}
         except Exception as exc:
@@ -64,7 +64,7 @@ class MCPToolServer:
                 "tool": name,
                 "result": result,
             }
-        if result.get("success"):
+        if result.get("success") is True:
             return {"success": True, "tool": name, "result": result}
         return {
             "success": False,

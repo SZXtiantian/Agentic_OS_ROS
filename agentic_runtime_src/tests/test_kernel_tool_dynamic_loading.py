@@ -205,6 +205,36 @@ sandbox:
         manager.load_manifest(manifest, permissions=("tool.install",))
 
 
+def test_manifest_sandbox_success_field_must_be_bool(tmp_path):
+    class BadSandboxPolicy:
+        def validate(self, sandbox):
+            return {"success": "true", "sandbox": dict(sandbox or {})}
+
+        def to_dict(self):
+            return {"bad": True}
+
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    (tool_root / "sample.py").write_text("def run(args):\n    return {'ok': True}\n", encoding="utf-8")
+    manifest = tool_root / "sample.tool.yaml"
+    manifest.write_text(
+        """
+name: sample.tool
+entrypoint: sample:run
+sandbox:
+  mode: in_process
+""",
+        encoding="utf-8",
+    )
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = ToolManager(tool_root=tool_root, access_manager=access, sandbox_policy=BadSandboxPolicy())
+
+    with pytest.raises(ValueError, match="TOOL_SANDBOX_RESULT_INVALID"):
+        manager.load_manifest(manifest, permissions=("tool.install",))
+
+    assert manager.describe("sample.tool")["error_code"] == "TOOL_NOT_FOUND"
+
+
 def test_sandbox_policy_allows_workspace_write_under_tool_root(tmp_path):
     policy = ToolSandboxPolicy(workspace_root=tmp_path)
 

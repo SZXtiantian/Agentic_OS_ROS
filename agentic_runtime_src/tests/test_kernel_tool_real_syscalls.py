@@ -176,6 +176,26 @@ def test_tool_handler_success_field_must_be_bool(tmp_path):
     assert result["result"] == {"success": "yes", "value": 1}
 
 
+def test_tool_call_rejects_malformed_access_success_without_executing(tmp_path, monkeypatch):
+    manager = ToolManager(tool_root=tmp_path / "tools")
+    executed = False
+
+    def handler(args):
+        nonlocal executed
+        executed = True
+        return {"value": 1}
+
+    manager.register("safe.tool", handler)
+    monkeypatch.setattr(manager, "_check_access", lambda *args, **kwargs: {"success": "true"})
+
+    result = manager.call_tool("agent_a", "safe.tool", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_ACCESS_RESULT_INVALID"
+    assert result["success_type"] == "str"
+    assert executed is False
+
+
 def test_tool_load_unload_register_builtin_without_permission_are_denied(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     manifest = service.tool.tool_root / "sample.yaml"
@@ -307,6 +327,28 @@ def test_tool_management_requires_access_manager_before_registry_change(tmp_path
     events = [event for event in sink.recent(limit=10) if event["event_type"] == "tool.audit"]
     assert [event["metadata"]["action"] for event in events] == ["load_manifest", "unload", "register_builtin"]
     assert all(event["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE" for event in events)
+
+
+def test_dangerous_tool_management_rejects_malformed_access_success_and_audits(tmp_path, monkeypatch):
+    sink = InMemoryKernelEventSink()
+    manager = ToolManager(tool_root=tmp_path / "tools", event_sink=sink)
+    monkeypatch.setattr(manager, "_check_access", lambda *args, **kwargs: {"success": "true"})
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_unload",
+            params={"name": "calculator.add", "permissions": ["tool.uninstall"]},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "TOOL_ACCESS_RESULT_INVALID"
+    assert manager.describe("calculator.add")["success"] is True
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "tool.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "TOOL_ACCESS_RESULT_INVALID"
+    assert audit["metadata"]["reason"] == "tool access decision result must include boolean success"
 
 
 def test_dangerous_tool_operations_emit_audit_events(tmp_path):

@@ -94,10 +94,14 @@ class ToolManager:
             raise ValueError("TOOL_FORBIDDEN_ROBOT_CAPABILITY")
         if check_access:
             access = self._check_access(agent_name, manifest.name, permissions, action="install", irreversible=True)
-            if not access.get("success", True):
-                raise ValueError(str(access.get("error_code") or "TOOL_INSTALL_DENIED"))
+            access_failure = self._access_failure("install", manifest.name, access)
+            if access_failure is not None:
+                raise ValueError(str(access_failure.get("error_code") or "TOOL_INSTALL_DENIED"))
         sandbox = self.sandbox_policy.validate(manifest.sandbox)
-        if not sandbox.get("success", False):
+        sandbox_success = self._success_state(sandbox)
+        if sandbox_success is None:
+            raise ValueError("TOOL_SANDBOX_RESULT_INVALID")
+        if sandbox_success is False:
             raise ValueError(str(sandbox.get("error_code") or "TOOL_SANDBOX_DENIED"))
         handler = self.loader.load(manifest)
         self.register(manifest.name, handler, conflicts=manifest.conflicts or (manifest.name,), description=manifest.description)
@@ -126,13 +130,14 @@ class ToolManager:
                 manifest_path = str(params.get("path") or "")
                 permissions = tuple(params.get("permissions") or ())
                 access = self._check_access(syscall.agent_name, manifest_path, permissions, action="install", irreversible=True)
-                if not access.get("success", True):
+                access_failure = self._access_failure("load_manifest", manifest_path, access)
+                if access_failure is not None:
                     return self._kernel_response(
                         self._audit_dangerous_result(
                             "load_manifest",
                             syscall.agent_name,
                             manifest_path,
-                            access,
+                            access_failure,
                             manifest_path=manifest_path,
                         )
                     )
@@ -213,8 +218,9 @@ class ToolManager:
         if self._is_forbidden(tool_name):
             return {"success": False, "error_code": "TOOL_FORBIDDEN_ROBOT_CAPABILITY"}
         access = self._check_access(agent_name, tool_name, permissions)
-        if not access.get("success", True):
-            return access
+        access_failure = self._access_failure("execute", tool_name, access)
+        if access_failure is not None:
+            return access_failure
         handler = self._registry.get(tool_name)
         if handler is None:
             return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": tool_name}
@@ -245,7 +251,7 @@ class ToolManager:
                     "result": result,
                 }
             normalized = self._normalize_handler_result(tool_name, call_id, result)
-            if not normalized.get("success", False):
+            if self._success_state(normalized) is not True:
                 self._record_tool_event(
                     "tool.failed",
                     agent_name,
@@ -278,7 +284,7 @@ class ToolManager:
                 "call_id": call_id,
                 "result": result,
             }
-        if result.get("success"):
+        if result.get("success") is True:
             return {"success": True, "tool": tool_name, "call_id": call_id, "result": result}
         return {
             "success": False,
@@ -304,8 +310,9 @@ class ToolManager:
 
     def unload(self, agent_name: str, name: str, permissions: tuple[str, ...] = ()) -> dict[str, Any]:
         access = self._check_access(agent_name, name, permissions, action="uninstall", irreversible=True)
-        if not access.get("success", True):
-            return self._audit_dangerous_result("unload", agent_name, name, access)
+        access_failure = self._access_failure("unload", name, access)
+        if access_failure is not None:
+            return self._audit_dangerous_result("unload", agent_name, name, access_failure)
         if name not in self._registry:
             return self._audit_dangerous_result(
                 "unload",
@@ -328,8 +335,9 @@ class ToolManager:
 
     def register_builtin(self, agent_name: str, name: str, permissions: tuple[str, ...] = ()) -> dict[str, Any]:
         access = self._check_access(agent_name, name, permissions, action="register_builtin", irreversible=True)
-        if not access.get("success", True):
-            return self._audit_dangerous_result("register_builtin", agent_name, name, access)
+        access_failure = self._access_failure("register_builtin", name, access)
+        if access_failure is not None:
+            return self._audit_dangerous_result("register_builtin", agent_name, name, access_failure)
         builtins = builtin_tools(self.tool_root or Path.cwd())
         if name not in builtins:
             return self._audit_dangerous_result(
@@ -404,6 +412,56 @@ class ToolManager:
             "requires_intervention": decision.requires_intervention,
         }
 
+    @staticmethod
+    def _success_state(result: Any) -> bool | None:
+        if not isinstance(result, dict) or "success" not in result:
+            return None
+        success = result["success"]
+        if isinstance(success, bool):
+            return success
+        return None
+
+    def _invalid_success_result(
+        self,
+        error_code: str,
+        action: str,
+        tool_name: str,
+        result: Any,
+        *,
+        source: str,
+    ) -> dict[str, Any]:
+        success_type = "missing"
+        result_keys: list[str] = []
+        if isinstance(result, dict):
+            result_keys = sorted(str(key) for key in result.keys())
+            if "success" in result:
+                success_type = type(result["success"]).__name__
+        else:
+            success_type = type(result).__name__
+        return {
+            "success": False,
+            "error_code": error_code,
+            "reason": f"{source} result must include boolean success",
+            "action": action,
+            "tool": tool_name,
+            "success_type": success_type,
+            "result_keys": result_keys,
+        }
+
+    def _access_failure(self, action: str, tool_name: str, access: dict[str, Any]) -> dict[str, Any] | None:
+        success = self._success_state(access)
+        if success is True:
+            return None
+        if success is False:
+            return access
+        return self._invalid_success_result(
+            "TOOL_ACCESS_RESULT_INVALID",
+            action,
+            tool_name,
+            access,
+            source="tool access decision",
+        )
+
     def status(self, call_id: str = "") -> dict[str, Any]:
         active_calls = [
             {"call_id": call.call_id, "agent_name": call.agent_name, "tool": call.tool_name}
@@ -439,8 +497,18 @@ class ToolManager:
             self.register(name, handler, description=description)
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        success = self._success_state(result)
+        if success is True:
             return KernelResponse.ok(result, data=result)
+        if success is None:
+            invalid = self._invalid_success_result(
+                "TOOL_RESULT_INVALID",
+                "kernel_response",
+                str(result.get("tool") or ""),
+                result,
+                source="tool manager",
+            )
+            return KernelResponse.error("TOOL_RESULT_INVALID", metadata=invalid)
         return KernelResponse.error(str(result.get("error_code") or "TOOL_BACKEND_UNAVAILABLE"), metadata=result)
 
     def _audit_dangerous_result(
@@ -456,8 +524,9 @@ class ToolManager:
             "agent_name": agent_name,
             "action": action,
             "tool": tool_name,
-            "success": bool(result.get("success", False)),
+            "success": self._success_state(result) is True,
             "error_code": str(result.get("error_code") or ""),
+            "reason": str(result.get("reason") or ""),
             "irreversible": True,
             "provider": "local_tool_manager",
             **metadata,
@@ -472,6 +541,7 @@ class ToolManager:
                 tool=tool_name,
                 success=event["success"],
                 error_code=event["error_code"],
+                reason=event["reason"],
                 irreversible=True,
                 provider="local_tool_manager",
                 **metadata,
