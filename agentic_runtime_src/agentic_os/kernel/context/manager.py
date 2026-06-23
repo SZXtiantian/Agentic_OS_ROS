@@ -104,7 +104,10 @@ class ContextManager:
 
     def snapshot(self, session_id: str, agent_name: str, **state: Any) -> ContextSnapshot:
         result = self.provider.snapshot(agent_name, session_id, "manual", dict(state), {"compat": True})
-        if not result.get("success", False):
+        invalid = self._invalid_provider_result(result, operation="snapshot")
+        if invalid is not None:
+            raise RuntimeError(str(invalid.get("error_code") or "CONTEXT_SNAPSHOT_FAILED"))
+        if result.get("success") is not True:
             raise RuntimeError(str(result.get("error_code") or "CONTEXT_SNAPSHOT_FAILED"))
         return ContextSnapshot(session_id=session_id, agent_name=agent_name, state=dict(state), created_at=result["created_at"])
 
@@ -206,9 +209,43 @@ class ContextManager:
         return KernelResponse.ok({"deleted_count": deleted_count, "scope": scope})
 
     def _provider_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        invalid = self._invalid_provider_result(result, operation="provider_response")
+        if invalid is not None:
+            return KernelResponse.error(str(invalid["error_code"]), metadata=invalid)
+        if result.get("success") is True:
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "CONTEXT_PROVIDER_UNAVAILABLE"), metadata=result)
+
+    def _invalid_provider_result(self, result: Any, *, operation: str) -> dict[str, Any] | None:
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "CONTEXT_PROVIDER_RESULT_INVALID",
+                "reason": f"context provider {operation} returned {type(result).__name__}",
+            }
+        if "success" not in result:
+            return {
+                "success": False,
+                "error_code": "CONTEXT_PROVIDER_RESULT_INVALID",
+                "reason": f"context provider {operation} missing success field",
+                "data": dict(result),
+            }
+        if not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "CONTEXT_PROVIDER_RESULT_INVALID",
+                "reason": f"context provider {operation} success field must be boolean",
+                "success_type": type(result.get("success")).__name__,
+                "data": dict(result),
+            }
+        if result["success"] is False and not result.get("error_code"):
+            return {
+                "success": False,
+                "error_code": "CONTEXT_PROVIDER_UNAVAILABLE",
+                "reason": f"context provider {operation} failed without error_code",
+                "data": dict(result),
+            }
+        return None
 
     def _check_access(
         self,
@@ -299,7 +336,7 @@ class ContextManager:
                 "created_at": utc_now(),
                 "owner_agent": owner,
                 "operation_type": operation_type,
-                "success": response.success,
+                "success": response.success is True,
                 "error_code": response.error_code,
             }
         )
@@ -321,7 +358,7 @@ class ContextManager:
             session_id=session_id,
             namespace=namespace,
             operation_type=operation_type,
-            success=response.success,
+            success=response.success is True,
             error_code=response.error_code,
             provider=self.provider.__class__.__name__,
             compact_mode="structural_truncation" if operation_type == "ctx_compact" else "",

@@ -77,6 +77,56 @@ def test_context_manager_snapshot_recover_compat_persists(tmp_path):
     assert recovered.current_skill == "robot.inspect_area"
 
 
+def test_context_provider_success_field_must_be_bool_for_syscalls(tmp_path):
+    class BadProvider:
+        def put(self, *args, **kwargs):
+            return {"success": "true", "key": "task.stage"}
+
+        def status(self):
+            return {"state": "ready", "provider": "bad"}
+
+    sink = InMemoryKernelEventSink()
+    manager = ContextManager(
+        tmp_path / "ctx",
+        provider=BadProvider(),
+        access_manager=AccessManager(event_sink=sink),
+        event_sink=sink,
+    )
+
+    response = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_put",
+            params={"session_id": "sess_1", "key": "task.stage", "value": "inspect"},
+        )
+    )
+
+    assert response.success is False
+    assert response.error_code == "CONTEXT_PROVIDER_RESULT_INVALID"
+    assert response.metadata["success_type"] == "str"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "context.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "CONTEXT_PROVIDER_RESULT_INVALID"
+
+
+def test_context_snapshot_compat_rejects_malformed_provider_success(tmp_path):
+    class BadProvider:
+        def snapshot(self, *args, **kwargs):
+            return {"success": "true", "created_at": "fake"}
+
+        def status(self):
+            return {"state": "ready", "provider": "bad"}
+
+    manager = ContextManager(tmp_path / "ctx", provider=BadProvider())
+
+    try:
+        manager.snapshot("sess_1", "agent_a", task={"place": "kitchen"})
+    except RuntimeError as exc:
+        assert "CONTEXT_PROVIDER_RESULT_INVALID" in str(exc)
+    else:
+        raise AssertionError("malformed provider success must fail")
+
+
 def test_context_syscall_queue_scheduler_roundtrip(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     service.start()
