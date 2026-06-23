@@ -96,6 +96,17 @@ def test_robot_motion_requires_access_manager_before_backend(tmp_path):
     asyncio.run(run())
 
 
+def test_human_ask_requires_access_manager_before_backend(tmp_path):
+    async def run():
+        executor, bridge_calls, _, _ = make_executor(tmp_path, access_manager=False)
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "human.ask", {"question": "Approve?", "timeout_s": 1}, "sess")
+        assert result.success is False
+        assert result.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+        assert bridge_calls == []
+
+    asyncio.run(run())
+
+
 def test_resource_manager_rejects_parallel_base_lock_without_bridge_dependency():
     resources = ResourceManager()
     resources.acquire("base", "other", "call")

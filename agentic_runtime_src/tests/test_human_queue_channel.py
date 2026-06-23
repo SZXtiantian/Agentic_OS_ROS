@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
+from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_runtime.human_channel import FileHumanQueueChannel
 from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
@@ -110,6 +111,7 @@ def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
         permissions=["human.ask"],
         required_capabilities=["human.ask"],
     )
+    server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
 
     async def run():
         task = asyncio.create_task(
@@ -146,6 +148,7 @@ def test_runtime_human_skill_uses_call_id_as_queue_correlation(tmp_path, monkeyp
         permissions=["human.ask"],
         required_capabilities=["human.ask"],
     )
+    server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
 
     async def run():
         task = asyncio.create_task(

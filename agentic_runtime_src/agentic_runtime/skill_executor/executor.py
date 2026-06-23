@@ -261,9 +261,12 @@ class SkillExecutor:
             "gripper.set",
             "perception.observe",
             "perception.capture_photo",
+            "human.ask",
         }
 
     def _access_resource_type(self, skill_name: str) -> str:
+        if skill_name == "human.ask":
+            return "human"
         if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo"}:
             return "robot_sensor"
         return "robot_motion"
@@ -274,6 +277,7 @@ class SkillExecutor:
             "robot.inspect_area",
             "arm.move_named",
             "gripper.set",
+            "human.ask",
         }
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
