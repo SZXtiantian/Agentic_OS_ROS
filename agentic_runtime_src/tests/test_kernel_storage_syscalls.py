@@ -53,6 +53,47 @@ def test_storage_write_read_list_emit_access_and_audit_events(tmp_path):
     assert all(event["metadata"]["allowed"] is True for event in checked)
 
 
+def test_remaining_storage_public_operations_emit_access_and_audit_events(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(event_sink=sink)
+    storage = StorageManager(tmp_path / "storage", access_manager=access, event_sink=sink)
+
+    mounted = storage.mount("reports", agent_name="agent_a")
+    directory = storage.create_directory("reports/daily", agent_name="agent_a")
+    created = storage.create_file("reports/daily/empty.md", agent_name="agent_a")
+    stat = storage.stat("reports/daily/empty.md", agent_name="agent_a")
+    history = storage.history("reports/daily/empty.md", agent_name="agent_a")
+    indexed = storage.index("reports", agent_name="agent_a")
+    retrieved = storage.retrieve("", collection_name="reports", limit=1, agent_name="agent_a")
+
+    assert all(
+        item["success"] is True
+        for item in (mounted, directory, created, stat, history, indexed, retrieved)
+    )
+    audits = [event for event in sink.recent(limit=30) if event["event_type"] == "storage.audit"]
+    checked = [event for event in sink.recent(limit=30) if event["event_type"] == "access.checked"]
+    assert [event["metadata"]["action"] for event in audits] == [
+        "mount",
+        "mkdir",
+        "create_file",
+        "stat",
+        "history",
+        "index",
+        "retrieve",
+    ]
+    assert [event["metadata"]["action"] for event in checked] == [
+        "mount",
+        "mkdir",
+        "create_file",
+        "stat",
+        "history",
+        "index",
+        "retrieve",
+    ]
+    assert all(event["metadata"]["irreversible"] is False for event in audits)
+    assert all(event["metadata"]["allowed"] is True for event in checked)
+
+
 def test_storage_read_access_denial_is_audited(tmp_path):
     sink = InMemoryKernelEventSink()
     access = AccessManager(event_sink=sink)

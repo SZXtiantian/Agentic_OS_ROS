@@ -65,27 +65,45 @@ class StorageManager:
             if operation in {"delete", "delete_artifact", "sto_delete"}:
                 return self._kernel_response(self.delete(str(params["path"]), agent_name=syscall.agent_name))
             if operation == "sto_mount":
-                return self._kernel_response(self.mount(str(params.get("collection_name") or params.get("path") or "default")))
+                return self._kernel_response(
+                    self.mount(
+                        str(params.get("collection_name") or params.get("path") or "default"),
+                        agent_name=syscall.agent_name,
+                    )
+                )
             if operation == "sto_create_file":
                 return self._kernel_response(
-                    self.create_file(str(params.get("file_path") or params.get("path") or params.get("file_name")))
+                    self.create_file(
+                        str(params.get("file_path") or params.get("path") or params.get("file_name")),
+                        agent_name=syscall.agent_name,
+                    )
                 )
             if operation in {"sto_create_directory", "sto_mkdir"}:
                 return self._kernel_response(
-                    self.create_directory(str(params.get("file_path") or params.get("path") or params.get("dir_path")))
+                    self.create_directory(
+                        str(params.get("file_path") or params.get("path") or params.get("dir_path")),
+                        agent_name=syscall.agent_name,
+                    )
                 )
             if operation == "sto_stat":
-                return self._kernel_response(self.stat(str(params.get("file_path") or params.get("path"))))
+                return self._kernel_response(
+                    self.stat(str(params.get("file_path") or params.get("path")), agent_name=syscall.agent_name)
+                )
             if operation == "sto_history":
-                return self._kernel_response(self.history(str(params.get("file_path") or params.get("path"))))
+                return self._kernel_response(
+                    self.history(str(params.get("file_path") or params.get("path")), agent_name=syscall.agent_name)
+                )
             if operation == "sto_index":
-                return self._kernel_response(self.index(str(params.get("collection_name") or params.get("path") or "")))
+                return self._kernel_response(
+                    self.index(str(params.get("collection_name") or params.get("path") or ""), agent_name=syscall.agent_name)
+                )
             if operation == "sto_retrieve":
                 return self._kernel_response(
                     self.retrieve(
                         query=str(params.get("query") or params.get("query_text") or ""),
                         collection_name=str(params.get("collection_name") or ""),
                         limit=int(params.get("limit", params.get("k", 5))),
+                        agent_name=syscall.agent_name,
                     )
                 )
             if operation == "sto_rollback":
@@ -196,35 +214,68 @@ class StorageManager:
         self._remove_index(relative_path)
         return self._audit_dangerous_result("delete", relative_path, {"success": True, "path": str(path)})
 
-    def mount(self, collection_name: str) -> dict[str, Any]:
+    def mount(self, collection_name: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(collection_name or "default", allow_root=False)
+        decision = self._check_access("mount", collection_name or "default", agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("mount", collection_name or "default", decision)
         path.mkdir(parents=True, exist_ok=True)
-        return {"success": True, "collection_name": collection_name, "path": str(path)}
+        return self._audit_result(
+            "mount",
+            collection_name or "default",
+            {"success": True, "collection_name": collection_name, "path": str(path)},
+        )
 
-    def create_file(self, relative_path: str) -> dict[str, Any]:
+    def create_file(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
+        decision = self._check_access("create_file", relative_path, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("create_file", relative_path, decision)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(exist_ok=False)
         self._index_file(relative_path, metadata={})
-        return {"success": True, "path": str(path), "size_bytes": 0}
+        return self._audit_result(
+            "create_file",
+            relative_path,
+            {"success": True, "path": str(path), "size_bytes": 0},
+        )
 
-    def create_directory(self, relative_path: str) -> dict[str, Any]:
+    def create_directory(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
+        decision = self._check_access("mkdir", relative_path, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("mkdir", relative_path, decision)
         path.mkdir(parents=True, exist_ok=True)
-        return {"success": True, "path": str(path)}
+        return self._audit_result("mkdir", relative_path, {"success": True, "path": str(path)})
 
-    def retrieve(self, query: str, collection_name: str = "", limit: int = 5) -> dict[str, Any]:
+    def retrieve(self, query: str, collection_name: str = "", limit: int = 5, agent_name: str = "storage_manager") -> dict[str, Any]:
         root = self._safe_path(collection_name or ".", allow_root=True)
+        resource = collection_name or "."
+        decision = self._check_access("retrieve", resource, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("retrieve", resource, decision)
         if not root.exists() or not root.is_dir():
-            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)}
+            return self._audit_result(
+                "retrieve",
+                resource,
+                {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)},
+            )
         if not self._index_available:
-            return {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error}
+            return self._audit_result(
+                "retrieve",
+                resource,
+                {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error},
+            )
         if not self._has_indexed_files(collection_name):
-            indexed = self.index(collection_name)
+            indexed = self.index(collection_name, agent_name=agent_name)
             if not indexed.get("success", False):
                 return indexed
         matches = self._search_index(query, collection_name, limit)
-        return {"success": True, "matches": matches, "retrieval_mode": "lexical_fts", "semantic": False}
+        return self._audit_result(
+            "retrieve",
+            resource,
+            {"success": True, "matches": matches, "retrieval_mode": "lexical_fts", "semantic": False},
+        )
 
     def rollback(self, relative_path: str, version: str = "", agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
@@ -255,27 +306,41 @@ class StorageManager:
             version=latest.name,
         )
 
-    def stat(self, relative_path: str) -> dict[str, Any]:
+    def stat(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
+        decision = self._check_access("stat", relative_path, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("stat", relative_path, decision)
         if not path.exists():
-            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
+            return self._audit_result(
+                "stat",
+                relative_path,
+                {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)},
+            )
         stat = path.stat()
         digest = ""
         if path.is_file():
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        return {
-            "success": True,
-            "path": str(path),
-            "relative_path": str(Path(relative_path)),
-            "is_file": path.is_file(),
-            "is_dir": path.is_dir(),
-            "size_bytes": int(stat.st_size),
-            "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
-            "sha256": digest,
-        }
+        return self._audit_result(
+            "stat",
+            relative_path,
+            {
+                "success": True,
+                "path": str(path),
+                "relative_path": str(Path(relative_path)),
+                "is_file": path.is_file(),
+                "is_dir": path.is_dir(),
+                "size_bytes": int(stat.st_size),
+                "mtime": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+                "sha256": digest,
+            },
+        )
 
-    def history(self, relative_path: str) -> dict[str, Any]:
+    def history(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         self._safe_path(relative_path, allow_root=False)
+        decision = self._check_access("history", relative_path, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("history", relative_path, decision)
         versions = []
         for version_path in sorted(self._version_dir(relative_path).glob("*.bak")):
             stat = version_path.stat()
@@ -288,21 +353,41 @@ class StorageManager:
                     "sha256": hashlib.sha256(version_path.read_bytes()).hexdigest(),
                 }
             )
-        return {"success": True, "path": relative_path, "versions": versions}
+        return self._audit_result(
+            "history",
+            relative_path,
+            {"success": True, "path": relative_path, "versions": versions},
+        )
 
-    def index(self, collection_name: str = "") -> dict[str, Any]:
+    def index(self, collection_name: str = "", agent_name: str = "storage_manager") -> dict[str, Any]:
         root = self._safe_path(collection_name or ".", allow_root=True)
+        resource = collection_name or "."
+        decision = self._check_access("index", resource, agent_name=agent_name)
+        if not decision.get("success", True):
+            return self._audit_result("index", resource, decision)
         if not root.exists() or not root.is_dir():
-            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)}
+            return self._audit_result(
+                "index",
+                resource,
+                {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(root)},
+            )
         if not self._index_available:
-            return {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error}
+            return self._audit_result(
+                "index",
+                resource,
+                {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": self._index_error},
+            )
         count = 0
         for path in sorted(root.rglob("*")):
             if not path.is_file() or self._is_internal_path(path):
                 continue
             self._index_file(str(path.relative_to(self.root)), metadata={})
             count += 1
-        return {"success": True, "collection_name": collection_name, "indexed_count": count, "index_path": str(self.index_path)}
+        return self._audit_result(
+            "index",
+            resource,
+            {"success": True, "collection_name": collection_name, "indexed_count": count, "index_path": str(self.index_path)},
+        )
 
     def share(
         self,
