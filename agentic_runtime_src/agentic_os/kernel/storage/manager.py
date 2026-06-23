@@ -212,6 +212,7 @@ class StorageManager:
             )
         path.unlink()
         self._remove_index(relative_path)
+        self._remove_share_policy(relative_path)
         return self._audit_dangerous_result("delete", relative_path, {"success": True, "path": str(path)})
 
     def mount(self, collection_name: str, agent_name: str = "storage_manager") -> dict[str, Any]:
@@ -421,7 +422,9 @@ class StorageManager:
         )
 
     def share_policy(self, relative_path: str) -> dict[str, Any]:
-        self._safe_path(relative_path, allow_root=False)
+        path = self._safe_path(relative_path, allow_root=False)
+        if not path.exists() or not path.is_file():
+            return {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)}
         if not self._index_available:
             return {"success": False, "error_code": "STORAGE_SHARE_REGISTRY_UNAVAILABLE", "reason": self._index_error}
         policy = self._load_share_policy(str(Path(relative_path)))
@@ -657,6 +660,13 @@ class StorageManager:
         with self._connect_index() as conn:
             conn.execute("DELETE FROM storage_files WHERE relative_path=?", (relative,))
             conn.execute("DELETE FROM storage_files_fts WHERE relative_path=?", (relative,))
+
+    def _remove_share_policy(self, relative_path: str) -> None:
+        if not self._index_available:
+            return
+        relative = str(Path(relative_path))
+        with self._connect_index() as conn:
+            conn.execute("DELETE FROM storage_shares WHERE relative_path=?", (relative,))
 
     def _has_indexed_files(self, collection_name: str = "") -> bool:
         if not self._index_available:

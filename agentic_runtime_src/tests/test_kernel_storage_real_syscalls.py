@@ -76,6 +76,24 @@ def test_storage_share_registry_persists_across_manager_reopen(tmp_path):
     assert status["share_registry"]["share_count"] == 1
 
 
+def test_storage_delete_removes_persisted_share_registry_entry(tmp_path):
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    root = tmp_path / "storage"
+    storage = StorageManager(root, access_manager=access)
+    storage.write("reports/a.md", "share me")
+    storage.share("reports/a.md", {"scope": "operator"})
+
+    deleted = storage.delete("reports/a.md")
+    reopened = StorageManager(root)
+    policy = reopened.share_policy("reports/a.md")
+    status = reopened.status()
+
+    assert deleted["success"] is True
+    assert policy["success"] is False
+    assert policy["error_code"] == "STORAGE_NOT_FOUND"
+    assert status["share_registry"]["share_count"] == 0
+
+
 def test_storage_syscall_roundtrip_and_status(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     service.start()
