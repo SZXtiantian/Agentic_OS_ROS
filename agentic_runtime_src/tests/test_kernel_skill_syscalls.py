@@ -21,6 +21,7 @@ class RuntimeCompatibleExecutor:
         self.cancellation_manager = SimpleNamespace(
             cancel_session=lambda session_id: self.cancelled_sessions.append(session_id),
             cancel_call=lambda session_id, call_id: self.cancelled_calls.append((session_id, call_id)) or call_id == "call_1",
+            active_calls=lambda: [{"session_id": "sess_1", "call_id": "call_1"}],
         )
         self.calls: list[tuple[str, dict, str]] = []
 
@@ -124,6 +125,26 @@ def test_skill_manager_rejects_backend_response_without_success_and_audits():
     assert response.metadata["data"] == {"state": "ready"}
     audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
     assert audit["metadata"]["error_code"] == "SKILL_RESULT_INVALID"
+
+
+def test_skill_status_unknown_call_id_returns_not_found_and_audits():
+    from agentic_os.kernel.hooks import InMemoryKernelEventSink
+
+    class Backend:
+        def status(self):
+            return {"success": True, "state": "ready", "active_calls": [{"session_id": "sess_1", "call_id": "call_1"}]}
+
+    sink = InMemoryKernelEventSink()
+    manager = SkillManager(Backend(), event_sink=sink)
+    response = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="skill_status", params={"call_id": "missing"})
+    )
+
+    assert response.success is False
+    assert response.error_code == "SYSCALL_NOT_FOUND"
+    assert response.metadata["call_id"] == "missing"
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
+    assert audit["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
 
 
 def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):

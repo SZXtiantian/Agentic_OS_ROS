@@ -78,6 +78,15 @@ class SkillManager:
             return self._unavailable("", "runtime skill backend not configured")
         status = self.backend.status()
         if status.get("success", False):
+            active_calls = list(status.get("active_calls") or [])
+            if call_id and not any(str(call.get("call_id") or "") == call_id for call in active_calls if isinstance(call, dict)):
+                return {
+                    "success": False,
+                    "error_code": "SYSCALL_NOT_FOUND",
+                    "reason": "skill call_id is not active",
+                    "call_id": call_id,
+                    "active_calls": active_calls,
+                }
             status["call_id"] = call_id
             status["recent_events"] = list(self._events[-20:])
         return status
