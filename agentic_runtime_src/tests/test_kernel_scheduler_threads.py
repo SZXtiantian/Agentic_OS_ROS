@@ -33,6 +33,11 @@ class TimeoutManager:
         raise TimeoutError("manager timed out")
 
 
+class MalformedBatchManager:
+    def address_batch(self, syscalls):
+        return [{"success": "false", "error_code": ""} for _ in syscalls]
+
+
 class BatchProvider:
     def __init__(self) -> None:
         self.batch_sizes: list[int] = []
@@ -113,6 +118,24 @@ def test_scheduler_sets_event_on_failure():
     assert result.error_code == "KERNEL_MANAGER_FAILED"
 
 
+def test_scheduler_rejects_non_boolean_success_response():
+    store = KernelQueueStore()
+    manager = FakeManager({"success": "false", "error_code": ""})
+    scheduler = FIFOKernelScheduler(store, managers={"memory": manager})
+    executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)
+
+    scheduler.start()
+    try:
+        result = executor.execute_request("agent_a", MemoryQuery(operation_type="remember"), timeout_s=1.0)
+    finally:
+        scheduler.stop()
+
+    assert result.success is False
+    assert result.error_code == "KERNEL_RESULT_INVALID"
+    assert result.syscall.status == KernelSyscallStatus.FAILED
+    assert result.syscall.error_code == "KERNEL_RESULT_INVALID"
+
+
 def test_scheduler_converts_manager_timeout_to_structured_error():
     store = KernelQueueStore()
     scheduler = FIFOKernelScheduler(store, managers={"memory": TimeoutManager()})
@@ -127,6 +150,31 @@ def test_scheduler_converts_manager_timeout_to_structured_error():
     assert result.success is False
     assert result.syscall.status == KernelSyscallStatus.FAILED
     assert result.error_code == "KERNEL_MANAGER_TIMEOUT"
+
+
+def test_scheduler_batch_rejects_non_boolean_success_response():
+    store = KernelQueueStore()
+    lane = SchedulerLaneSpec(
+        "memory",
+        KernelQueueName.MEMORY,
+        concurrent=True,
+        manager_key="memory",
+        batchable=True,
+        batch_window_ms=10,
+        max_batch_size=8,
+    )
+    scheduler = FIFOKernelScheduler(store, managers={"memory": MalformedBatchManager()}, lanes=(lane,), poll_timeout_s=0.01)
+    executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)
+
+    scheduler.start()
+    try:
+        result = executor.execute_request("agent_a", MemoryQuery(operation_type="remember"), timeout_s=1.0)
+    finally:
+        scheduler.stop()
+
+    assert result.success is False
+    assert result.error_code == "KERNEL_RESULT_INVALID"
+    assert result.syscall.status == KernelSyscallStatus.FAILED
 
 
 def test_scheduler_batches_llm_syscalls_in_window():

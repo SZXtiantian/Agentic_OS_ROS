@@ -59,6 +59,19 @@ def test_executor_legacy_register_execute_still_works():
     assert syscall.status == KernelSyscallStatus.DONE
 
 
+def test_executor_rejects_non_boolean_success_response():
+    executor = SyscallExecutor()
+    executor.register("bad", lambda syscall: {"success": "false", "error_code": ""})
+    syscall = KernelSyscall.create("agent_a", "bad", "bad", {})
+
+    result = executor.execute(syscall)
+
+    assert result.success is False
+    assert result.error_code == "KERNEL_RESULT_INVALID"
+    assert syscall.status == KernelSyscallStatus.FAILED
+    assert syscall.error_code == "KERNEL_RESULT_INVALID"
+
+
 def test_execute_request_queues_syscall_and_waits_for_scheduler():
     store = KernelQueueStore()
     executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)

@@ -246,17 +246,29 @@ class BaseKernelScheduler:
         syscall.end_time = syscall.end_time or time.time()
 
     def _response_success(self, response: Any) -> bool:
+        if self._invalid_response_error_code(response):
+            return False
         if isinstance(response, KernelResponse):
             return response.success
         if isinstance(response, dict) and "success" in response:
-            return bool(response["success"])
+            return response["success"]
         return True
 
     def _response_error_code(self, response: Any) -> str:
+        invalid_error = self._invalid_response_error_code(response)
+        if invalid_error:
+            return invalid_error
         if isinstance(response, KernelResponse):
             return response.error_code
         if isinstance(response, dict):
             return str(response.get("error_code", ""))
+        return ""
+
+    def _invalid_response_error_code(self, response: Any) -> str:
+        if isinstance(response, KernelResponse) and not isinstance(response.success, bool):
+            return "KERNEL_RESULT_INVALID"
+        if isinstance(response, dict) and "success" in response and not isinstance(response["success"], bool):
+            return "KERNEL_RESULT_INVALID"
         return ""
 
     def _emit(self, event_type: str, syscall: KernelSyscall, **metadata: Any) -> None:

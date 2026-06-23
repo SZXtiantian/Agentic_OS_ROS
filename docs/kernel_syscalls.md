@@ -4,6 +4,8 @@ Last updated: 2026-06-23
 
 Agent Apps call kernel capabilities through `ctx.kernel.*`. Public syscalls return a `KernelResponse` shape: `success`, `data`, `response_message`, `error_code`, and `metadata`.
 
+Kernel manager responses that explicitly include `success` must use a real boolean value. The syscall executor and scheduler reject non-boolean `success` fields as `KERNEL_RESULT_INVALID` instead of relying on Python truthiness.
+
 `ctx.kernel.cancel(syscall_id)` cancels only a syscall still waiting in the kernel queue. Missing, empty, already-finished, or manager-local active calls return `SYSCALL_NOT_FOUND`; manager-specific cancellation remains available through `ctx.kernel.llm.cancel`, `ctx.kernel.skill.cancel`, `ctx.kernel.tool.cancel`, and human cancel paths where the backend supports them.
 
 ## Namespaces
@@ -167,7 +169,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 511 passed, 3 skipped
+# 514 passed, 3 skipped
 scripts/run_tests.sh
-# 511 passed, 3 deselected; Agentic OS MVP checks passed.
+# 514 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

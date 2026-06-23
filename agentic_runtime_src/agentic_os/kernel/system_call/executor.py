@@ -138,10 +138,18 @@ class SyscallExecutor:
         syscall.mark_started()
         try:
             response = handler(syscall)
-            syscall.finish(response=response)
+            invalid_error = self._invalid_response_error_code(response)
+            if invalid_error:
+                syscall.fail(invalid_error, response)
+            elif self._explicit_failure(response):
+                syscall.fail(self._response_error_code(syscall, response) or "KERNEL_SYSCALL_REJECTED", response)
+            else:
+                syscall.finish(response=response)
             return SyscallExecutionResult(
                 syscall=syscall,
                 response=response,
+                success=syscall.status == KernelSyscallStatus.DONE,
+                error_code=syscall.error_code,
                 started_monotonic=started,
                 ended_monotonic=time.monotonic(),
             )
@@ -197,18 +205,37 @@ class SyscallExecutor:
             return self._next_pid_value
 
     def _response_success(self, syscall: KernelSyscall, response: Any) -> bool:
+        if self._invalid_response_error_code(response):
+            return False
         if isinstance(response, KernelResponse):
             return response.success
         if isinstance(response, dict) and "success" in response:
-            return bool(response["success"])
+            return response["success"]
         return syscall.status == KernelSyscallStatus.DONE
 
     def _response_error_code(self, syscall: KernelSyscall, response: Any) -> str:
+        invalid_error = self._invalid_response_error_code(response)
+        if invalid_error:
+            return invalid_error
         if isinstance(response, KernelResponse):
             return response.error_code
         if isinstance(response, dict):
             return str(response.get("error_code", syscall.error_code))
         return syscall.error_code
+
+    def _explicit_failure(self, response: Any) -> bool:
+        if isinstance(response, KernelResponse):
+            return isinstance(response.success, bool) and response.success is False
+        if isinstance(response, dict) and "success" in response:
+            return isinstance(response["success"], bool) and response["success"] is False
+        return False
+
+    def _invalid_response_error_code(self, response: Any) -> str:
+        if isinstance(response, KernelResponse) and not isinstance(response.success, bool):
+            return "KERNEL_RESULT_INVALID"
+        if isinstance(response, dict) and "success" in response and not isinstance(response["success"], bool):
+            return "KERNEL_RESULT_INVALID"
+        return ""
 
     def _emit(self, event_type: str, syscall: KernelSyscall, **metadata: Any) -> None:
         if self.event_sink is not None:
