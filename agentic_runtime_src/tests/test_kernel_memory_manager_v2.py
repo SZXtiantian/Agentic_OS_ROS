@@ -86,6 +86,21 @@ def test_memory_eviction_moves_to_persistent_provider():
     assert manager.get("n1", "agent_a")["success"] is True
 
 
+def test_memory_retrieve_reports_persistent_provider_failure():
+    class FailingPersistentProvider(InMemoryMemoryProvider):
+        def retrieve_memory(self, query: str, agent_name: str, limit: int = 5, user_id: str = ""):
+            return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE", "reason": "persistent db closed"}
+
+    ram = InMemoryMemoryProvider()
+    manager = MemoryManager(provider=ram, persistent_provider=FailingPersistentProvider())
+
+    result = manager.retrieve("agent_a", "kitchen", limit=5)
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
+    assert result["reason"] == "persistent db closed"
+
+
 def test_two_tier_eviction_writes_compressed_block_to_storage(tmp_path):
     storage = StorageManager(tmp_path / "storage")
     robot_metadata = {
@@ -120,6 +135,21 @@ def test_two_tier_eviction_writes_compressed_block_to_storage(tmp_path):
     assert blocks[0].metadata["note_metadata"][0]["robot"]["place_id"] == "kitchen"
     assert storage_result["matches"]
     assert retrieved["memories"][0]["metadata"]["compressed_block"]["notes"] == ["n1"]
+
+
+def test_memory_retrieve_reports_storage_block_backend_failure():
+    class FailingStorage:
+        def retrieve(self, query: str, collection_name: str = "", limit: int = 5):
+            return {"success": False, "error_code": "STORAGE_INDEX_UNAVAILABLE", "reason": "fts db missing"}
+
+    manager = MemoryManager(provider=InMemoryMemoryProvider(), two_tier_enabled=True, storage_manager=FailingStorage())
+
+    result = manager.retrieve("agent_a", "red block", limit=5)
+
+    assert result["success"] is False
+    assert result["error_code"] == "STORAGE_INDEX_UNAVAILABLE"
+    assert result["reason"] == "fts db missing"
+    assert result["operation"] == "search_storage_blocks"
 
 
 def test_hash_embedding_provider_is_deterministic():

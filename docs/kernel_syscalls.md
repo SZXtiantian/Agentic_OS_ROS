@@ -37,6 +37,7 @@ Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, a
 Runtime `memory.remember` skill dispatch returns the real kernel/provider result; provider failures such as `MEMORY_PROVIDER_UNAVAILABLE` are propagated through the runtime memory adapter to the skill result and audit record instead of being converted to an empty success.
 Runtime `memory.remember` and `memory.recall` skill dispatch require a structured backend result with a boolean `success`; non-object or legacy unstructured returns fail with `MEMORY_RESULT_INVALID` or `MEMORY_BACKEND_UNAVAILABLE` instead of being converted to empty success.
 Runtime `memory.recall` skill dispatch uses the structured kernel result path; provider failures remain `MEMORY_PROVIDER_UNAVAILABLE` instead of being converted to successful `value: null`.
+Memory search/retrieve treats configured fallback providers as real dependencies: persistent-provider failures return their stable memory error code, and storage-backed memory-block retrieve failures return the storage error code or `MEMORY_STORAGE_RETRIEVE_FAILED` instead of being hidden behind a successful empty result.
 Runtime artifact writes check the kernel storage response before creating `ArtifactRecord`; storage provider failures preserve stable `STORAGE_*` error codes instead of surfacing as missing-field exceptions.
 Runtime `report.say` writes to a real JSONL report sink at `AGENTIC_REPORT_LOG` or `AGENTIC_VAR/reports/report.jsonl`; write failures return `REPORT_BACKEND_UNAVAILABLE` and appear in bridge client status instead of returning stdout-only success.
 ROS bridge `ask_human` responses use the same `success` contract as other public results: answered requests return `success: true`, bridge failures return their stable ROS error code with `success: false`, and unanswered responses without a backend error are `HUMAN_UNANSWERED`.
@@ -155,7 +156,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 465 passed, 3 skipped
+# 467 passed, 3 skipped
 scripts/run_tests.sh
-# 465 passed, 3 deselected; Agentic OS MVP checks passed.
+# 467 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

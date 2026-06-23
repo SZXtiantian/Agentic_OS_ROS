@@ -107,16 +107,27 @@ class MemoryManager:
         decision = self._check_memory_operation_access(agent_name, "search", query or "*")
         if not decision.get("success", True):
             return self._audit_result("search", agent_name, decision, query=query)
-        result = self.provider.retrieve_memory(query, agent_name, limit, user_id)
+        result = self._call_provider("search", self.provider.retrieve_memory, query, agent_name, limit, user_id)
         if not result.get("success", False):
             return self._audit_result("search", agent_name, result, query=query)
         memories = list(result.get("memories") or [])
         memories.extend(self._retrieve_compressed_blocks(agent_name, query, limit - len(memories)))
         if self.persistent_provider is not None and len(memories) < limit:
-            persistent = self.persistent_provider.retrieve_memory(query, agent_name, limit - len(memories), user_id)
+            persistent = self._call_provider(
+                "search_persistent",
+                self.persistent_provider.retrieve_memory,
+                query,
+                agent_name,
+                limit - len(memories),
+                user_id,
+            )
+            if not persistent.get("success", False):
+                return self._audit_result("search", agent_name, persistent, query=query)
             memories.extend(persistent.get("memories") or [])
         if self.two_tier_enabled and self.storage_manager is not None and len(memories) < limit:
-            storage_matches = self.storage_manager.retrieve(query, collection_name="memory_blocks", limit=limit - len(memories))
+            storage_matches = self._call_storage_retrieve(query, limit - len(memories))
+            if not storage_matches.get("success", False):
+                return self._audit_result("search", agent_name, storage_matches, query=query)
             for match in storage_matches.get("matches", []):
                 memories.append(
                     {
@@ -411,6 +422,50 @@ class MemoryManager:
                 "operation": action,
                 "provider_status": self._safe_provider_status(),
             }
+        return result
+
+    def _call_provider(self, action: str, fn: Any, *args: Any) -> dict[str, Any]:
+        try:
+            result = fn(*args)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error_code": "MEMORY_PROVIDER_UNAVAILABLE",
+                "reason": str(exc),
+                "operation": action,
+                "provider_status": self._safe_provider_status(),
+            }
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "MEMORY_PROVIDER_RESULT_INVALID",
+                "reason": f"provider returned {type(result).__name__}",
+                "operation": action,
+                "provider_status": self._safe_provider_status(),
+            }
+        return result
+
+    def _call_storage_retrieve(self, query: str, limit: int) -> dict[str, Any]:
+        try:
+            result = self.storage_manager.retrieve(query, collection_name="memory_blocks", limit=limit)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error_code": "MEMORY_STORAGE_RETRIEVE_FAILED",
+                "reason": str(exc),
+                "operation": "search_storage_blocks",
+            }
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "MEMORY_STORAGE_RETRIEVE_FAILED",
+                "reason": f"storage retrieve returned {type(result).__name__}",
+                "operation": "search_storage_blocks",
+            }
+        if not result.get("success", False):
+            forwarded = dict(result)
+            forwarded.setdefault("operation", "search_storage_blocks")
+            return forwarded
         return result
 
     def _safe_provider_status(self) -> dict[str, Any]:
