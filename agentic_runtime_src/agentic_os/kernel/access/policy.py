@@ -14,6 +14,8 @@ HIGH_RISK_OPERATIONS = {
     "storage.overwrite_protected",
     "access.privilege_change",
     "tool.install",
+    "tool.uninstall",
+    "tool.register_builtin",
     "tool.execute_admin",
     "bridge.install_profile",
     "bridge.rollback_profile",

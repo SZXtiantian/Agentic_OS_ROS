@@ -137,6 +137,32 @@ def test_tool_management_requires_permission_then_intervention():
     assert allowed.requires_intervention is True
 
 
+def test_tool_uninstall_and_register_builtin_are_high_risk_without_irreversible_flag():
+    manager = AccessManager()
+
+    uninstall = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", permissions=("tool.uninstall",)),
+            action="uninstall",
+            resource=AccessResource("tool", "sample.tool"),
+        )
+    )
+    register_builtin = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", permissions=("tool.register_builtin",)),
+            action="register_builtin",
+            resource=AccessResource("tool", "calculator.add"),
+        )
+    )
+
+    assert uninstall.allowed is False
+    assert uninstall.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert uninstall.requires_intervention is True
+    assert register_builtin.allowed is False
+    assert register_builtin.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert register_builtin.requires_intervention is True
+
+
 def test_audit_delete_always_forbidden():
     manager = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
     decision = manager.check(
