@@ -76,7 +76,7 @@ LLM status exposes provider configuration state and active `call_id`s. `llm_stat
 
 Configured external LLM provider calls require a kernel access manager and explicit `llm.external.call` permission in syscall metadata. Without an access manager the public syscall path returns `ACCESS_MANAGER_UNAVAILABLE` before any provider call. When a provider is configured and the permission is present, the call is still intervention-gated; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`. Missing provider configuration still fails as `LLM_PROVIDER_UNCONFIGURED` before any access prompt because no external call is attempted.
 
-Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.status(call_id=...)` and `ctx.kernel.skill.cancel(call_id)` inspect the runtime active-call registry; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
+Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.status(call_id=...)` and `ctx.kernel.skill.cancel(call_id)` inspect the runtime active-call registry; empty or missing call IDs and unknown active calls return `SYSCALL_NOT_FOUND` instead of reporting session-level cancel success.
 
 Runtime skill backend responses must explicitly include `success` or, for human replies, `answered`. The kernel skill manager also rejects non-object responses or responses missing `success` with `SKILL_RESULT_INVALID`; these failures are audited instead of being treated as successful.
 
@@ -158,7 +158,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 471 passed, 3 skipped
+# 472 passed, 3 skipped
 scripts/run_tests.sh
-# 471 passed, 3 deselected; Agentic OS MVP checks passed.
+# 472 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

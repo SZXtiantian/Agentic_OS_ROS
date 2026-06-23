@@ -75,6 +75,7 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     status = manager.status(call_id="call_1")
     cancelled = manager.cancel("sess_1", call_id="call_1")
     missing_cancel = manager.cancel("sess_1", call_id="missing")
+    missing_call_id_cancel = manager.cancel("sess_1")
 
     assert called["success"] is True
     assert called["result"]["data"]["skill"] == "report.say"
@@ -84,7 +85,22 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     assert cancelled["success"] is True
     assert missing_cancel["success"] is False
     assert missing_cancel["error_code"] == "SYSCALL_NOT_FOUND"
+    assert missing_call_id_cancel["success"] is False
+    assert missing_call_id_cancel["error_code"] == "SYSCALL_NOT_FOUND"
     assert executor.cancelled_calls == [("sess_1", "call_1"), ("sess_1", "missing")]
+    assert executor.cancelled_sessions == []
+
+
+def test_runtime_skill_backend_cancel_requires_call_id():
+    executor = RuntimeCompatibleExecutor()
+    backend = RuntimeSkillBackend(SimpleNamespace(executor=executor, registry=RuntimeCompatibleRegistry()))
+
+    result = backend.cancel("sess_1")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SYSCALL_NOT_FOUND"
+    assert result["reason"] == "call_id required"
+    assert executor.cancelled_calls == []
     assert executor.cancelled_sessions == []
 
 

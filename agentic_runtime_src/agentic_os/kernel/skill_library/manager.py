@@ -94,6 +94,8 @@ class SkillManager:
     def cancel(self, session_id: str, call_id: str = "") -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable("", "runtime skill backend not configured")
+        if not call_id:
+            return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "reason": "call_id required", "session_id": session_id}
         return self.backend.cancel(session_id, call_id=call_id)
 
     def _unavailable(self, skill_name: str, reason: str) -> dict[str, Any]:
