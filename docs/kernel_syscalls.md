@@ -35,6 +35,7 @@ Production `RuntimeServer.create()` wires one shared kernel `AccessManager` and 
 
 Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, and compact policy. Memory status exposes the real SQLite `path`/`db_path`, `fts_available`, `index`, and `last_error`. Memory import/export file failures return stable errors such as `MEMORY_IMPORT_INVALID_JSON`, `MEMORY_IMPORT_NOT_FOUND`, or `MEMORY_EXPORT_FAILED` and are emitted as `memory.audit` events.
 Runtime `memory.remember` skill dispatch returns the real kernel/provider result; provider failures such as `MEMORY_PROVIDER_UNAVAILABLE` are propagated through the runtime memory adapter to the skill result and audit record instead of being converted to an empty success.
+Runtime artifact writes check the kernel storage response before creating `ArtifactRecord`; storage provider failures preserve stable `STORAGE_*` error codes instead of surfacing as missing-field exceptions.
 
 OpenAI-compatible and vLLM-compatible LLM providers require explicit `base_url`, `api_key` or `api_key_env`, and `model`. LiteLLM, HuggingFace, and local providers require an explicit `model` before dependency or service checks. Provider `name` is only an internal route name and is not used as a model fallback.
 LiteLLM `llm_embed` uses the real `litellm.embedding(...)` API and never falls back to chat completion; missing `litellm` returns `LLM_PROVIDER_DEPENDENCY_MISSING`, provider failures return `LLM_PROVIDER_ERROR`, and malformed embedding responses return `LLM_RESPONSE_INVALID`.
@@ -147,7 +148,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 437 passed, 3 skipped
+# 438 passed, 3 skipped
 scripts/run_tests.sh
-# 437 passed, 3 deselected; Agentic OS MVP checks passed.
+# 438 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

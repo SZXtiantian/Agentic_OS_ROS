@@ -32,6 +32,7 @@ class StorageManager:
     ) -> ArtifactRecord:
         relative = self._safe_relative(name)
         kernel_result = self.kernel.write(str(Path(session_id) / relative), data)
+        self._raise_for_kernel_result(kernel_result)
         path = Path(str(kernel_result["path"]))
         return ArtifactRecord(
             session_id=session_id,
@@ -46,3 +47,20 @@ class StorageManager:
         if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
             raise AgenticRuntimeError("STORAGE_PATH_INVALID", f"invalid artifact path: {name}")
         return path
+
+    def _raise_for_kernel_result(self, result: dict[str, Any]) -> None:
+        if not isinstance(result, dict):
+            raise AgenticRuntimeError(
+                "STORAGE_RESPONSE_INVALID",
+                f"storage kernel returned {type(result).__name__}",
+                recoverable=True,
+                suggested_recovery=["retry", "cancel"],
+            )
+        if result.get("success", False):
+            return
+        raise AgenticRuntimeError(
+            str(result.get("error_code") or "STORAGE_PROVIDER_UNAVAILABLE"),
+            str(result.get("reason") or result.get("message") or "storage artifact write failed"),
+            recoverable=True,
+            suggested_recovery=["retry", "cancel"],
+        )

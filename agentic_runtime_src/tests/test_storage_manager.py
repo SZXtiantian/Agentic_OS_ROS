@@ -21,6 +21,21 @@ def test_storage_manager_rejects_path_traversal(tmp_path):
     assert exc.value.code == "STORAGE_PATH_INVALID"
 
 
+def test_storage_manager_preserves_kernel_failure_code(tmp_path):
+    class RejectingKernel:
+        def write(self, relative_path, data):
+            return {"success": False, "error_code": "STORAGE_PROVIDER_UNAVAILABLE", "reason": "disk unavailable"}
+
+    manager = StorageManager(tmp_path / "storage")
+    manager.kernel = RejectingKernel()
+
+    with pytest.raises(AgenticRuntimeError) as exc:
+        manager.write_artifact("sess_1", "inspection_report.json", {"ok": True})
+
+    assert exc.value.code == "STORAGE_PROVIDER_UNAVAILABLE"
+    assert "disk unavailable" in exc.value.message
+
+
 def test_kernel_storage_list_root_allowed(tmp_path):
     manager = KernelStorageManager(tmp_path / "storage")
     manager.write("reports/inspection.json", {"ok": True})
