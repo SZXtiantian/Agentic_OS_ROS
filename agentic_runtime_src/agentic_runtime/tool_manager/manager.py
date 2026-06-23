@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import KernelSyscall
 from agentic_os.kernel.tool import ToolManager as KernelToolManager
 
@@ -10,10 +12,17 @@ from .registry import ToolRegistry
 
 
 class ToolManager:
-    def __init__(self, registry: ToolRegistry | None = None, audit_logger: AuditLogger | None = None) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry | None = None,
+        audit_logger: AuditLogger | None = None,
+        *,
+        access_manager: AccessManager | None = None,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self.registry = registry or ToolRegistry.default()
         self.audit_logger = audit_logger
-        self.kernel = KernelToolManager()
+        self.kernel = KernelToolManager(access_manager=access_manager, event_sink=event_sink)
         for name in self.registry.list_tools():
             handler = self.registry.get(name)
             if handler is not None:
@@ -24,7 +33,7 @@ class ToolManager:
             call.app_id or "runtime",
             "tool",
             call.name,
-            {"name": call.name, "args": call.args},
+            {"name": call.name, "args": call.args, "permissions": tuple(call.permissions)},
         )
         raw = self.kernel.address_request(syscall)
         if raw.get("success"):

@@ -101,7 +101,7 @@ class RuntimeServer:
         session_runner = SessionRunner(app_factory, session_manager, storage_manager, context_manager)
         scheduler = SingleRobotScheduler(session_runner)
         bridge_manager = BridgeManager(config.bridge_root, config.bridge_profile_root, capability_registry=registry.capabilities)
-        tool_manager = ToolManager(audit_logger=audit_logger)
+        tool_manager = ToolManager(audit_logger=audit_logger, access_manager=access_manager, event_sink=event_sink)
         config_manager = ConfigManager(config, registry)
         task_log_manager = TaskLogManager()
         llm_chat = LLMChat()

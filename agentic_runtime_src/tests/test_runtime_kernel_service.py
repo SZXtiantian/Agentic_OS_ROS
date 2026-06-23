@@ -320,6 +320,8 @@ def test_runtime_server_shares_kernel_access_manager_with_runtime_wrappers(tmp_p
     assert server.context_manager.kernel.event_sink is event_sink
     assert server.storage_manager.kernel.access_manager is access
     assert server.storage_manager.kernel.event_sink is event_sink
+    assert server.tool_manager.kernel.access_manager is access
+    assert server.tool_manager.kernel.event_sink is event_sink
     assert server.executor.dispatcher.memory_store.kernel.access_manager is access
     assert server.executor.dispatcher.memory_store.kernel.event_sink is event_sink
 

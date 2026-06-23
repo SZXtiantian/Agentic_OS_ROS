@@ -10,6 +10,7 @@ class ToolCall:
     args: dict[str, Any] = field(default_factory=dict)
     app_id: str = ""
     session_id: str = ""
+    permissions: tuple[str, ...] = ()
 
 
 @dataclass
