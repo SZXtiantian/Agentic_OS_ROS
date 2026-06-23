@@ -141,7 +141,7 @@ class DefaultAccessPolicy:
         if "admin" in groups:
             return AccessDecision(allowed=True, reason="admin access allowed")
 
-        if resource_type in {"memory", "storage"}:
+        if resource_type in {"memory", "storage", "context"}:
             if is_owner(request.subject, request.resource):
                 return AccessDecision(allowed=True, reason="owner access allowed")
             if action == "read" and is_shared_read(request.resource):

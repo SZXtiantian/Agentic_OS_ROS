@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from agentic_os.kernel.access import AccessManager
 from agentic_os.kernel.context import ContextManager
 from agentic_os.kernel.context.providers import SQLiteContextProvider
 from agentic_os.kernel.hooks import InMemoryKernelEventSink
@@ -173,6 +174,54 @@ def test_context_audit_does_not_leak_values(tmp_path):
     events = [event for event in sink.recent(limit=10) if event["event_type"] == "context.audit"]
     assert [event["metadata"]["operation_type"] for event in events] == ["ctx_put", "ctx_delete"]
     assert "secret context value" not in str(events)
+
+
+def test_context_syscalls_emit_access_and_audit_events_without_value_leak(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(event_sink=sink)
+    manager = ContextManager(tmp_path / "ctx", access_manager=access, event_sink=sink)
+
+    put = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_put",
+            params={"session_id": "sess_1", "key": "task.stage", "value": "private stage value"},
+        )
+    )
+    got = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_get",
+            params={"session_id": "sess_1", "key": "task.stage"},
+        )
+    )
+    listed = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_list",
+            params={"session_id": "sess_1", "prefix": "task."},
+        )
+    )
+    deleted = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="ctx_delete",
+            params={"session_id": "sess_1", "key": "task.stage"},
+        )
+    )
+
+    assert all(response.success is True for response in (put, got, listed, deleted))
+    checked = [event for event in sink.recent(limit=20) if event["event_type"] == "access.checked"]
+    audits = [event for event in sink.recent(limit=20) if event["event_type"] == "context.audit"]
+    assert [event["metadata"]["action"] for event in checked] == ["write", "read", "read", "context_delete"]
+    assert all(event["metadata"]["resource_type"] == "context" for event in checked)
+    assert [event["metadata"]["operation_type"] for event in audits] == [
+        "ctx_put",
+        "ctx_get",
+        "ctx_list",
+        "ctx_delete",
+    ]
+    assert "private stage value" not in str(audits)
 
 
 def test_context_sdk_facade_uses_kernel_service(tmp_path):

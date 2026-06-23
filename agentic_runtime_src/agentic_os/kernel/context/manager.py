@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.system_call import ContextQuery, KernelResponse, KernelSyscall
 
@@ -42,11 +43,13 @@ class ContextManager:
         provider: ContextProvider | None = None,
         *,
         default_session_id: str = "default",
+        access_manager: AccessManager | None = None,
         event_sink: KernelEventSink | None = None,
     ) -> None:
         self.root = Path(root or "/tmp/agentic_kernel_context")
         self.provider = provider or SQLiteContextProvider(self.root / "context.sqlite3")
         self.default_session_id = default_session_id
+        self.access_manager = access_manager
         self.event_sink = event_sink
         self._events: list[dict[str, Any]] = []
 
@@ -66,7 +69,10 @@ class ContextManager:
         op = self._normalize_operation(query.operation_type)
         params = dict(query.params)
         try:
-            if op == "ctx_put":
+            access = self._check_access(owner, session_id, namespace, op, params)
+            if not access.success:
+                response = access
+            elif op == "ctx_put":
                 response = self._put(owner, session_id, namespace, params)
             elif op == "ctx_get":
                 response = self._get(owner, session_id, namespace, params)
@@ -203,6 +209,68 @@ class ContextManager:
         if result.get("success", False):
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "CONTEXT_PROVIDER_UNAVAILABLE"), metadata=result)
+
+    def _check_access(
+        self,
+        owner: str,
+        session_id: str,
+        namespace: str,
+        operation_type: str,
+        params: dict[str, Any],
+    ) -> KernelResponse:
+        if self.access_manager is None:
+            return KernelResponse.ok({"allowed": True})
+        action = self._access_action(operation_type)
+        resource_id = self._context_resource_id(session_id, namespace, operation_type, params)
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(agent_name=owner, session_id=session_id),
+                action=action,
+                resource=AccessResource("context", resource_id, owner_agent=owner),
+            )
+        )
+        if decision.allowed:
+            return KernelResponse.ok({"allowed": True})
+        return KernelResponse.error(
+            decision.error_code,
+            metadata={
+                "reason": decision.reason,
+                "requires_intervention": decision.requires_intervention,
+                "resource_id": resource_id,
+                "action": action,
+            },
+        )
+
+    def _access_action(self, operation_type: str) -> str:
+        return {
+            "ctx_put": "write",
+            "ctx_get": "read",
+            "ctx_delete": "context_delete",
+            "ctx_list": "read",
+            "ctx_snapshot": "write",
+            "ctx_recover": "read",
+            "ctx_compact": "write",
+            "ctx_clear": "context_clear",
+        }.get(operation_type, "read")
+
+    def _context_resource_id(
+        self,
+        session_id: str,
+        namespace: str,
+        operation_type: str,
+        params: dict[str, Any],
+    ) -> str:
+        if operation_type in {"ctx_put", "ctx_get", "ctx_delete"}:
+            suffix = str(params.get("key") or "")
+        elif operation_type == "ctx_list":
+            suffix = str(params.get("prefix") or "*")
+        elif operation_type in {"ctx_snapshot", "ctx_recover"}:
+            suffix = str(params.get("checkpoint") or "default")
+        elif operation_type == "ctx_clear":
+            suffix = str(params.get("scope") or "session")
+        else:
+            suffix = namespace
+        return f"{session_id}/{namespace}/{suffix}"
 
     def _normalize_operation(self, operation_type: str) -> str:
         aliases = {
