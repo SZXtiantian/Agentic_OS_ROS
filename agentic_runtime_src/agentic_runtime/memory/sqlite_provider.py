@@ -11,8 +11,8 @@ class SQLiteKeyValueMemoryProvider:
     def __init__(self, path: Path) -> None:
         self.store = SQLiteMemoryStore(path)
 
-    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> None:
-        self.store.remember(app_id, session_id, key, value)
+    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> dict[str, Any]:
+        return self.store.remember(app_id, session_id, key, value)
 
     def recall(self, app_id: str, key: str) -> Any:
         return self.store.recall(app_id, key)

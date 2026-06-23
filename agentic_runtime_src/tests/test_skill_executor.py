@@ -209,6 +209,29 @@ def test_memory_remember_backend_failure_is_not_reported_as_success(tmp_path):
     asyncio.run(run())
 
 
+def test_memory_remember_non_structured_backend_result_is_not_success(tmp_path):
+    class NonStructuredMemoryStore:
+        def remember(self, app_id, session_id, key, value):
+            return None
+
+        def recall_result(self, app_id, key):
+            return {"success": False, "error_code": "MEMORY_NOT_FOUND"}
+
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        executor.dispatcher.memory_store = NonStructuredMemoryStore()
+
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "memory.remember", {"key": "k", "value": {"v": 1}}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "MEMORY_RESULT_INVALID"
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "MEMORY_RESULT_INVALID"
+
+    asyncio.run(run())
+
+
 def test_memory_recall_backend_failure_is_not_reported_as_empty_success(tmp_path):
     class FailingMemoryStore:
         def remember(self, app_id, session_id, key, value):
@@ -232,6 +255,30 @@ def test_memory_recall_backend_failure_is_not_reported_as_empty_success(tmp_path
         record = executor.audit_logger.recent(limit=1)[0]
         assert record["status"] == "failed"
         assert record["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
+
+    asyncio.run(run())
+
+
+def test_memory_recall_requires_structured_backend_result(tmp_path):
+    class NonStructuredRecallMemoryStore:
+        def remember(self, app_id, session_id, key, value):
+            return {"success": True, "memory_id": key}
+
+        def recall_result(self, app_id, key):
+            return None
+
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        executor.dispatcher.memory_store = NonStructuredRecallMemoryStore()
+
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "memory.recall", {"key": "k"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "MEMORY_RESULT_INVALID"
+        assert "value" not in result.data
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "MEMORY_RESULT_INVALID"
 
     asyncio.run(run())
 

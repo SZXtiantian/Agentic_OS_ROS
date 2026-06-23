@@ -33,7 +33,7 @@ class SQLiteMemoryStore:
                 """
             )
 
-    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> None:
+    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> dict[str, Any]:
         now = datetime.now(timezone.utc).isoformat()
         value_json = json.dumps(value, ensure_ascii=False)
         with self._connect() as conn:
@@ -48,6 +48,7 @@ class SQLiteMemoryStore:
                 """,
                 (app_id, session_id, key, value_json, now, now),
             )
+        return {"success": True, "memory_id": key, "updated_at": now}
 
     def recall(self, app_id: str, key: str) -> Any:
         with self._connect() as conn:
@@ -58,3 +59,9 @@ class SQLiteMemoryStore:
         if row is None:
             return None
         return json.loads(row[0])
+
+    def recall_result(self, app_id: str, key: str) -> dict[str, Any]:
+        value = self.recall(app_id, key)
+        if value is None:
+            return {"success": False, "error_code": "MEMORY_NOT_FOUND", "memory_id": key}
+        return {"success": True, "memory_id": key, "value": value}

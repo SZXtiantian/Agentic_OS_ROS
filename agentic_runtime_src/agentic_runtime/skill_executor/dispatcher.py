@@ -64,14 +64,41 @@ class SkillDispatcher:
         if skill_name == "memory.remember":
             result = self.memory_store.remember(app_id, session_id, args["key"], args.get("value"))
             if isinstance(result, dict):
+                if "success" not in result or not isinstance(result.get("success"), bool):
+                    return {
+                        "success": False,
+                        "error_code": "MEMORY_RESULT_INVALID",
+                        "reason": "memory remember result missing boolean success field",
+                        "raw_type": type(result).__name__,
+                    }
                 return result if not result.get("success", False) else {"success": True, **result}
-            return {"success": True}
+            return {
+                "success": False,
+                "error_code": "MEMORY_RESULT_INVALID",
+                "reason": f"memory remember backend returned {type(result).__name__}",
+            }
         if skill_name == "memory.recall":
             if hasattr(self.memory_store, "recall_result"):
                 result = self.memory_store.recall_result(app_id, args["key"])
                 if isinstance(result, dict):
+                    if "success" not in result or not isinstance(result.get("success"), bool):
+                        return {
+                            "success": False,
+                            "error_code": "MEMORY_RESULT_INVALID",
+                            "reason": "memory recall result missing boolean success field",
+                            "raw_type": type(result).__name__,
+                        }
                     return result
-            return {"success": True, "value": self.memory_store.recall(app_id, args["key"])}
+                return {
+                    "success": False,
+                    "error_code": "MEMORY_RESULT_INVALID",
+                    "reason": f"memory recall backend returned {type(result).__name__}",
+                }
+            return {
+                "success": False,
+                "error_code": "MEMORY_BACKEND_UNAVAILABLE",
+                "reason": "memory backend does not implement recall_result contract",
+            }
         if skill_name == "storage.list_recent_photos":
             return self._list_recent_photos(int(args.get("limit", 5)), app_id=app_id)
         if skill_name == "human.ask":

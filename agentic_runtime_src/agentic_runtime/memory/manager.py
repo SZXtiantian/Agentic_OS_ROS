@@ -24,7 +24,12 @@ class RuntimeMemoryProviderAdapter:
             if not result.get("success", False):
                 return {"memory_id": note.id, **result}
             return {"success": True, "memory_id": note.id, **result}
-        return {"success": True, "memory_id": note.id}
+        return {
+            "success": False,
+            "memory_id": note.id,
+            "error_code": "MEMORY_RESULT_INVALID",
+            "reason": f"memory provider remember returned {type(result).__name__}",
+        }
 
     def remove_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
         deleted = self.provider.delete(agent_name, memory_id)
@@ -39,7 +44,12 @@ class RuntimeMemoryProviderAdapter:
             if not result.get("success", False):
                 return {"memory_id": note.id, **result}
             return {"success": True, "memory_id": note.id, **result}
-        return {"success": True, "memory_id": note.id}
+        return {
+            "success": False,
+            "memory_id": note.id,
+            "error_code": "MEMORY_RESULT_INVALID",
+            "reason": f"memory provider remember returned {type(result).__name__}",
+        }
 
     def get_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
         value = self.provider.recall(agent_name, memory_id)

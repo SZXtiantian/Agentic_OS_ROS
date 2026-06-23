@@ -35,6 +35,7 @@ Production `RuntimeServer.create()` wires one shared kernel `AccessManager` and 
 
 Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, and compact policy. Memory status exposes the real SQLite `path`/`db_path`, `fts_available`, `index`, and `last_error`. Memory import/export file failures return stable errors such as `MEMORY_IMPORT_INVALID_JSON`, `MEMORY_IMPORT_NOT_FOUND`, or `MEMORY_EXPORT_FAILED` and are emitted as `memory.audit` events.
 Runtime `memory.remember` skill dispatch returns the real kernel/provider result; provider failures such as `MEMORY_PROVIDER_UNAVAILABLE` are propagated through the runtime memory adapter to the skill result and audit record instead of being converted to an empty success.
+Runtime `memory.remember` and `memory.recall` skill dispatch require a structured backend result with a boolean `success`; non-object or legacy unstructured returns fail with `MEMORY_RESULT_INVALID` or `MEMORY_BACKEND_UNAVAILABLE` instead of being converted to empty success.
 Runtime `memory.recall` skill dispatch uses the structured kernel result path; provider failures remain `MEMORY_PROVIDER_UNAVAILABLE` instead of being converted to successful `value: null`.
 Runtime artifact writes check the kernel storage response before creating `ArtifactRecord`; storage provider failures preserve stable `STORAGE_*` error codes instead of surfacing as missing-field exceptions.
 Runtime `report.say` writes to a real JSONL report sink at `AGENTIC_REPORT_LOG` or `AGENTIC_VAR/reports/report.jsonl`; write failures return `REPORT_BACKEND_UNAVAILABLE` and appear in bridge client status instead of returning stdout-only success.
@@ -154,7 +155,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 462 passed, 3 skipped
+# 465 passed, 3 skipped
 scripts/run_tests.sh
-# 462 passed, 3 deselected; Agentic OS MVP checks passed.
+# 465 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
