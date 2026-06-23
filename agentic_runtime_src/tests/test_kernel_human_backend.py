@@ -491,6 +491,91 @@ def test_human_manager_rejects_non_boolean_success_field():
     assert result.metadata["reason"] == "human backend response success field must be bool"
 
 
+def test_human_manager_rejects_non_boolean_legacy_answered_field():
+    class Backend:
+        def address_request(self, syscall):
+            return {"answered": "false", "answer": ""}
+
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    manager = HumanInteractionManager(Backend(), access_manager=access, event_sink=sink)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    assert result.metadata["reason"] == "human backend response answered field must be bool"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "HUMAN_RESULT_INVALID"
+    assert audit["metadata"]["reason"] == "human backend response answered field must be bool"
+
+
+def test_human_manager_rejects_non_boolean_answered_even_with_success():
+    class Backend:
+        def address_request(self, syscall):
+            return {"success": True, "answered": "true", "answer": "yes"}
+
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = HumanInteractionManager(Backend(), access_manager=access)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    assert result.metadata["reason"] == "human backend response answered field must be bool"
+
+
+def test_human_cancel_rejects_non_boolean_backend_success():
+    class Backend:
+        def cancel(self, session_id, call_id=""):
+            return {"success": "true", "session_id": session_id, "call_id": call_id}
+
+        def status(self):
+            return {"success": True, "state": "ready", "backend": "test_backend"}
+
+    sink = InMemoryKernelEventSink()
+    manager = HumanInteractionManager(Backend(), event_sink=sink)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_cancel",
+            params={"session_id": "sess_human", "call_id": "human_1"},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    assert result.metadata["reason"] == "human backend response success field must be bool"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["action"] == "cancel"
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "HUMAN_RESULT_INVALID"
+
+
 def test_runtime_human_backend_uses_skill_executor_contract():
     executor = RuntimeCompatibleExecutor()
     backend = RuntimeHumanBackend(SimpleNamespace(executor=executor, registry=SimpleNamespace()))

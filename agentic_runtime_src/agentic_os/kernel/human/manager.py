@@ -58,9 +58,11 @@ class HumanInteractionManager:
                 self._record(syscall, result)
                 self._audit_result(syscall, result)
                 return self._kernel_response(result)
-            result = self.human_adapter.cancel(
-                str(syscall.params.get("session_id") or "kernel"),
-                call_id,
+            result = self._normalize_backend_result(
+                self.human_adapter.cancel(
+                    str(syscall.params.get("session_id") or "kernel"),
+                    call_id,
+                )
             )
             self._record(syscall, result)
             self._audit_result(syscall, result)
@@ -139,7 +141,7 @@ class HumanInteractionManager:
                 "call_id": call_id,
                 "recent_events": list(self._events[-20:]),
             }
-        if call_id and status.get("success", False) and not self._status_has_active_call(status, call_id):
+        if call_id and status.get("success") is True and not self._status_has_active_call(status, call_id):
             return {
                 "success": False,
                 "state": str(status.get("state") or "ready"),
@@ -158,7 +160,7 @@ class HumanInteractionManager:
         self._events.append(
             {
                 "operation_type": syscall.operation_type,
-                "success": bool(result.get("success", False)),
+                "success": result.get("success") is True,
                 "error_code": str(result.get("error_code", "")),
             }
         )
@@ -227,8 +229,9 @@ class HumanInteractionManager:
                 agent_name=syscall.agent_name,
                 session_id=str(syscall.params.get("session_id") or "kernel"),
                 call_id=str(syscall.params.get("call_id") or syscall.params.get("correlation_id") or ""),
-                success=bool(result.get("success", False)),
+                success=result.get("success") is True,
                 error_code=str(result.get("error_code") or ""),
+                reason=str(result.get("reason") or ""),
                 backend=self.human_adapter.__class__.__name__ if self.human_adapter is not None else "",
             )
 
@@ -242,7 +245,15 @@ class HumanInteractionManager:
             }
         normalized = dict(result)
         if "success" not in normalized and "answered" in normalized:
-            answered = bool(normalized.get("answered", False))
+            if not isinstance(normalized.get("answered"), bool):
+                return {
+                    "success": False,
+                    "answered": False,
+                    "error_code": "HUMAN_RESULT_INVALID",
+                    "reason": "human backend response answered field must be bool",
+                    "data": normalized,
+                }
+            answered = normalized["answered"]
             normalized["success"] = answered
             if not answered and not normalized.get("error_code"):
                 normalized["error_code"] = "HUMAN_UNANSWERED"
@@ -260,6 +271,14 @@ class HumanInteractionManager:
                 "answered": False,
                 "error_code": "HUMAN_RESULT_INVALID",
                 "reason": "human backend response success field must be bool",
+                "data": normalized,
+            }
+        if "answered" in normalized and not isinstance(normalized.get("answered"), bool):
+            return {
+                "success": False,
+                "answered": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human backend response answered field must be bool",
                 "data": normalized,
             }
         return normalized
@@ -285,6 +304,6 @@ class HumanInteractionManager:
         return sorted(active)
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        if result.get("success") is True:
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "HUMAN_BACKEND_UNAVAILABLE"), metadata=result)

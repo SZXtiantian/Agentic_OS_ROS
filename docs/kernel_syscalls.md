@@ -90,7 +90,7 @@ Runtime skill backend responses must explicitly include a boolean `success` or, 
 Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.status(call_id=...)` and `human.cancel` inspect the active human/skill registry; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 Human cancel requires an explicit `call_id`; empty IDs return `SYSCALL_NOT_FOUND` before backend dispatch, and backends without a cancel contract return `HUMAN_BACKEND_UNAVAILABLE`.
 Human backend status must come from a real backend `status()` contract with boolean `success`; missing status support returns `HUMAN_BACKEND_STATUS_UNAVAILABLE`, and malformed status payloads return `HUMAN_RESULT_INVALID` instead of reporting `ready`.
-Human ask backend responses must include boolean `success` or the legacy `answered` field; malformed dict responses return `HUMAN_RESULT_INVALID` instead of being converted to backend-unavailable or unanswered results.
+Human ask/cancel backend responses must include boolean `success`; the legacy ask-only `answered` field is accepted only when it is also boolean. Malformed dict responses return `HUMAN_RESULT_INVALID` instead of being converted to backend-unavailable, unanswered, cancelled, or successful results.
 Runtime human channel status/cancel failures are normalized: channel status exceptions return `HUMAN_BACKEND_STATUS_UNAVAILABLE`, malformed channel status/cancel results return `HUMAN_RESULT_INVALID`, and cancel falls back to skill cancellation only when the real channel reports `SYSCALL_NOT_FOUND`.
 
 Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful. `AppInvoker` also strips falsy legacy `mock` task fields and rejects truthy `mock` requests with `SIMULATED_BACKEND_DISABLED` before loading an app or touching a bridge.
@@ -172,7 +172,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 533 passed, 3 skipped
+# 536 passed, 3 skipped
 scripts/run_tests.sh
-# 533 passed, 3 deselected; Agentic OS MVP checks passed.
+# 536 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
