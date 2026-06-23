@@ -94,7 +94,12 @@ class HumanInteractionManager:
 
     def _check_ask_access(self, syscall: KernelSyscall) -> dict[str, Any]:
         if self.access_manager is None:
-            return {"success": True}
+            return {
+                "success": False,
+                "error_code": "ACCESS_MANAGER_UNAVAILABLE",
+                "reason": "human.ask requires a kernel access manager",
+                "requires_intervention": False,
+            }
         query = getattr(syscall, "query", None)
         metadata = dict(getattr(query, "metadata", {}) or {})
         permissions = tuple(metadata.get("permissions") or syscall.params.get("permissions") or ())

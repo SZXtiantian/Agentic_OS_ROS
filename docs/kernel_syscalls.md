@@ -53,6 +53,7 @@ Runtime CLI, photo CLI, and natural-language gateway bridge readiness failures u
 Human requests are durable JSONL queue records under the runtime human channel root. Operators or integration services must append a matching response by `correlation_id`; the runtime never invents an answer.
 
 `human.ask` requires explicit `human.ask` permission in syscall metadata before the runtime backend is called. With permission present, it is still treated as an intervention-gated operation; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`.
+If `HumanInteractionManager` is constructed without a kernel access manager, `human.ask` fails before the backend with `ACCESS_MANAGER_UNAVAILABLE`; cancel/status paths remain available for lifecycle inspection.
 
 Runtime robot motion skills such as `robot.navigate_to`, `robot.inspect_area`, `arm.move_named`, and `gripper.set` require both explicit robot permissions and operator intervention before safety checks or ROS bridge calls run. Without an intervention backend they fail with `ACCESS_INTERVENTION_REQUIRED` and emit audit/status evidence; `robot.stop` remains permission-gated but is not delayed by intervention.
 If a `SkillExecutor` is constructed without a kernel `AccessManager`, managed robot/perception/gripper skills fail fast with `ACCESS_MANAGER_UNAVAILABLE` before any safety or ROS bridge call; production `RuntimeServer.create()` wires the shared access manager into the executor.
@@ -140,7 +141,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 426 passed, 3 skipped
+# 427 passed, 3 skipped
 scripts/run_tests.sh
-# 426 passed, 3 deselected; Agentic OS MVP checks passed.
+# 427 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

@@ -72,13 +72,19 @@ def test_human_manager_audits_ask_and_cancel():
             return {"success": True, "state": "ready", "backend": "test_backend"}
 
     sink = InMemoryKernelEventSink()
-    manager = HumanInteractionManager(Backend(), event_sink=sink)
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    manager = HumanInteractionManager(Backend(), access_manager=access, event_sink=sink)
 
     ask = manager.address_request(
         SimpleNamespace(
             agent_name="agent_a",
             operation_type="human.ask",
             params={"session_id": "sess_human", "correlation_id": "human_1"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
         )
     )
     cancel = manager.address_request(
@@ -96,6 +102,38 @@ def test_human_manager_audits_ask_and_cancel():
     assert [event["metadata"]["action"] for event in events] == ["ask", "cancel"]
     assert events[0]["metadata"]["success"] is True
     assert events[1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+
+
+def test_human_ask_requires_access_manager_before_backend_call():
+    class Backend:
+        calls = 0
+
+        def address_request(self, syscall):
+            self.calls += 1
+            return {"success": True, "answered": True, "answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    manager = HumanInteractionManager(backend, event_sink=sink)
+
+    denied = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert denied.success is False
+    assert denied.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+    assert backend.calls == 0
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
 
 
 def test_human_ask_requires_explicit_permission_before_backend_call():
