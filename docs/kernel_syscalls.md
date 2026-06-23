@@ -56,6 +56,7 @@ Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_m
 Storage share policies live in the persistent SQLite share registry; deleting a file removes its share entry, and querying share policy for a missing file returns `STORAGE_NOT_FOUND` instead of stale success. `sto_share` checks access/intervention before revealing whether the target path exists.
 
 Runtime ROS bridge status includes `bridge_client` when a runtime server is wired. The real `Ros2CliBridgeClient.status()` exposes `ros2_cli_available`, `last_command`, `last_success`, and `last_error` so missing `ros2`, unavailable services/actions, timeouts, and invalid bridge responses remain visible after fail-fast errors. Bridge clients without a real `status()` contract report `ROS_BRIDGE_STATUS_UNAVAILABLE`; non-object or invalid status payloads report `ROS_RESULT_INVALID` and emit `ros_bridge.status`. `agentic-runtime status --json` returns the same kernel status surface instead of the legacy monitor-only view.
+ROS2 bridge source packages do not provide a simulated navigation success path: `navigation_bridge_node` always dispatches to real Nav2 and reports `ROS_BRIDGE_UNAVAILABLE`, `ROS_SERVICE_UNAVAILABLE`, or `ROS_ACTION_TIMEOUT` when the dependency is missing or unavailable. `state_bridge_node` defaults to a real identity, reports unknown robot state fields as unknown/not localized, and returns `ROS_BRIDGE_PROFILE_UNAVAILABLE` or `ROS_BRIDGE_UNAVAILABLE` when the profile or concrete camera/arm/gripper backends are not visible.
 Runtime CLI, photo CLI, and natural-language gateway bridge readiness failures use the same stable `ROS_BRIDGE_UNAVAILABLE` code; older `AGENTIC_BRIDGE_UNAVAILABLE` text is historical and must not be emitted by production entrypoints.
 
 Human requests are durable JSONL queue records under the runtime human channel root. Operators or integration services must append a matching response by `correlation_id`; the runtime never invents an answer.
@@ -153,7 +154,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 458 passed, 3 skipped
+# 462 passed, 3 skipped
 scripts/run_tests.sh
-# 458 passed, 3 deselected; Agentic OS MVP checks passed.
+# 462 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

@@ -63,7 +63,6 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
-                        "mock_nav": False,
                         "places_file": places_file,
                         "nav2_action_name": nav2_action_name,
                         "nav2_server_timeout_s": 10.0,

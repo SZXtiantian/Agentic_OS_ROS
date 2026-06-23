@@ -1,5 +1,5 @@
 # agentic_app_runtime_bridge
 
-MVP Runtime currently calls the world, safety, and capability bridge contracts through the Runtime bridge client abstraction. The default implementation is mock-only and does not require this aggregate ROS2 node.
+Runtime calls the world, safety, and capability bridge contracts through the Agentic Runtime bridge client abstraction. Production deployments must connect those contracts to real ROS2 services, actions, or topics owned by AgenticOS bridge packages.
 
-This package is a minimal skeleton for a future single-entry bridge. It exists to reserve the boundary without blocking the MVP mock Runtime path.
+This package is a minimal skeleton for a future single-entry aggregate bridge. It reserves the boundary without providing a simulated success path; missing ROS2 dependencies must surface stable bridge/backend error codes through the concrete capability bridge nodes.

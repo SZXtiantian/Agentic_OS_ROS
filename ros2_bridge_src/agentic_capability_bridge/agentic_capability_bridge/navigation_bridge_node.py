@@ -17,8 +17,6 @@ from .config_paths import default_config_path
 class NavigationBridgeNode(Node):
     def __init__(self) -> None:
         super().__init__("navigation_bridge_node")
-        self.declare_parameter("mock_nav", False)
-        self.declare_parameter("mock_duration_s", 2.0)
         self.declare_parameter("places_file", str(default_config_path("places.yaml")))
         self.declare_parameter("nav2_action_name", "/navigate_to_pose")
         self.declare_parameter("nav2_server_timeout_s", 5.0)
@@ -46,44 +44,7 @@ class NavigationBridgeNode(Node):
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
-        if bool(self.get_parameter("mock_nav").value):
-            return self._execute_mock(goal_handle)
         return self._execute_nav2(goal_handle)
-
-    def _execute_mock(self, goal_handle):
-        duration = float(self.get_parameter("mock_duration_s").value)
-        started = time.monotonic()
-        feedback = NavigateToPlace.Feedback()
-        while time.monotonic() - started < duration:
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                result = NavigateToPlace.Result()
-                result.success = False
-                result.error_code = "SKILL_CANCELLED"
-                result.reason = "navigation cancelled"
-                result.result_json = "{}"
-                return result
-            progress = min((time.monotonic() - started) / max(duration, 0.1), 1.0)
-            feedback.status = "running"
-            feedback.progress = float(progress)
-            feedback.feedback_json = json.dumps({"mode": "mock"}, ensure_ascii=False)
-            goal_handle.publish_feedback(feedback)
-            time.sleep(0.2)
-
-        goal_handle.succeed()
-        result = NavigateToPlace.Result()
-        result.success = True
-        result.error_code = ""
-        result.reason = ""
-        result.result_json = json.dumps(
-            {
-                "place": goal_handle.request.place,
-                "request_id": goal_handle.request.request_id,
-                "mode": "mock",
-            },
-            ensure_ascii=False,
-        )
-        return result
 
     def _execute_nav2(self, goal_handle):
         # Real Nav2 integration is deliberately isolated to this ROS2 bridge.
@@ -94,7 +55,7 @@ class NavigationBridgeNode(Node):
             goal_handle.abort()
             result = NavigateToPlace.Result()
             result.success = False
-            result.error_code = "BACKEND_UNAVAILABLE"
+            result.error_code = "ROS_BRIDGE_UNAVAILABLE"
             result.reason = f"Nav2 client unavailable: {exc}"
             result.result_json = "{}"
             return result
@@ -116,7 +77,7 @@ class NavigationBridgeNode(Node):
             goal_handle.abort()
             result = NavigateToPlace.Result()
             result.success = False
-            result.error_code = "BACKEND_UNAVAILABLE"
+            result.error_code = "ROS_SERVICE_UNAVAILABLE"
             result.reason = f"Nav2 action server unavailable: {action_name}"
             result.result_json = "{}"
             return result
@@ -130,7 +91,7 @@ class NavigationBridgeNode(Node):
             goal_handle.abort()
             result = NavigateToPlace.Result()
             result.success = False
-            result.error_code = "BACKEND_TIMEOUT"
+            result.error_code = "ROS_ACTION_TIMEOUT"
             result.reason = str(exc)
             result.result_json = "{}"
             return result
@@ -168,7 +129,7 @@ class NavigationBridgeNode(Node):
             goal_handle.abort()
             result = NavigateToPlace.Result()
             result.success = False
-            result.error_code = "BACKEND_TIMEOUT"
+            result.error_code = "ROS_ACTION_TIMEOUT"
             result.reason = str(exc)
             result.result_json = "{}"
             return result

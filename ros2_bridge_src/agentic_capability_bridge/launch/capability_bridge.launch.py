@@ -7,7 +7,6 @@ from launch_ros.actions import Node
 def generate_launch_description():
     places_file = LaunchConfiguration("places_file")
     robot_id = LaunchConfiguration("robot_id")
-    mock_nav = LaunchConfiguration("mock_nav")
     nav2_action_name = LaunchConfiguration("nav2_action_name")
     bridge_profile_file = LaunchConfiguration("bridge_profile_file")
 
@@ -15,7 +14,6 @@ def generate_launch_description():
         [
             DeclareLaunchArgument("places_file", default_value="/opt/agentic/etc/places.yaml"),
             DeclareLaunchArgument("robot_id", default_value="real_robot"),
-            DeclareLaunchArgument("mock_nav", default_value="false"),
             DeclareLaunchArgument("nav2_action_name", default_value="/navigate_to_pose"),
             DeclareLaunchArgument(
                 "bridge_profile_file",
@@ -45,7 +43,6 @@ def generate_launch_description():
                 output="screen",
                 parameters=[
                     {
-                        "mock_nav": mock_nav,
                         "places_file": places_file,
                         "nav2_action_name": nav2_action_name,
                     }

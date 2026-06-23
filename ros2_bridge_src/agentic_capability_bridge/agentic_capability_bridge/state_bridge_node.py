@@ -15,11 +15,12 @@ DIRECT_ACTION_GROUP_BACKENDS = {"servo_action_group", "action_group_controller",
 class StateBridgeNode(Node):
     def __init__(self) -> None:
         super().__init__("state_bridge_node")
-        self.declare_parameter("robot_id", "mock_robot")
-        self.declare_parameter("mode", "mock")
-        self.declare_parameter("battery_percent", 80.0)
+        self.declare_parameter("robot_id", "real_robot")
+        self.declare_parameter("mode", "real_bridge")
+        self.declare_parameter("battery_percent", 0.0)
         self.declare_parameter("current_place", "")
         self.declare_parameter("bridge_profile_file", str(DEFAULT_PROFILE))
+        self._profile_error = ""
         self._profile = self._load_profile()
         self.create_service(GetRobotState, "/agentic/robot/get_state", self.get_robot_state)
         self.get_logger().info("agentic state bridge ready")
@@ -27,27 +28,47 @@ class StateBridgeNode(Node):
     def _load_profile(self) -> dict[str, Any]:
         path = Path(str(self.get_parameter("bridge_profile_file").value)).expanduser()
         if not path.exists():
-            self.get_logger().warning(f"bridge profile not found: {path}")
+            self._profile_error = f"bridge profile not found: {path}"
+            self.get_logger().warning(self._profile_error)
             return {}
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
 
     def get_robot_state(self, request: GetRobotState.Request, response: GetRobotState.Response):
         del request
-        response.success = True
-        response.error_code = ""
-        response.reason = ""
+        mode = str(self.get_parameter("mode").value)
+        readiness = self._bridge_readiness(mode)
+        error_code, reason = self._readiness_error(readiness)
+        response.success = not error_code
+        response.error_code = error_code
+        response.reason = reason
         response.state.robot_id = str(self.get_parameter("robot_id").value)
-        response.state.mode = str(self.get_parameter("mode").value)
-        response.state.battery_state = "normal"
+        response.state.mode = mode
+        response.state.battery_state = "unknown"
         response.state.battery_percent = float(self.get_parameter("battery_percent").value)
-        response.state.is_localized = True
+        response.state.is_localized = False
         response.state.is_moving = False
         response.state.estop_pressed = False
         response.state.current_place = str(self.get_parameter("current_place").value)
         response.state.active_task_id = ""
-        response.state.state_json = json.dumps(self._bridge_readiness(response.state.mode), ensure_ascii=False)
+        readiness["success"] = response.success
+        readiness["error_code"] = error_code
+        readiness["reason"] = reason
+        response.state.state_json = json.dumps(readiness, ensure_ascii=False)
         return response
+
+    def _readiness_error(self, readiness: dict[str, Any]) -> tuple[str, str]:
+        if self._profile_error:
+            return "ROS_BRIDGE_PROFILE_UNAVAILABLE", self._profile_error
+        if not any(
+            [
+                readiness.get("camera_ready"),
+                readiness.get("arm_backend_available"),
+                readiness.get("gripper_topic_visible"),
+            ]
+        ):
+            return "ROS_BRIDGE_UNAVAILABLE", "no real camera, arm, or gripper bridge backend is visible in the ROS graph"
+        return "", ""
 
     def _bridge_readiness(self, mode: str) -> dict[str, Any]:
         topics = {name for name, _types in self.get_topic_names_and_types()}
