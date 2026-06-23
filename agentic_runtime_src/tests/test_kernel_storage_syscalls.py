@@ -190,6 +190,29 @@ def test_sto_share_updates_policy_only_after_confirmation(tmp_path):
     assert storage.share_policy("reports/x.md")["sharing_policy"]["metadata"] == {"scope": "operator"}
 
 
+def test_sto_share_checks_access_before_revealing_missing_path(tmp_path):
+    sink = InMemoryKernelEventSink()
+    storage = StorageManager(tmp_path / "storage", event_sink=sink)
+
+    denied = storage.share("reports/missing.md", {"scope": "operator"})
+
+    assert denied["success"] is False
+    assert denied["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "storage.audit"][-1]
+    assert audit["metadata"]["action"] == "share"
+    assert audit["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert audit["metadata"]["irreversible"] is True
+
+    allowed_storage = StorageManager(
+        tmp_path / "allowed",
+        access_manager=AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider()),
+    )
+    missing = allowed_storage.share("reports/missing.md", {"scope": "operator"})
+
+    assert missing["success"] is False
+    assert missing["error_code"] == "STORAGE_NOT_FOUND"
+
+
 def test_dangerous_storage_operations_emit_audit_events(tmp_path):
     sink = InMemoryKernelEventSink()
     access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())

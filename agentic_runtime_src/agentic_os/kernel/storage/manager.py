@@ -397,15 +397,15 @@ class StorageManager:
         agent_name: str = "storage_manager",
     ) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
+        decision = self._check_access("share", relative_path, agent_name=agent_name, irreversible=True)
+        if not decision.get("success", True):
+            return self._audit_dangerous_result("share", relative_path, decision)
         if not path.exists():
             return self._audit_dangerous_result(
                 "share",
                 relative_path,
                 {"success": False, "error_code": "STORAGE_NOT_FOUND", "path": str(path)},
             )
-        decision = self._check_access("share", relative_path, agent_name=agent_name, irreversible=True)
-        if not decision.get("success", True):
-            return self._audit_dangerous_result("share", relative_path, decision)
         if not self._index_available:
             return self._audit_dangerous_result(
                 "share",
