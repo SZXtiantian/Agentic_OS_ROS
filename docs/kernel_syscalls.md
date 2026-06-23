@@ -37,6 +37,7 @@ Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, a
 Runtime `memory.remember` skill dispatch returns the real kernel/provider result; provider failures such as `MEMORY_PROVIDER_UNAVAILABLE` are propagated through the runtime memory adapter to the skill result and audit record instead of being converted to an empty success.
 Runtime `memory.remember` and `memory.recall` skill dispatch require a structured backend result with a boolean `success`; non-object or legacy unstructured returns fail with `MEMORY_RESULT_INVALID` or `MEMORY_BACKEND_UNAVAILABLE` instead of being converted to empty success.
 Runtime `memory.recall` skill dispatch uses the structured kernel result path; provider failures remain `MEMORY_PROVIDER_UNAVAILABLE` instead of being converted to successful `value: null`.
+Runtime memory provider adapters require legacy provider `remember`, `delete`, and structured `search` results to report a real boolean `success`; string booleans, malformed rows, and non-object structured results return `MEMORY_RESULT_INVALID`, while provider error codes such as `MEMORY_INDEX_UNAVAILABLE` are preserved.
 Memory get fallback to a configured persistent provider is allowed only after the primary provider returns `MEMORY_NOT_FOUND`; `MEMORY_FORBIDDEN` and provider/backend failures are returned directly so persistent fallback cannot bypass access denial or hide dependency failure.
 Memory search/retrieve treats configured fallback providers as real dependencies: persistent-provider failures return their stable memory error code, and storage-backed memory-block retrieve failures return the storage error code or `MEMORY_STORAGE_RETRIEVE_FAILED` instead of being hidden behind a successful empty result.
 Runtime artifact writes check the kernel storage response before creating `ArtifactRecord`; storage provider failures preserve stable `STORAGE_*` error codes instead of surfacing as missing-field exceptions.
@@ -164,7 +165,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 495 passed, 3 skipped
+# 500 passed, 3 skipped
 scripts/run_tests.sh
-# 495 passed, 3 deselected; Agentic OS MVP checks passed.
+# 500 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

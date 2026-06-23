@@ -20,36 +20,22 @@ class RuntimeMemoryProviderAdapter:
     def add_memory(self, note: MemoryNote) -> dict[str, Any]:
         session_id = str(note.metadata.get("session_id") or "")
         result = self.provider.remember(note.owner_agent, session_id, note.id, note.content)
-        if isinstance(result, dict):
-            if not result.get("success", False):
-                return {"memory_id": note.id, **result}
-            return {"success": True, "memory_id": note.id, **result}
-        return {
-            "success": False,
-            "memory_id": note.id,
-            "error_code": "MEMORY_RESULT_INVALID",
-            "reason": f"memory provider remember returned {type(result).__name__}",
-        }
+        return self._structured_result(result, "remember", memory_id=note.id)
 
     def remove_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
-        deleted = self.provider.delete(agent_name, memory_id)
-        return {"success": deleted, "memory_id": memory_id, "error_code": "" if deleted else "MEMORY_NOT_FOUND"}
+        result = self.provider.delete(agent_name, memory_id)
+        if isinstance(result, bool):
+            return {"success": result, "memory_id": memory_id, "error_code": "" if result else "MEMORY_NOT_FOUND"}
+        if isinstance(result, dict):
+            return self._structured_result(result, "delete", memory_id=memory_id)
+        return self._invalid_result("delete", type(result).__name__, memory_id=memory_id)
 
     def update_memory(self, note: MemoryNote) -> dict[str, Any]:
         session_id = str(note.metadata.get("session_id") or "")
         if self.provider.recall(note.owner_agent, note.id) is None:
             return {"success": False, "memory_id": note.id, "error_code": "MEMORY_NOT_FOUND"}
         result = self.provider.remember(note.owner_agent, session_id, note.id, note.content)
-        if isinstance(result, dict):
-            if not result.get("success", False):
-                return {"memory_id": note.id, **result}
-            return {"success": True, "memory_id": note.id, **result}
-        return {
-            "success": False,
-            "memory_id": note.id,
-            "error_code": "MEMORY_RESULT_INVALID",
-            "reason": f"memory provider remember returned {type(result).__name__}",
-        }
+        return self._structured_result(result, "remember", memory_id=note.id)
 
     def get_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
         value = self.provider.recall(agent_name, memory_id)
@@ -60,16 +46,45 @@ class RuntimeMemoryProviderAdapter:
     def retrieve_memory(self, query: str, agent_name: str, limit: int = 5, user_id: str = "") -> dict[str, Any]:
         del user_id
         rows = self.provider.search(agent_name, query, limit=limit)
-        memories = [
-            {
-                "id": row["key"],
-                "content": row["value"],
-                "owner_agent": agent_name,
-                "updated_at": row.get("updated_at", ""),
-            }
-            for row in rows
-        ]
+        if isinstance(rows, dict):
+            return self._structured_result(rows, "search")
+        if not isinstance(rows, list):
+            return self._invalid_result("search", type(rows).__name__)
+        memories = []
+        for row in rows:
+            if not isinstance(row, dict):
+                return self._invalid_result("search", f"row:{type(row).__name__}")
+            memories.append(
+                {
+                    "id": row.get("key", ""),
+                    "content": row.get("value"),
+                    "owner_agent": agent_name,
+                    "updated_at": row.get("updated_at", ""),
+                }
+            )
         return {"success": True, "memories": memories}
+
+    def _structured_result(self, result: Any, operation: str, *, memory_id: str = "") -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return self._invalid_result(operation, type(result).__name__, memory_id=memory_id)
+        if "success" not in result or not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "memory_id": memory_id,
+                "error_code": "MEMORY_RESULT_INVALID",
+                "reason": f"memory provider {operation} result missing boolean success field",
+            }
+        if result["success"]:
+            return {"success": True, "memory_id": memory_id, **result}
+        return {"memory_id": memory_id, **result}
+
+    def _invalid_result(self, operation: str, result_type: str, *, memory_id: str = "") -> dict[str, Any]:
+        return {
+            "success": False,
+            "memory_id": memory_id,
+            "error_code": "MEMORY_RESULT_INVALID",
+            "reason": f"memory provider {operation} returned {result_type}",
+        }
 
 
 class MemoryManager:
