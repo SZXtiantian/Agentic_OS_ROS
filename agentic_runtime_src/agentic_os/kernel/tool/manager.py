@@ -244,6 +244,15 @@ class ToolManager:
                     "call_id": call_id,
                     "result": result,
                 }
+            normalized = self._normalize_handler_result(tool_name, call_id, result)
+            if not normalized.get("success", False):
+                self._record_tool_event(
+                    "tool.failed",
+                    agent_name,
+                    tool_name,
+                    {"call_id": call_id, "error_code": str(normalized.get("error_code") or "")},
+                )
+                return normalized
             return {"success": True, "tool": tool_name, "call_id": call_id, "result": result}
         except Exception as exc:
             self._record_tool_event("tool.failed", agent_name, tool_name, {"reason": str(exc), "call_id": call_id})
@@ -256,6 +265,29 @@ class ToolManager:
 
     def list_tools(self) -> list[dict[str, Any]]:
         return [self.describe(name) for name in sorted(self._registry)]
+
+    def _normalize_handler_result(self, tool_name: str, call_id: str, result: Any) -> dict[str, Any]:
+        if not isinstance(result, dict) or "success" not in result:
+            return {"success": True, "tool": tool_name, "call_id": call_id, "result": result}
+        if not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "TOOL_RESULT_INVALID",
+                "reason": "tool handler result success field must be bool",
+                "tool": tool_name,
+                "call_id": call_id,
+                "result": result,
+            }
+        if result.get("success"):
+            return {"success": True, "tool": tool_name, "call_id": call_id, "result": result}
+        return {
+            "success": False,
+            "error_code": str(result.get("error_code") or "TOOL_FAILED"),
+            "reason": str(result.get("reason") or result.get("message") or "tool handler reported failure"),
+            "tool": tool_name,
+            "call_id": call_id,
+            "result": result,
+        }
 
     def describe(self, name: str) -> dict[str, Any]:
         if name not in self._registry:

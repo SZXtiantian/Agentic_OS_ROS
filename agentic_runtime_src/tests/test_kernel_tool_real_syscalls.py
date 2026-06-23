@@ -153,6 +153,29 @@ def test_tool_cancel_active_call_is_cooperative_and_audited(tmp_path):
     )
 
 
+def test_tool_handler_explicit_failure_is_not_wrapped_as_success(tmp_path):
+    manager = ToolManager(tool_root=tmp_path / "tools")
+    manager.register("failing.tool", lambda args: {"success": False, "error_code": "TOOL_PROVIDER_UNAVAILABLE", "reason": "offline"})
+
+    result = manager.call_tool("agent_a", "failing.tool", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_PROVIDER_UNAVAILABLE"
+    assert result["reason"] == "offline"
+    assert result["result"]["success"] is False
+
+
+def test_tool_handler_success_field_must_be_bool(tmp_path):
+    manager = ToolManager(tool_root=tmp_path / "tools")
+    manager.register("bad.tool", lambda args: {"success": "yes", "value": 1})
+
+    result = manager.call_tool("agent_a", "bad.tool", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_RESULT_INVALID"
+    assert result["result"] == {"success": "yes", "value": 1}
+
+
 def test_tool_load_unload_register_builtin_without_permission_are_denied(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     manifest = service.tool.tool_root / "sample.yaml"

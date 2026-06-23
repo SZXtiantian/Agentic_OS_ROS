@@ -45,6 +45,31 @@ class MCPToolServer:
         if handler is None:
             return {"success": False, "error_code": "TOOL_NOT_FOUND", "tool": name}
         try:
-            return {"success": True, "tool": name, "result": handler(dict(args or {}))}
+            result = handler(dict(args or {}))
+            normalized = self._normalize_handler_result(name, result)
+            if not normalized.get("success", False):
+                return normalized
+            return {"success": True, "tool": name, "result": result}
         except Exception as exc:
             return {"success": False, "error_code": "TOOL_FAILED", "tool": name, "reason": str(exc)}
+
+    def _normalize_handler_result(self, name: str, result: Any) -> dict[str, object]:
+        if not isinstance(result, dict) or "success" not in result:
+            return {"success": True, "tool": name, "result": result}
+        if not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "TOOL_RESULT_INVALID",
+                "reason": "tool handler result success field must be bool",
+                "tool": name,
+                "result": result,
+            }
+        if result.get("success"):
+            return {"success": True, "tool": name, "result": result}
+        return {
+            "success": False,
+            "error_code": str(result.get("error_code") or "TOOL_FAILED"),
+            "reason": str(result.get("reason") or result.get("message") or "tool handler reported failure"),
+            "tool": name,
+            "result": result,
+        }

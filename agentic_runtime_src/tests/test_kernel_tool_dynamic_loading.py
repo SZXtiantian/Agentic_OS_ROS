@@ -146,6 +146,34 @@ def test_mcp_enabled_lifecycle_and_call():
     assert server.stop() == {"success": True, "status": "stopped"}
 
 
+def test_mcp_tool_explicit_failure_is_not_wrapped_as_success():
+    server = MCPToolServer(enabled=True)
+    server.register_tool(
+        "fail",
+        lambda args: {"success": False, "error_code": "TOOL_PROVIDER_UNAVAILABLE", "reason": "missing binary"},
+    )
+    assert server.start() == {"success": True, "status": "running"}
+
+    result = server.call_tool("fail", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_PROVIDER_UNAVAILABLE"
+    assert result["reason"] == "missing binary"
+    assert result["result"]["success"] is False
+
+
+def test_mcp_tool_success_field_must_be_bool():
+    server = MCPToolServer(enabled=True)
+    server.register_tool("bad", lambda args: {"success": "true", "value": 1})
+    assert server.start() == {"success": True, "status": "running"}
+
+    result = server.call_tool("bad", {})
+
+    assert result["success"] is False
+    assert result["error_code"] == "TOOL_RESULT_INVALID"
+    assert result["result"] == {"success": "true", "value": 1}
+
+
 def test_sandbox_rejects_network_and_disabled_modes(tmp_path):
     tool_root = tmp_path / "tools"
     tool_root.mkdir()
