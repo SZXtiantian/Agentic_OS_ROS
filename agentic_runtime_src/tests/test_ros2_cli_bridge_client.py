@@ -265,9 +265,14 @@ def test_ros2_cli_bridge_client_missing_ros2_returns_stable_error():
     async def run():
         client = Ros2CliBridgeClient(runner=runner)
         result = await client.get_robot_state()
+        status = client.status()
         assert result["success"] is False
         assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         assert result["state"] == {}
+        assert status["provider"] == "ros2_cli"
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert status["last_command"][:4] == ["ros2", "service", "call", "/agentic/robot/get_state"]
 
     asyncio.run(run())
 
@@ -295,8 +300,12 @@ def test_ros2_cli_bridge_client_unparseable_response_returns_stable_error():
     async def run():
         client = Ros2CliBridgeClient(runner=runner)
         result = await client.capture_photo("workspace", "photo", 5)
+        status = client.status()
         assert result["success"] is False
         assert result["error_code"] == "ROS_RESULT_INVALID"
         assert result["image_path"] == ""
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "ROS_RESULT_INVALID"
+        assert status["last_error"]["operation"] == "capture_photo"
 
     asyncio.run(run())

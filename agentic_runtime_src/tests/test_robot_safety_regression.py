@@ -197,6 +197,9 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
         event["event_type"] == "robot.audit" and event["metadata"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         for event in status["events"]["recent"]
     )
+    assert status["bridge_client"]["last_success"] is False
+    assert status["bridge_client"]["last_error"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+    assert status["bridge_client"]["last_command"][:4] == ["ros2", "service", "call", "/agentic/safety/check"]
 
 
 def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):

@@ -98,6 +98,7 @@ class KernelService:
             return status
         skills = [skill.name for skill in self.runtime_server.registry.list_skills()]
         status["runtime"] = self.runtime_server.monitor.status(skills, ros_bridge=self.runtime_server.config.ros_bridge_mode)
+        status["bridge_client"] = self._bridge_client_status()
         return status
 
     def kernel_status(self) -> dict[str, Any]:
@@ -128,6 +129,7 @@ class KernelService:
                     "runtime_scheduler": self.runtime_server.scheduler.status(),
                     "sessions": len(self.runtime_server.session_manager.list_sessions(limit=100)),
                     "bridge": self.runtime_server.bridge_manager.status(),
+                    "bridge_client": self._bridge_client_status(),
                 }
             )
         return status
@@ -305,6 +307,25 @@ class KernelService:
             except Exception as exc:
                 return {"status": "error", "error": str(exc)}
         return {"status": "ready"}
+
+    def _bridge_client_status(self) -> dict[str, Any]:
+        bridge_client = getattr(self.runtime_server, "bridge_client", None)
+        if bridge_client is not None and hasattr(bridge_client, "status"):
+            try:
+                return bridge_client.status()
+            except Exception as exc:
+                return {
+                    "state": "unavailable",
+                    "provider": bridge_client.__class__.__name__,
+                    "error_code": "ROS_BRIDGE_STATUS_UNAVAILABLE",
+                    "reason": str(exc),
+                }
+        return {
+            "state": "unavailable",
+            "provider": bridge_client.__class__.__name__ if bridge_client is not None else "",
+            "error_code": "ROS_BRIDGE_STATUS_UNAVAILABLE",
+            "reason": "bridge client status is not implemented",
+        }
 
     def _llm_status(self) -> dict[str, Any]:
         return self.llm.status()
