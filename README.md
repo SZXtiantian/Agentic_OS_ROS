@@ -98,6 +98,19 @@ The boundary remains unchanged: Runtime, kernel, SDK, and Agent Apps must not
 import `rclpy`; ROS2-specific imports belong only in bridge packages under
 `ros2_bridge_src/`.
 
+## Real-Only Runtime Convergence
+
+The next phase is to remove simulated production success paths and converge the
+runtime on real providers, real bridge backends, explicit access decisions,
+intervention gates, and auditable failure contracts. Missing dependencies must
+fail fast with stable error codes instead of returning mock success.
+
+Primary planning and contract docs:
+
+- `docs/agentic_os_next_phase_real_only_plan.md`
+- `docs/kernel_syscalls.md`
+- `docs/agentic_app_developer_guide.md`
+
 ## Traditional ROS2 App Work
 
 `/home/ubuntu/ros2_ws/src/color_block_grasper` is a traditional ROS2 RGB-D
@@ -106,6 +119,7 @@ color-block grasping application, not an Agent App. It is allowed to import
 field notes are tracked here for project continuity:
 
 - `docs/color_block_grasper_ros2_app_development.md`
+- `docs/color_block_grasper_agentic_app_technical_plan.md`
 
 Do not move this package into `agentic_apps/`, and do not make Agent Apps depend
 on its direct ROS2 topics or servo commands.
