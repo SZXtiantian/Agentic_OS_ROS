@@ -62,7 +62,9 @@ class SkillDispatcher:
         if skill_name == "robot.stop":
             return await self.bridge_client.stop_robot(args.get("reason", "app_requested"))
         if skill_name == "memory.remember":
-            self.memory_store.remember(app_id, session_id, args["key"], args.get("value"))
+            result = self.memory_store.remember(app_id, session_id, args["key"], args.get("value"))
+            if isinstance(result, dict):
+                return result if not result.get("success", False) else {"success": True, **result}
             return {"success": True}
         if skill_name == "memory.recall":
             return {"success": True, "value": self.memory_store.recall(app_id, args["key"])}

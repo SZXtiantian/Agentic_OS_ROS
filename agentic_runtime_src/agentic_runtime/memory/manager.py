@@ -66,17 +66,19 @@ class MemoryManager:
         self.kernel_provider = RuntimeMemoryProviderAdapter(provider)
         self.kernel = KernelMemoryManager(self.kernel_provider, access_manager=access_manager, event_sink=event_sink)
 
-    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> None:
-        self.kernel.address_request(
-            KernelSyscall.create(
-                app_id,
-                "memory",
-                "remember",
-                {
-                    "memory_id": key,
-                    "content": value,
-                    "metadata": {"session_id": session_id, "owner_agent": app_id},
-                },
+    def remember(self, app_id: str, session_id: str, key: str, value: Any) -> dict[str, Any]:
+        return self._response_dict(
+            self.kernel.address_request(
+                KernelSyscall.create(
+                    app_id,
+                    "memory",
+                    "remember",
+                    {
+                        "memory_id": key,
+                        "content": value,
+                        "metadata": {"session_id": session_id, "owner_agent": app_id},
+                    },
+                )
             )
         )
 
@@ -112,10 +114,18 @@ class MemoryManager:
         return bool(result.get("success"))
 
     def _response_dict(self, response: Any) -> dict[str, Any]:
+        if hasattr(response, "as_mapping"):
+            return dict(response.as_mapping())
         if hasattr(response, "data") and isinstance(response.data, dict):
             return dict(response.data)
         if hasattr(response, "response_message") and isinstance(response.response_message, dict):
             return dict(response.response_message)
+        if hasattr(response, "success"):
+            return {
+                "success": bool(getattr(response, "success", False)),
+                "error_code": str(getattr(response, "error_code", "") or ""),
+                "metadata": dict(getattr(response, "metadata", {}) or {}),
+            }
         if isinstance(response, dict):
             return dict(response)
         return {"success": False, "error_code": "MEMORY_RESPONSE_INVALID"}
