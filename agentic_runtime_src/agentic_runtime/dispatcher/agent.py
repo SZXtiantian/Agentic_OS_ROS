@@ -59,7 +59,8 @@ class DispatcherAgent:
             if selected_agents:
                 task_log.mark_running(task_id, selected_agents)
             executor = self.executor or _build_executor(self.runtime, self.app_index)
-            app_result = await executor.execute(validated, parent_session_id=dispatcher_session.session_id)
+            raw_app_result = await executor.execute(validated, parent_session_id=dispatcher_session.session_id)
+            app_result = _coerce_app_result(raw_app_result)
             child_session_id = str(app_result.get("session_id", ""))
             if child_session_id and selected_agents:
                 task_log.attach_agent_session(task_id, str(validated["selected_app_id"]), child_session_id)
@@ -67,11 +68,18 @@ class DispatcherAgent:
                     if item.get("agent_id") == validated["selected_app_id"]:
                         item["session_id"] = child_session_id
                         item["status"] = "running"
-            success = bool(app_result.get("success", app_result.get("result", {}).get("success", False)))
-            if "result" in app_result:
-                success = bool(app_result.get("result", {}).get("success", success))
-            summary = _summary_from_result(app_result)
+            success_check = _result_success_check(app_result)
+            success = bool(success_check["success"])
+            summary = _summary_from_result(app_result, success_override=success)
             detail_refs = _detail_refs(app_result, plan_path, self.runtime)
+            if not success_check["valid"]:
+                error_code = str(success_check["error_code"])
+                reason = str(success_check["reason"])
+                summary["error_code"] = error_code
+                summary["summary"] = reason
+                record = task_log.fail_task(task_id, error_code, reason, detail_refs)
+                self.runtime.session_manager.fail_session(dispatcher_session.session_id, error_code, {"success": False, "app_result": app_result})
+                return _dispatch_result(False, "failed", validated, dispatcher_session.session_id, selected_agents, app_result, summary, str(task_log.path), record, error_code, reason)
             if success:
                 record = task_log.complete_task(task_id, summary, detail_refs)
                 self.runtime.session_manager.complete_session(dispatcher_session.session_id, {"success": True, "app_result": app_result})
@@ -136,8 +144,47 @@ def _selected_agents(plan: dict[str, Any]) -> list[dict[str, Any]]:
     return [{"agent_id": app_id, "role": "primary_executor", "reason": str(plan.get("route_reason", "")), "session_id": "", "status": "planned"}]
 
 
-def _summary_from_result(result: dict[str, Any]) -> dict[str, Any]:
-    app_result = dict(result.get("result") or result)
+def _coerce_app_result(result: Any) -> dict[str, Any]:
+    if isinstance(result, dict):
+        return result
+    return {
+        "success": False,
+        "error_code": "DISPATCH_APP_RESULT_INVALID",
+        "reason": f"dispatcher executor returned {type(result).__name__}",
+    }
+
+
+def _result_success_check(result: dict[str, Any]) -> dict[str, Any]:
+    app_result = result.get("result")
+    if "result" in result:
+        if not isinstance(app_result, dict):
+            return _invalid_result_success("result must be an object")
+        if "success" in app_result:
+            return _success_field(app_result["success"], "result.success")
+        return _invalid_result_success("result.success field is required")
+    if "success" in result:
+        return _success_field(result["success"], "success")
+    return _invalid_result_success("success field is required")
+
+
+def _success_field(value: Any, field_name: str) -> dict[str, Any]:
+    if not isinstance(value, bool):
+        return _invalid_result_success(f"{field_name} field must be boolean")
+    return {"valid": True, "success": value, "error_code": "", "reason": ""}
+
+
+def _invalid_result_success(reason: str) -> dict[str, Any]:
+    return {
+        "valid": False,
+        "success": False,
+        "error_code": "DISPATCH_APP_RESULT_INVALID",
+        "reason": reason,
+    }
+
+
+def _summary_from_result(result: dict[str, Any], *, success_override: bool | None = None) -> dict[str, Any]:
+    raw_app_result = result.get("result") if isinstance(result.get("result"), dict) else result
+    app_result = dict(raw_app_result)
     steps = list(app_result.get("steps") or [])
     app_paths: list[str] = []
     raw_paths: list[str] = []
@@ -158,8 +205,10 @@ def _summary_from_result(result: dict[str, Any]) -> dict[str, Any]:
     summary = str(app_result.get("user_summary") or app_result.get("summary") or result.get("summary") or "")
     if not summary and result.get("type"):
         summary = str(result.get("type"))
+    if success_override is None:
+        success_override = bool(_result_success_check(result)["success"])
     return {
-        "success": bool(result.get("success", app_result.get("success", False))),
+        "success": bool(success_override),
         "error_code": str(app_result.get("error_code") or result.get("error_code") or ""),
         "summary": summary,
         "app_output_paths": list(dict.fromkeys(app_paths)),
@@ -175,7 +224,8 @@ def _detail_refs(result: dict[str, Any], plan_path, runtime: Any) -> dict[str, A
     }
     if result.get("session_id"):
         refs["app_session_paths"] = [str(runtime.session_manager.store.session_dir(str(result["session_id"])))]
-    app_result = dict(result.get("result") or result)
+    raw_app_result = result.get("result") if isinstance(result.get("result"), dict) else result
+    app_result = dict(raw_app_result)
     run_dirs = []
     for step in app_result.get("steps", []):
         if step.get("app_run_dir"):

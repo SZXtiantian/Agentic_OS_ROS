@@ -71,6 +71,57 @@ def test_dispatcher_writes_failed_task_log_when_photo_bridge_unavailable(tmp_pat
     asyncio.run(run())
 
 
+def test_dispatcher_rejects_non_boolean_app_success(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_TASK_LOG_ROOT", str(tmp_path / "tasks"))
+
+    class MalformedExecutor:
+        async def execute(self, plan, *, parent_session_id):
+            return {
+                "session_id": "sess_malformed",
+                "result": {"success": "false", "reason": "string success"},
+            }
+
+    async def run():
+        server = create_test_runtime_server()
+        result = await DispatcherAgent(server, executor=MalformedExecutor()).arun(
+            "拍一张照片",
+            GatewayFlags(mock=True, json=True),
+        )
+        assert result["success"] is False
+        assert result["status"] == "failed"
+        assert result["error_code"] == "DISPATCH_APP_RESULT_INVALID"
+        assert "result.success field must be boolean" in result["message"]
+        recent = server.task_log_manager.list_recent(limit=5)
+        assert recent[0].status == "failed"
+        assert recent[0].error_code == "DISPATCH_APP_RESULT_INVALID"
+
+    asyncio.run(run())
+
+
+def test_dispatcher_requires_nested_app_result_success(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_TASK_LOG_ROOT", str(tmp_path / "tasks"))
+
+    class MissingNestedSuccessExecutor:
+        async def execute(self, plan, *, parent_session_id):
+            return {
+                "success": True,
+                "session_id": "sess_missing",
+                "result": {"summary": "missing nested success"},
+            }
+
+    async def run():
+        server = create_test_runtime_server()
+        result = await DispatcherAgent(server, executor=MissingNestedSuccessExecutor()).arun(
+            "拍一张照片",
+            GatewayFlags(mock=True, json=True),
+        )
+        assert result["success"] is False
+        assert result["error_code"] == "DISPATCH_APP_RESULT_INVALID"
+        assert result["message"] == "result.success field is required"
+
+    asyncio.run(run())
+
+
 def test_robot_photographer_dispatch_manifest_registered(app_root):
     entry = AppIndex.load(app_root).get("robot_photographer_agent")
     assert entry is not None

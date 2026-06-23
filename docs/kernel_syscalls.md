@@ -90,6 +90,7 @@ Runtime human channel status/cancel failures are normalized: channel status exce
 
 Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful. `AppInvoker` also strips falsy legacy `mock` task fields and rejects truthy `mock` requests with `SIMULATED_BACKEND_DISABLED` before loading an app or touching a bridge.
 Runtime, natural-language, photo, and kernel-service CLI compatibility `--mock` flags are rejected at the CLI boundary; accepted production calls create the runtime and app tasks without propagating `mock=False` defaults into scheduler kwargs, app constructor kwargs, or task input.
+The natural-language dispatcher also validates the selected app result before completing a task log record. Nested `result.success` or top-level `success` must be boolean; malformed app executor output fails with `DISPATCH_APP_RESULT_INVALID` and records a failed dispatch instead of a completed task.
 Tool and MCP tool handlers may return arbitrary domain data, but if they explicitly include `success`, it must be boolean; explicit `success: false` is propagated as a failed tool syscall and non-boolean success returns `TOOL_RESULT_INVALID`.
 
 ## Permissions And Intervention
@@ -165,7 +166,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 503 passed, 3 skipped
+# 505 passed, 3 skipped
 scripts/run_tests.sh
-# 503 passed, 3 deselected; Agentic OS MVP checks passed.
+# 505 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
