@@ -4,6 +4,9 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.hooks import InMemoryKernelEventSink
+
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.app_factory import AppFactory
 from agentic_runtime.config import RuntimeConfig
@@ -64,9 +67,16 @@ class RuntimeServer:
             if candidate.exists():
                 config_path = candidate
         config = RuntimeConfig.load(config_path)
+        event_sink = InMemoryKernelEventSink()
+        access_manager = AccessManager(event_sink=event_sink)
         registry = SkillRegistry(config.skill_root).load()
         audit_logger = AuditLogger(config.audit_log_path)
-        memory_manager = create_memory_manager(config.memory_provider, config.memory_db_path)
+        memory_manager = create_memory_manager(
+            config.memory_provider,
+            config.memory_db_path,
+            access_manager=access_manager,
+            event_sink=event_sink,
+        )
         session_store = SessionStore(config.session_root)
         session_manager = SessionManager(session_store)
         syscall_store = SyscallStore(config.session_root)
@@ -85,8 +95,8 @@ class RuntimeServer:
             session_manager=session_manager,
         )
         monitor = ExecutionMonitor(audit_logger, resource_manager)
-        storage_manager = StorageManager(config.storage_root)
-        context_manager = ContextManager(config.context_root)
+        storage_manager = StorageManager(config.storage_root, access_manager=access_manager, event_sink=event_sink)
+        context_manager = ContextManager(config.context_root, access_manager=access_manager, event_sink=event_sink)
         app_factory = AppFactory(config.app_root, executor)
         session_runner = SessionRunner(app_factory, session_manager, storage_manager, context_manager)
         scheduler = SingleRobotScheduler(session_runner)
@@ -117,7 +127,7 @@ class RuntimeServer:
             llm_chat=llm_chat,
             human_channel=human_channel,
         )
-        server.kernel_service = KernelService(server)
+        server.kernel_service = KernelService(server, access_manager=access_manager, event_sink=event_sink)
         server.executor.kernel_service = server.kernel_service
         server.executor.access_manager = server.kernel_service.access_manager
         server.executor.event_sink = server.kernel_service.event_sink

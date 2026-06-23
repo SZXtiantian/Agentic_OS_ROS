@@ -306,3 +306,29 @@ def test_runtime_server_shutdown_stops_kernel_scheduler(tmp_path, monkeypatch):
 
     assert server.kernel_service.status()["scheduler"]["active"] is False
     assert server.kernel_service.status()["scheduler"]["threads"] == {}
+
+
+def test_runtime_server_shares_kernel_access_manager_with_runtime_wrappers(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
+    server = create_test_runtime_server()
+
+    access = server.kernel_service.access_manager
+    event_sink = server.kernel_service.event_sink
+
+    assert server.executor.access_manager is access
+    assert server.context_manager.kernel.access_manager is access
+    assert server.context_manager.kernel.event_sink is event_sink
+    assert server.storage_manager.kernel.access_manager is access
+    assert server.storage_manager.kernel.event_sink is event_sink
+    assert server.executor.dispatcher.memory_store.kernel.access_manager is access
+    assert server.executor.dispatcher.memory_store.kernel.event_sink is event_sink
+
+    snapshot = server.context_manager.snapshot("sess_shared", "inspection_agent", task={"place": "lab"})
+
+    assert snapshot.task == {"place": "lab"}
+    assert any(
+        event["event_type"] == "context.audit"
+        and event["metadata"]["operation_type"] == "ctx_snapshot"
+        and event["metadata"]["session_id"] == "sess_shared"
+        for event in event_sink.recent(limit=20)
+    )

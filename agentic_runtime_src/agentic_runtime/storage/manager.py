@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.storage import StorageManager as KernelStorageManager
 
 from agentic_runtime.errors import AgenticRuntimeError
@@ -11,9 +13,15 @@ from .models import ArtifactRecord
 
 
 class StorageManager:
-    def __init__(self, root: Path) -> None:
+    def __init__(
+        self,
+        root: Path,
+        *,
+        access_manager: AccessManager | None = None,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self.root = root
-        self.kernel = KernelStorageManager(root)
+        self.kernel = KernelStorageManager(root, access_manager=access_manager, event_sink=event_sink)
 
     def write_artifact(
         self,

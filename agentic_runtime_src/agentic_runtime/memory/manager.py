@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.hooks import KernelEventSink
 from agentic_os.kernel.memory import MemoryManager as KernelMemoryManager
 from agentic_os.kernel.memory import MemoryNote
 from agentic_os.kernel.system_call import KernelSyscall
@@ -53,10 +55,16 @@ class RuntimeMemoryProviderAdapter:
 
 
 class MemoryManager:
-    def __init__(self, provider: MemoryProvider) -> None:
+    def __init__(
+        self,
+        provider: MemoryProvider,
+        *,
+        access_manager: AccessManager | None = None,
+        event_sink: KernelEventSink | None = None,
+    ) -> None:
         self.provider = provider
         self.kernel_provider = RuntimeMemoryProviderAdapter(provider)
-        self.kernel = KernelMemoryManager(self.kernel_provider)
+        self.kernel = KernelMemoryManager(self.kernel_provider, access_manager=access_manager, event_sink=event_sink)
 
     def remember(self, app_id: str, session_id: str, key: str, value: Any) -> None:
         self.kernel.address_request(

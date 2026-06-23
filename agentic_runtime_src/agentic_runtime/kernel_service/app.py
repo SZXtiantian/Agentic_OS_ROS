@@ -23,13 +23,21 @@ from agentic_runtime.simulation import simulated_backend_disabled
 
 
 class KernelService:
-    def __init__(self, runtime_server=None, config=None, audit_logger=None, managers: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        runtime_server=None,
+        config=None,
+        audit_logger=None,
+        managers: dict[str, Any] | None = None,
+        access_manager: AccessManager | None = None,
+        event_sink: InMemoryKernelEventSink | None = None,
+    ) -> None:
         self.runtime_server = runtime_server
         self.config = config or getattr(runtime_server, "config", None)
         self.audit_logger = audit_logger or getattr(runtime_server, "audit_logger", None)
         self.kernel_config = dict(getattr(self.config, "kernel", {}) or {})
-        self.event_sink = InMemoryKernelEventSink()
-        self.access_manager = AccessManager(event_sink=self.event_sink)
+        self.event_sink = event_sink or InMemoryKernelEventSink()
+        self.access_manager = access_manager or AccessManager(event_sink=self.event_sink)
         self.queue_store = KernelQueueStore(event_sink=self.event_sink)
         self.llm = self._build_llm_adapter()
         self.context = self._build_context_manager()
