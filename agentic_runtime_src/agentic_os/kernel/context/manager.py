@@ -218,10 +218,18 @@ class ContextManager:
         operation_type: str,
         params: dict[str, Any],
     ) -> KernelResponse:
-        if self.access_manager is None:
-            return KernelResponse.ok({"allowed": True})
         action = self._access_action(operation_type)
         resource_id = self._context_resource_id(session_id, namespace, operation_type, params)
+        if self.access_manager is None:
+            return KernelResponse.error(
+                "ACCESS_MANAGER_UNAVAILABLE",
+                metadata={
+                    "reason": f"context {operation_type} requires a kernel access manager",
+                    "requires_intervention": False,
+                    "resource_id": resource_id,
+                    "action": action,
+                },
+            )
         decision = self.access_manager.check(
             AccessRequest(
                 subject=AccessSubject(agent_name=owner, session_id=session_id),

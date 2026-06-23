@@ -152,7 +152,8 @@ def test_context_snapshot_recover_and_compact(tmp_path):
 
 def test_context_audit_does_not_leak_values(tmp_path):
     sink = InMemoryKernelEventSink()
-    manager = ContextManager(tmp_path / "ctx", event_sink=sink)
+    access = AccessManager(event_sink=sink)
+    manager = ContextManager(tmp_path / "ctx", access_manager=access, event_sink=sink)
 
     put = manager.address_request(
         SimpleNamespace(
@@ -174,6 +175,40 @@ def test_context_audit_does_not_leak_values(tmp_path):
     events = [event for event in sink.recent(limit=10) if event["event_type"] == "context.audit"]
     assert [event["metadata"]["operation_type"] for event in events] == ["ctx_put", "ctx_delete"]
     assert "secret context value" not in str(events)
+
+
+def test_context_syscalls_require_access_manager_before_provider_access(tmp_path):
+    sink = InMemoryKernelEventSink()
+    manager = ContextManager(tmp_path / "ctx", event_sink=sink)
+    manager.provider.put("agent_a", "sess_1", "context", "existing", "kept", {})
+
+    operations = [
+        ("ctx_put", {"session_id": "sess_1", "key": "new", "value": "not written"}),
+        ("ctx_get", {"session_id": "sess_1", "key": "existing"}),
+        ("ctx_list", {"session_id": "sess_1", "prefix": ""}),
+        ("ctx_delete", {"session_id": "sess_1", "key": "existing"}),
+        ("ctx_snapshot", {"session_id": "sess_1", "checkpoint": "blocked", "state": {"secret": "nope"}}),
+        ("ctx_recover", {"session_id": "sess_1", "checkpoint": "blocked"}),
+        ("ctx_compact", {"session_id": "sess_1", "max_tokens": 4}),
+        ("ctx_clear", {"session_id": "sess_1", "scope": "session"}),
+    ]
+
+    responses = [
+        manager.address_request(
+            SimpleNamespace(agent_name="agent_a", operation_type=operation, params=params)
+        )
+        for operation, params in operations
+    ]
+
+    assert all(response.success is False for response in responses)
+    assert [response.error_code for response in responses] == ["ACCESS_MANAGER_UNAVAILABLE"] * len(operations)
+    assert manager.provider.get("agent_a", "sess_1", "context", "existing")["value"] == "kept"
+    assert manager.provider.get("agent_a", "sess_1", "context", "new") is None
+    assert manager.provider.recover("agent_a", "sess_1", "blocked") is None
+    audits = [event for event in sink.recent(limit=20) if event["event_type"] == "context.audit"]
+    assert [event["metadata"]["operation_type"] for event in audits] == [operation for operation, _ in operations]
+    assert all(event["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE" for event in audits)
+    assert "not written" not in str(audits)
 
 
 def test_context_syscalls_emit_access_and_audit_events_without_value_leak(tmp_path):
@@ -252,7 +287,10 @@ def test_context_sdk_facade_uses_kernel_service(tmp_path):
 def test_context_unavailable_status_and_error_code(tmp_path):
     blocking_file = tmp_path / "not_a_dir"
     blocking_file.write_text("x", encoding="utf-8")
-    manager = ContextManager(provider=SQLiteContextProvider(blocking_file / "context.sqlite3"))
+    manager = ContextManager(
+        provider=SQLiteContextProvider(blocking_file / "context.sqlite3"),
+        access_manager=AccessManager(),
+    )
 
     response = manager.address_request(
         SimpleNamespace(

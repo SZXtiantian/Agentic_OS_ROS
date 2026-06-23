@@ -42,7 +42,7 @@ Skill manifests with `backend.type` set to `mock`, `fake`, `stub`, or `dummy` ar
 
 Context `ctx_compact` is structural JSON truncation over stored context entries. It is not an LLM semantic summary; `status()["context"]["compact_policy"]` reports `mode: structural_truncation`, `semantic_summary: false`, and `llm_required: false`.
 
-Context syscalls run through the kernel access manager and emit `access.checked` plus `context.audit`; audit events do not include stored context values.
+Context syscalls run through the kernel access manager and emit `access.checked` plus `context.audit`; audit events do not include stored context values. Direct syscall manager construction without a kernel access manager returns `ACCESS_MANAGER_UNAVAILABLE` before reading or mutating the SQLite provider.
 
 Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_mode: lexical_fts` with `semantic: false`. Semantic/vector retrieval may only be marked available when a real embedding/vector provider is configured; otherwise `status()["storage"]["semantic_retrieval"]` reports `STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED`.
 Storage share policies live in the persistent SQLite share registry; deleting a file removes its share entry, and querying share policy for a missing file returns `STORAGE_NOT_FOUND` instead of stale success.
@@ -143,7 +143,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 431 passed, 3 skipped
+# 432 passed, 3 skipped
 scripts/run_tests.sh
-# 431 passed, 3 deselected; Agentic OS MVP checks passed.
+# 432 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
