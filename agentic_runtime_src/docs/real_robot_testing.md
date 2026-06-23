@@ -82,6 +82,9 @@ success=true
 
 This validates the installed AgenticOS runtime in `/opt/agentic`, the
 AgenticOS ROS2 bridge, and the real camera driver. It is not a mock test.
+The real robot acceptance scripts must call `agentic photo --real`; if a real
+bridge, camera, or arm backend is unavailable they fail with structured errors
+instead of falling back to `--mock`.
 
 Terminal 1: start or verify the AgenticOS bridge services:
 

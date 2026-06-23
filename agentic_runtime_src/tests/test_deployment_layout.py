@@ -54,6 +54,9 @@ def test_real_robot_multi_angle_acceptance_uses_arm_health_gate(runtime_src):
     assert "check_camera_pose_action_groups.py" in multi_angle
     assert "refusing real multi-angle arm motion" in multi_angle
     assert "camera_pitch_down_15" not in multi_angle
+    assert "--mock" not in multi_angle
+    assert 'photo --real --json "拍一张照片"' in multi_angle
+    assert 'photo --real --allow-arm-motion --yes --json "拍一组多角度照片并验证差异"' in multi_angle
 
 
 def test_real_robot_torque_semantics_probe_is_gated_and_no_position_motion(runtime_src):

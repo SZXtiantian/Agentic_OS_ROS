@@ -183,7 +183,6 @@ main() {
   ros_graph_checks
   ensure_bridge
 
-  soft "$AGENTIC_HOME/bin/agentic" photo --mock --allow-arm-motion --yes --json "拍一组多角度照片并验证差异"
   soft "$AGENTIC_HOME/bin/agentic" photo --real --json "拍一张照片"
 
   if [[ "$ALLOW_ARM" == "1" ]]; then
