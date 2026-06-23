@@ -228,6 +228,50 @@ def test_tool_load_unload_register_builtin_with_permission_require_intervention(
     assert all(event["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED" for event in audit_events)
 
 
+def test_tool_management_requires_access_manager_before_registry_change(tmp_path):
+    tool_root = tmp_path / "tools"
+    tool_root.mkdir()
+    (tool_root / "sample.py").write_text("def run(args):\n    return {'ok': True}\n", encoding="utf-8")
+    manifest = tool_root / "sample.tool.yaml"
+    manifest.write_text("name: sample.tool\nentrypoint: sample:run\n", encoding="utf-8")
+    sink = InMemoryKernelEventSink()
+    manager = ToolManager(tool_root=tool_root, event_sink=sink)
+
+    loaded = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_load_manifest",
+            params={"path": str(manifest), "permissions": ["tool.install"]},
+        )
+    )
+    unloaded = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_unload",
+            params={"name": "calculator.add", "permissions": ["tool.uninstall"]},
+        )
+    )
+    registered = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="tool_register_builtin",
+            params={"name": "calculator.add", "permissions": ["tool.register_builtin"]},
+        )
+    )
+
+    assert loaded.success is False
+    assert loaded.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+    assert unloaded.success is False
+    assert unloaded.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+    assert registered.success is False
+    assert registered.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+    assert manager.describe("sample.tool")["success"] is False
+    assert manager.describe("calculator.add")["success"] is True
+    events = [event for event in sink.recent(limit=10) if event["event_type"] == "tool.audit"]
+    assert [event["metadata"]["action"] for event in events] == ["load_manifest", "unload", "register_builtin"]
+    assert all(event["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE" for event in events)
+
+
 def test_dangerous_tool_operations_emit_audit_events(tmp_path):
     tool_root = tmp_path / "tools"
     tool_root.mkdir()

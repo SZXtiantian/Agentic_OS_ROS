@@ -5,6 +5,7 @@ import time
 
 import pytest
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.system_call import KernelSyscall
 from agentic_os.kernel.tool import MCPToolServer, ToolManager, ToolSandboxPolicy
 
@@ -35,11 +36,17 @@ mcp:
 """,
         encoding="utf-8",
     )
-    manager = ToolManager(tool_root=tool_root)
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = ToolManager(tool_root=tool_root, access_manager=access)
 
-    loaded = manager.load_manifest(manifest)
+    loaded = manager.load_manifest(manifest, permissions=("tool.install",))
     result = manager.address_request(
-        KernelSyscall.create("agent_a", "tool", "call_tool", {"name": loaded.name, "args": {"a": 1, "b": 2}})
+        KernelSyscall.create(
+            "agent_a",
+            "tool",
+            "call_tool",
+            {"name": loaded.name, "args": {"a": 1, "b": 2}, "permissions": ["tool.execute.calculator.add"]},
+        )
     )
 
     assert result["success"] is True
@@ -111,7 +118,8 @@ def test_tool_outside_tool_root_rejected(tmp_path):
     outside.mkdir()
     manifest = outside / "tool.yaml"
     manifest.write_text("name: outside.tool\nentrypoint: outside:run\n", encoding="utf-8")
-    manager = ToolManager(tool_root=tool_root)
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = ToolManager(tool_root=tool_root, access_manager=access)
 
     with pytest.raises(ValueError, match="outside tool root"):
         manager.load_manifest(manifest)
@@ -162,10 +170,11 @@ sandbox:
 """,
         encoding="utf-8",
     )
-    manager = ToolManager(tool_root=tool_root)
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = ToolManager(tool_root=tool_root, access_manager=access)
 
     with pytest.raises(ValueError, match="TOOL_SANDBOX_NETWORK_DISABLED"):
-        manager.load_manifest(manifest)
+        manager.load_manifest(manifest, permissions=("tool.install",))
 
 
 def test_sandbox_policy_allows_workspace_write_under_tool_root(tmp_path):
