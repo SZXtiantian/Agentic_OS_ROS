@@ -80,7 +80,12 @@ class SkillExecutor:
             permission_result = "allowed"
             syscall.permission_result = permission_result
 
-            if self.access_manager is not None and self._requires_access_check(skill.name):
+            if self._requires_access_check(skill.name):
+                if self.access_manager is None:
+                    raise PermissionDeniedError(
+                        "kernel access manager is required for robot and human-facing capability execution",
+                        code="ACCESS_MANAGER_UNAVAILABLE",
+                    )
                 access_decision = self.access_manager.check(
                     AccessRequest(
                         subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),

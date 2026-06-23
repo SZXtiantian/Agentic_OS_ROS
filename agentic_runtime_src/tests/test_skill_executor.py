@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.errors import ResourceLockedError
@@ -30,7 +31,7 @@ FULL_PERMS = [
 ]
 
 
-def make_executor(tmp_path):
+def make_executor(tmp_path, *, access_manager=True):
     config = RuntimeConfig.load(Path(__file__).resolve().parents[1] / "configs" / "runtime.yaml")
     registry = SkillRegistry(config.skill_root).load()
     bridge_calls = []
@@ -49,6 +50,7 @@ def make_executor(tmp_path):
         SkillDispatcher(client, memory),
         AuditLogger(tmp_path / "audit.jsonl"),
         CancellationManager(),
+        access_manager=AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider()) if access_manager else None,
     )
     return executor, bridge_calls, resources, memory
 
@@ -78,6 +80,17 @@ def test_navigate_permission_denied_does_not_call_backend(tmp_path):
         result = await executor.execute(app_with_permissions(["world.read"]), "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess")
         assert result.success is False
         assert result.error_code == "PERMISSION_DENIED"
+        assert bridge_calls == []
+
+    asyncio.run(run())
+
+
+def test_robot_motion_requires_access_manager_before_backend(tmp_path):
+    async def run():
+        executor, bridge_calls, _, _ = make_executor(tmp_path, access_manager=False)
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "robot.navigate_to", {"place": "厨房", "timeout_s": 2}, "sess")
+        assert result.success is False
+        assert result.error_code == "ACCESS_MANAGER_UNAVAILABLE"
         assert bridge_calls == []
 
     asyncio.run(run())

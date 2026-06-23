@@ -54,6 +54,7 @@ Human requests are durable JSONL queue records under the runtime human channel r
 `human.ask` requires explicit `human.ask` permission in syscall metadata before the runtime backend is called. With permission present, it is still treated as an intervention-gated operation; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`.
 
 Runtime robot motion skills such as `robot.navigate_to`, `robot.inspect_area`, `arm.move_named`, and `gripper.set` require both explicit robot permissions and operator intervention before safety checks or ROS bridge calls run. Without an intervention backend they fail with `ACCESS_INTERVENTION_REQUIRED` and emit audit/status evidence; `robot.stop` remains permission-gated but is not delayed by intervention.
+If a `SkillExecutor` is constructed without a kernel `AccessManager`, managed robot/perception/gripper skills fail fast with `ACCESS_MANAGER_UNAVAILABLE` before any safety or ROS bridge call; production `RuntimeServer.create()` wires the shared access manager into the executor.
 
 LLM status exposes provider configuration state and active `call_id`s. Cancelling an unknown LLM call returns `SYSCALL_NOT_FOUND`; cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
