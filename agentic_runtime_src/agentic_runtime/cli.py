@@ -93,27 +93,31 @@ async def run_app(args) -> int:
 
 def status(args) -> int:
     server = RuntimeServer.create(mock=args.mock)
-    skills = [skill.name for skill in server.registry.list_skills()]
-    data = server.monitor.status(skills, ros_bridge=server.config.ros_bridge_mode)
-    data["scheduler"] = server.scheduler.status()
-    data["sessions"] = [record.to_dict() for record in server.session_manager.list_sessions(limit=5)]
+    data = server.kernel_service.status()
     if args.json:
         print_json(data)
         return 0
+    runtime = dict(data.get("runtime") or {})
+    scheduler = dict(data.get("scheduler") or {})
+    bridge_client = dict(data.get("bridge_client") or {})
     print("agenticd: running")
-    print(f"ros_bridge: {data['ros_bridge']}")
-    print(f"scheduler: {data['scheduler']['policy']}")
+    print(f"ros_bridge: {runtime.get('ros_bridge', '')}")
+    print(f"bridge_client: {bridge_client.get('state', 'unavailable')} {bridge_client.get('error_code', '')}".rstrip())
+    scheduler_label = scheduler.get("policy") or ",".join(scheduler.get("lanes") or []) or "unknown"
+    print(f"scheduler: {scheduler_label}")
     print("skills:")
-    for item in data["skills"]:
+    for item in runtime.get("skills") or []:
         print(f"  - {item['name']}: {item['status']}")
     print("resource_locks:")
-    if data["resource_locks"]:
-        for name, owner in data["resource_locks"].items():
+    resource_locks = dict(runtime.get("resource_locks") or {})
+    if resource_locks:
+        for name, owner in resource_locks.items():
             print(f"  - {name}: {owner}")
     else:
         print("  - base: free")
     print("recent_syscalls:")
-    for record in data["recent_syscalls"]:
+    recent_syscalls = list(data.get("recent_syscalls") or runtime.get("recent_syscalls") or [])
+    for record in recent_syscalls:
         print(f"  - {record.get('skill_name')}: {record.get('status')} {record.get('error_code')}")
     return 0
 

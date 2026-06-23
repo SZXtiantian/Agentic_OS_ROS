@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 from agentic_runtime import cli as runtime_cli
 from agentic_runtime.kernel_service import server as kernel_server
@@ -22,6 +23,33 @@ def test_runtime_cli_mock_flag_is_rejected(capsys):
     assert rc == 1
     assert payload["success"] is False
     assert payload["error_code"] == SIMULATED_BACKEND_DISABLED
+
+
+def test_runtime_cli_status_json_exposes_kernel_bridge_health(monkeypatch, capsys):
+    class KernelService:
+        def status(self):
+            return {
+                "runtime": {"agenticd": "running", "ros_bridge": "cli", "skills": [], "resource_locks": {}, "recent_syscalls": []},
+                "scheduler": {"active": False, "lanes": ["llm", "memory"]},
+                "bridge_client": {
+                    "state": "unavailable",
+                    "provider": "Ros2CliBridgeClient",
+                    "error_code": "ROS_BRIDGE_UNAVAILABLE",
+                    "reason": "ros2 command is unavailable",
+                },
+                "events": {"recent": [{"event_type": "ros_bridge.status"}]},
+                "recent_syscalls": [],
+            }
+
+    monkeypatch.setattr(runtime_cli.RuntimeServer, "create", staticmethod(lambda mock=False: SimpleNamespace(kernel_service=KernelService())))
+
+    rc = runtime_cli.main(["status", "--json"])
+
+    payload = _last_json(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["bridge_client"]["provider"] == "Ros2CliBridgeClient"
+    assert payload["bridge_client"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+    assert payload["events"]["recent"][0]["event_type"] == "ros_bridge.status"
 
 
 def test_kernel_service_server_mock_flag_is_rejected(capsys):
