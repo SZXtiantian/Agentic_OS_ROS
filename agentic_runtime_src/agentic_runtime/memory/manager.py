@@ -91,12 +91,24 @@ class MemoryManager:
         )
 
     def recall(self, app_id: str, key: str) -> Any:
+        result = self.recall_result(app_id, key)
+        if not result.get("success"):
+            return None
+        return result.get("value")
+
+    def recall_result(self, app_id: str, key: str) -> dict[str, Any]:
         result = self._response_dict(
             self.kernel.address_request(KernelSyscall.create(app_id, "memory", "recall", {"memory_id": key}))
         )
         if not result.get("success"):
-            return None
-        return (result.get("memory") or {}).get("content")
+            return result
+        memory = dict(result.get("memory") or {})
+        return {
+            "success": True,
+            "memory_id": key,
+            "value": memory.get("content"),
+            "memory": memory,
+        }
 
     def search(self, app_id: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
         result = self._response_dict(

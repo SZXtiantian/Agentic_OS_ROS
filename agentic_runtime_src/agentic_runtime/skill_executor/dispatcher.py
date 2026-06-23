@@ -67,6 +67,10 @@ class SkillDispatcher:
                 return result if not result.get("success", False) else {"success": True, **result}
             return {"success": True}
         if skill_name == "memory.recall":
+            if hasattr(self.memory_store, "recall_result"):
+                result = self.memory_store.recall_result(app_id, args["key"])
+                if isinstance(result, dict):
+                    return result
             return {"success": True, "value": self.memory_store.recall(app_id, args["key"])}
         if skill_name == "storage.list_recent_photos":
             return self._list_recent_photos(int(args.get("limit", 5)), app_id=app_id)

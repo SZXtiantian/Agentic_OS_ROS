@@ -209,6 +209,33 @@ def test_memory_remember_backend_failure_is_not_reported_as_success(tmp_path):
     asyncio.run(run())
 
 
+def test_memory_recall_backend_failure_is_not_reported_as_empty_success(tmp_path):
+    class FailingMemoryStore:
+        def remember(self, app_id, session_id, key, value):
+            return {"success": True, "memory_id": key}
+
+        def recall_result(self, app_id, key):
+            return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE", "reason": "db closed"}
+
+        def recall(self, app_id, key):
+            return None
+
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        executor.dispatcher.memory_store = FailingMemoryStore()
+
+        result = await executor.execute(app_with_permissions(FULL_PERMS), "memory.recall", {"key": "k"}, "sess")
+
+        assert result.success is False
+        assert result.error_code == "MEMORY_PROVIDER_UNAVAILABLE"
+        assert "value" not in result.data
+        record = executor.audit_logger.recent(limit=1)[0]
+        assert record["status"] == "failed"
+        assert record["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
+
+    asyncio.run(run())
+
+
 def test_skill_backend_response_must_explicitly_report_success(tmp_path):
     async def run():
         executor, _, _, _ = make_executor(tmp_path)

@@ -33,3 +33,25 @@ def test_runtime_memory_provider_failure_is_not_converted_to_success():
     assert result["success"] is False
     assert result["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
     assert result["memory_id"] == "last_inspection"
+
+
+def test_runtime_memory_recall_result_preserves_provider_exception():
+    class RaisingRecallProvider:
+        def remember(self, app_id, session_id, key, value):
+            return {"success": True}
+
+        def recall(self, app_id, key):
+            raise OSError("database closed")
+
+        def search(self, app_id, query, limit=5):
+            return []
+
+        def delete(self, app_id, key):
+            return False
+
+    manager = MemoryManager(RaisingRecallProvider())
+
+    result = manager.recall_result("app", "last_inspection")
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
