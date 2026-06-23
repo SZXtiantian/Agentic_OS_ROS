@@ -177,6 +177,52 @@ def test_ros2_cli_bridge_report_say_preserves_backend_failure(tmp_path, monkeypa
     assert status["last_error"]["error_code"] == "REPORT_BACKEND_UNAVAILABLE"
 
 
+def test_ros2_cli_bridge_ask_human_returns_uniform_success_shape():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"answered": true, "answer": "yes", "reason": ""}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.ask_human("Ready?", timeout_s=1)
+        assert result["success"] is True
+        assert result["answered"] is True
+        assert result["answer"] == "yes"
+        assert result["error_code"] == ""
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_ask_human_unanswered_is_not_success():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"answered": false, "answer": "", "reason": "operator declined"}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.ask_human("Ready?", timeout_s=1)
+        assert result["success"] is False
+        assert result["answered"] is False
+        assert result["error_code"] == "HUMAN_UNANSWERED"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_ask_human_bridge_error_has_success_false():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        raise FileNotFoundError("ros2")
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.ask_human("Ready?", timeout_s=1)
+        assert result["success"] is False
+        assert result["answered"] is False
+        assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+
+    asyncio.run(run())
+
+
 def test_ros2_cli_bridge_client_camera_arm_methods():
     calls = []
 

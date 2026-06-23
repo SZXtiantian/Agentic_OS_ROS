@@ -321,9 +321,12 @@ class Ros2CliBridgeClient:
             data = _parse_required_response(output)
         except RosBridgeCommandError as exc:
             self._record_error("ask_human", exc)
-            return {"answered": False, "answer": "", "error_code": exc.error_code, "reason": exc.reason}
+            return {"success": False, "answered": False, "answer": "", "error_code": exc.error_code, "reason": exc.reason}
+        answered = bool(data.get("answered", False))
         return {
-            "answered": bool(data.get("answered", False)),
+            "success": answered,
+            "answered": answered,
+            "error_code": "" if answered else str(data.get("error_code") or "HUMAN_UNANSWERED"),
             "answer": str(data.get("answer", "")),
             "reason": str(data.get("reason", "")),
         }
