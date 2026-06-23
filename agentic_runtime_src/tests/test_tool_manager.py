@@ -42,3 +42,18 @@ def test_tool_manager_requires_execute_permission_when_access_managed():
     assert allowed.data["message"] == "hello"
     checked = [event for event in sink.recent(limit=10) if event["event_type"] == "access.checked"]
     assert [event["metadata"]["allowed"] for event in checked] == [False, True]
+
+
+def test_tool_manager_rejects_malformed_kernel_success(monkeypatch):
+    manager = ToolManager()
+    monkeypatch.setattr(
+        manager.kernel,
+        "address_request",
+        lambda syscall: {"success": "true", "result": {"message": "fake success"}},
+    )
+
+    result = manager.call(ToolCall(name="echo", args={"message": "hello"}))
+
+    assert result.success is False
+    assert result.error_code == "TOOL_RESULT_INVALID"
+    assert result.reason == "kernel tool result success field must be boolean"

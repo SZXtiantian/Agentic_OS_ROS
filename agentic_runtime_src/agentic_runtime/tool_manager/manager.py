@@ -36,9 +36,19 @@ class ToolManager:
             {"name": call.name, "args": call.args, "permissions": tuple(call.permissions)},
         )
         raw = self.kernel.address_request(syscall)
-        if raw.get("success"):
+        raw_success = raw.get("success")
+        if raw_success is True:
             data = raw.get("result")
             return self._finish(call, ToolResult(True, data=data if isinstance(data, dict) else {"result": data}))
+        if not isinstance(raw_success, bool):
+            return self._finish(
+                call,
+                ToolResult(
+                    False,
+                    error_code="TOOL_RESULT_INVALID",
+                    reason="kernel tool result success field must be boolean",
+                ),
+            )
         error_code = str(raw.get("error_code") or "TOOL_FAILED")
         if error_code == "TOOL_FORBIDDEN_ROBOT_CAPABILITY":
             error_code = "TOOL_FORBIDDEN"
