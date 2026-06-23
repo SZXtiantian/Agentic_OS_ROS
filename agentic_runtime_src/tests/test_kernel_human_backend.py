@@ -104,6 +104,57 @@ def test_human_manager_audits_ask_and_cancel():
     assert events[1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
 
 
+def test_human_cancel_requires_call_id_before_backend_call():
+    class Backend:
+        calls = 0
+
+        def cancel(self, session_id, call_id=""):
+            self.calls += 1
+            return {"success": True, "session_id": session_id, "call_id": call_id}
+
+        def status(self):
+            return {"success": True, "state": "ready", "backend": "test_backend"}
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    manager = HumanInteractionManager(backend, event_sink=sink)
+
+    missing = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_cancel",
+            params={"session_id": "sess_human"},
+        )
+    )
+
+    assert missing.success is False
+    assert missing.error_code == "SYSCALL_NOT_FOUND"
+    assert backend.calls == 0
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["action"] == "cancel"
+    assert audit["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+
+
+def test_human_cancel_requires_backend_cancel_contract():
+    class Backend:
+        def status(self):
+            return {"success": True, "state": "ready", "backend": "test_backend"}
+
+    manager = HumanInteractionManager(Backend())
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_cancel",
+            params={"session_id": "sess_human", "call_id": "human_1"},
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_BACKEND_UNAVAILABLE"
+    assert result.metadata["reason"] == "human backend does not support cancel"
+
+
 def test_human_status_requires_active_call_id_and_audits():
     class Backend:
         def status(self):

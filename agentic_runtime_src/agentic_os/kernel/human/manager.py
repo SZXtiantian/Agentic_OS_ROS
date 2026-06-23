@@ -36,10 +36,31 @@ class HumanInteractionManager:
             self._record(syscall, result)
             self._audit_result(syscall, result)
             return self._kernel_response(result)
-        if syscall.operation_type in {"human.cancel", "human_cancel"} and hasattr(self.human_adapter, "cancel"):
+        if syscall.operation_type in {"human.cancel", "human_cancel"}:
+            call_id = str(syscall.params.get("call_id") or syscall.params.get("correlation_id") or "")
+            if not call_id:
+                result = {
+                    "success": False,
+                    "error_code": "SYSCALL_NOT_FOUND",
+                    "reason": "call_id required",
+                    "call_id": call_id,
+                }
+                self._record(syscall, result)
+                self._audit_result(syscall, result)
+                return self._kernel_response(result)
+            if not hasattr(self.human_adapter, "cancel"):
+                result = {
+                    "success": False,
+                    "error_code": "HUMAN_BACKEND_UNAVAILABLE",
+                    "reason": "human backend does not support cancel",
+                    "call_id": call_id,
+                }
+                self._record(syscall, result)
+                self._audit_result(syscall, result)
+                return self._kernel_response(result)
             result = self.human_adapter.cancel(
                 str(syscall.params.get("session_id") or "kernel"),
-                str(syscall.params.get("call_id") or ""),
+                call_id,
             )
             self._record(syscall, result)
             self._audit_result(syscall, result)
