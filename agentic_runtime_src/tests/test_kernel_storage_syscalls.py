@@ -120,6 +120,55 @@ def test_storage_read_access_denial_is_audited(tmp_path):
     assert audit["metadata"]["error_code"] == "ACCESS_DYNAMIC_DENY"
 
 
+def test_storage_rejects_malformed_access_success_and_audits_reason(tmp_path, monkeypatch):
+    sink = InMemoryKernelEventSink()
+    storage = StorageManager(tmp_path / "storage", event_sink=sink)
+    monkeypatch.setattr(
+        storage,
+        "_check_access",
+        lambda *args, **kwargs: {"success": "true", "reason": "malformed access result"},
+    )
+
+    result = storage.write("reports/x.md", "content", agent_name="agent_a")
+
+    assert result["success"] is False
+    assert result["error_code"] == "STORAGE_ACCESS_RESULT_INVALID"
+    assert result["success_type"] == "str"
+    assert not (tmp_path / "storage" / "reports" / "x.md").exists()
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "storage.audit"][-1]
+    assert audit["metadata"]["success"] is False
+    assert audit["metadata"]["error_code"] == "STORAGE_ACCESS_RESULT_INVALID"
+    assert audit["metadata"]["reason"] == "storage access decision result must include boolean success"
+
+
+def test_storage_address_request_rejects_malformed_provider_success(tmp_path, monkeypatch):
+    storage = StorageManager(tmp_path / "storage")
+    monkeypatch.setattr(storage, "write", lambda *args, **kwargs: {"success": "true", "path": "reports/x.md"})
+
+    result = storage.address_request(
+        KernelSyscall.create("agent_a", "storage", "sto_write", {"path": "reports/x.md", "content": "content"})
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "STORAGE_PROVIDER_RESULT_INVALID"
+    assert result["metadata"]["success_type"] == "str"
+
+
+def test_storage_retrieve_rejects_malformed_auto_index_success(tmp_path, monkeypatch):
+    root = tmp_path / "storage"
+    (root / "reports").mkdir(parents=True)
+    storage = StorageManager(root)
+    monkeypatch.setattr(storage, "_has_indexed_files", lambda collection_name="": False)
+    monkeypatch.setattr(storage, "index", lambda *args, **kwargs: {"success": "true", "indexed_count": 1})
+
+    result = storage.retrieve("kitchen", collection_name="reports", agent_name="agent_a")
+
+    assert result["success"] is False
+    assert result["error_code"] == "STORAGE_PROVIDER_RESULT_INVALID"
+    assert result["action"] == "index"
+    assert result["success_type"] == "str"
+
+
 def test_sto_rejects_absolute_path(tmp_path):
     storage = StorageManager(tmp_path / "storage")
 

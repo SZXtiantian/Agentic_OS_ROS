@@ -33,7 +33,7 @@ class LSFSAdapter:
 
     def write(self, path: str, content: Any, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
         result = self.storage.write(path, content)
-        if result.get("success"):
+        if result.get("success") is True:
             result["metadata"] = dict(metadata or {})
         return result
 

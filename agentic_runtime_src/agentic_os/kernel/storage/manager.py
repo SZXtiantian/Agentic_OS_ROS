@@ -143,13 +143,15 @@ class StorageManager:
         overwriting = path.exists()
         if overwriting:
             decision = self._check_access("overwrite", relative_path, agent_name=agent_name, irreversible=True)
-            if not decision.get("success", True):
-                return self._audit_dangerous_result("overwrite", relative_path, decision)
+            access_failure = self._access_failure("overwrite", relative_path, decision, irreversible=True)
+            if access_failure is not None:
+                return access_failure
             version = self._save_version(path, relative_path)
         else:
             decision = self._check_access("write", relative_path, agent_name=agent_name)
-            if not decision.get("success", True):
-                return self._audit_result("write", relative_path, decision)
+            access_failure = self._access_failure("write", relative_path, decision)
+            if access_failure is not None:
+                return access_failure
         path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, (dict, list)):
             payload = json.dumps(content, ensure_ascii=False, indent=2, sort_keys=True)
@@ -165,8 +167,9 @@ class StorageManager:
     def read(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("read", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("read", relative_path, decision)
+        access_failure = self._access_failure("read", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         if not path.exists() or not path.is_file():
             return self._audit_result(
                 "read",
@@ -182,8 +185,9 @@ class StorageManager:
     def list(self, relative_path: str = ".", agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=True)
         decision = self._check_access("list", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("list", relative_path, decision)
+        access_failure = self._access_failure("list", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         if not path.exists() or not path.is_dir():
             return self._audit_result(
                 "list",
@@ -202,8 +206,9 @@ class StorageManager:
     def delete(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("delete", relative_path, agent_name=agent_name, irreversible=True)
-        if not decision.get("success", True):
-            return self._audit_dangerous_result("delete", relative_path, decision)
+        access_failure = self._access_failure("delete", relative_path, decision, irreversible=True)
+        if access_failure is not None:
+            return access_failure
         if not path.exists() or not path.is_file():
             return self._audit_dangerous_result(
                 "delete",
@@ -218,8 +223,9 @@ class StorageManager:
     def mount(self, collection_name: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(collection_name or "default", allow_root=False)
         decision = self._check_access("mount", collection_name or "default", agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("mount", collection_name or "default", decision)
+        access_failure = self._access_failure("mount", collection_name or "default", decision)
+        if access_failure is not None:
+            return access_failure
         path.mkdir(parents=True, exist_ok=True)
         return self._audit_result(
             "mount",
@@ -230,8 +236,9 @@ class StorageManager:
     def create_file(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("create_file", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("create_file", relative_path, decision)
+        access_failure = self._access_failure("create_file", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch(exist_ok=False)
         self._index_file(relative_path, metadata={})
@@ -244,8 +251,9 @@ class StorageManager:
     def create_directory(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("mkdir", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("mkdir", relative_path, decision)
+        access_failure = self._access_failure("mkdir", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         path.mkdir(parents=True, exist_ok=True)
         return self._audit_result("mkdir", relative_path, {"success": True, "path": str(path)})
 
@@ -253,8 +261,9 @@ class StorageManager:
         root = self._safe_path(collection_name or ".", allow_root=True)
         resource = collection_name or "."
         decision = self._check_access("retrieve", resource, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("retrieve", resource, decision)
+        access_failure = self._access_failure("retrieve", resource, decision)
+        if access_failure is not None:
+            return access_failure
         if not root.exists() or not root.is_dir():
             return self._audit_result(
                 "retrieve",
@@ -269,7 +278,20 @@ class StorageManager:
             )
         if not self._has_indexed_files(collection_name):
             indexed = self.index(collection_name, agent_name=agent_name)
-            if not indexed.get("success", False):
+            indexed_success = self._success_state(indexed)
+            if indexed_success is None:
+                return self._audit_result(
+                    "retrieve",
+                    resource,
+                    self._invalid_success_result(
+                        "STORAGE_PROVIDER_RESULT_INVALID",
+                        "index",
+                        resource,
+                        indexed,
+                        source="storage index",
+                    ),
+                )
+            if indexed_success is False:
                 return indexed
         matches = self._search_index(query, collection_name, limit)
         return self._audit_result(
@@ -281,8 +303,9 @@ class StorageManager:
     def rollback(self, relative_path: str, version: str = "", agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("rollback", relative_path, agent_name=agent_name, irreversible=True)
-        if not decision.get("success", True):
-            return self._audit_dangerous_result("rollback", relative_path, decision)
+        access_failure = self._access_failure("rollback", relative_path, decision, irreversible=True)
+        if access_failure is not None:
+            return access_failure
         versions = sorted(self._version_dir(relative_path).glob("*.bak"))
         if not versions:
             return self._audit_dangerous_result(
@@ -310,8 +333,9 @@ class StorageManager:
     def stat(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("stat", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("stat", relative_path, decision)
+        access_failure = self._access_failure("stat", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         if not path.exists():
             return self._audit_result(
                 "stat",
@@ -340,8 +364,9 @@ class StorageManager:
     def history(self, relative_path: str, agent_name: str = "storage_manager") -> dict[str, Any]:
         self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("history", relative_path, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("history", relative_path, decision)
+        access_failure = self._access_failure("history", relative_path, decision)
+        if access_failure is not None:
+            return access_failure
         versions = []
         for version_path in sorted(self._version_dir(relative_path).glob("*.bak")):
             stat = version_path.stat()
@@ -364,8 +389,9 @@ class StorageManager:
         root = self._safe_path(collection_name or ".", allow_root=True)
         resource = collection_name or "."
         decision = self._check_access("index", resource, agent_name=agent_name)
-        if not decision.get("success", True):
-            return self._audit_result("index", resource, decision)
+        access_failure = self._access_failure("index", resource, decision)
+        if access_failure is not None:
+            return access_failure
         if not root.exists() or not root.is_dir():
             return self._audit_result(
                 "index",
@@ -398,8 +424,9 @@ class StorageManager:
     ) -> dict[str, Any]:
         path = self._safe_path(relative_path, allow_root=False)
         decision = self._check_access("share", relative_path, agent_name=agent_name, irreversible=True)
-        if not decision.get("success", True):
-            return self._audit_dangerous_result("share", relative_path, decision)
+        access_failure = self._access_failure("share", relative_path, decision, irreversible=True)
+        if access_failure is not None:
+            return access_failure
         if not path.exists():
             return self._audit_dangerous_result(
                 "share",
@@ -549,6 +576,64 @@ class StorageManager:
             "requires_intervention": decision.requires_intervention,
         }
 
+    @staticmethod
+    def _success_state(result: dict[str, Any]) -> bool | None:
+        if not isinstance(result, dict) or "success" not in result:
+            return None
+        success = result["success"]
+        if isinstance(success, bool):
+            return success
+        return None
+
+    def _invalid_success_result(
+        self,
+        error_code: str,
+        action: str,
+        relative_path: str,
+        result: Any,
+        *,
+        source: str,
+    ) -> dict[str, Any]:
+        success_type = "missing"
+        result_keys: list[str] = []
+        if isinstance(result, dict):
+            result_keys = sorted(str(key) for key in result.keys())
+            if "success" in result:
+                success_type = type(result["success"]).__name__
+        else:
+            success_type = type(result).__name__
+        return {
+            "success": False,
+            "error_code": error_code,
+            "reason": f"{source} result must include boolean success",
+            "action": action,
+            "relative_path": str(Path(relative_path)),
+            "success_type": success_type,
+            "result_keys": result_keys,
+        }
+
+    def _access_failure(
+        self,
+        action: str,
+        relative_path: str,
+        decision: dict[str, Any],
+        *,
+        irreversible: bool = False,
+    ) -> dict[str, Any] | None:
+        success = self._success_state(decision)
+        if success is True:
+            return None
+        result = decision
+        if success is None:
+            result = self._invalid_success_result(
+                "STORAGE_ACCESS_RESULT_INVALID",
+                action,
+                relative_path,
+                decision,
+                source="storage access decision",
+            )
+        return self._audit_result(action, relative_path, result, irreversible=irreversible)
+
     def _audit_result(
         self,
         action: str,
@@ -559,12 +644,14 @@ class StorageManager:
         **metadata: Any,
     ) -> dict[str, Any]:
         if self.event_sink is not None:
+            success = self._success_state(result) is True
             self.event_sink.emit(
                 "storage.audit",
                 action=action,
                 relative_path=str(Path(relative_path)),
-                success=bool(result.get("success", False)),
+                success=success,
                 error_code=str(result.get("error_code") or ""),
+                reason=str(result.get("reason") or ""),
                 irreversible=irreversible,
                 provider="local_fs",
                 **metadata,
@@ -789,6 +876,16 @@ class StorageManager:
         return any(part.startswith(".storage_") for part in relative.parts)
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        success = self._success_state(result)
+        if success is True:
             return KernelResponse.ok(result, data=result)
+        if success is None:
+            invalid = self._invalid_success_result(
+                "STORAGE_PROVIDER_RESULT_INVALID",
+                "kernel_response",
+                "",
+                result,
+                source="storage provider",
+            )
+            return KernelResponse.error("STORAGE_PROVIDER_RESULT_INVALID", metadata=invalid)
         return KernelResponse.error(str(result.get("error_code") or "STORAGE_PROVIDER_UNAVAILABLE"), metadata=result)
