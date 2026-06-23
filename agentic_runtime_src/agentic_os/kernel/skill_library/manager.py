@@ -44,6 +44,7 @@ class SkillManager:
                 response = {"success": False, "error_code": "SKILL_OPERATION_UNSUPPORTED", "operation": operation}
         except Exception as exc:
             response = {"success": False, "error_code": "SKILL_BACKEND_UNAVAILABLE", "reason": str(exc)}
+        response = self._normalize_response(response, operation, skill_name)
         self._record(operation, skill_name, response)
         self._audit_result(operation, skill_name, session_id, response)
         return self._kernel_response(response)
@@ -104,6 +105,27 @@ class SkillManager:
             }
         )
         self._events = self._events[-100:]
+
+    def _normalize_response(self, response: Any, operation: str, skill_name: str) -> dict[str, Any]:
+        if not isinstance(response, dict):
+            return {
+                "success": False,
+                "error_code": "SKILL_RESULT_INVALID",
+                "reason": "skill backend response must be an object",
+                "operation": operation,
+                "skill_name": skill_name,
+                "raw_type": type(response).__name__,
+            }
+        if "success" not in response:
+            return {
+                "success": False,
+                "error_code": "SKILL_RESULT_INVALID",
+                "reason": "skill backend response missing success field",
+                "operation": operation,
+                "skill_name": skill_name,
+                "data": dict(response),
+            }
+        return response
 
     def _audit_result(self, operation: str, skill_name: str, session_id: str, response: dict[str, Any]) -> None:
         if self.event_sink is not None:

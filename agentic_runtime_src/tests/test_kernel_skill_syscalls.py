@@ -87,6 +87,45 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     assert executor.cancelled_sessions == []
 
 
+def test_skill_manager_rejects_non_object_backend_response():
+    class BadBackend:
+        def call(self, *args, **kwargs):
+            return "ok"
+
+    manager = SkillManager(BadBackend())
+    response = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="skill_call",
+            params={"skill_name": "report.say", "args": {"message": "hi"}},
+        )
+    )
+
+    assert response.success is False
+    assert response.error_code == "SKILL_RESULT_INVALID"
+    assert response.metadata["raw_type"] == "str"
+
+
+def test_skill_manager_rejects_backend_response_without_success_and_audits():
+    from agentic_os.kernel.hooks import InMemoryKernelEventSink
+
+    class BadBackend:
+        def status(self):
+            return {"state": "ready"}
+
+    sink = InMemoryKernelEventSink()
+    manager = SkillManager(BadBackend(), event_sink=sink)
+    response = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="skill_status", params={})
+    )
+
+    assert response.success is False
+    assert response.error_code == "SKILL_RESULT_INVALID"
+    assert response.metadata["data"] == {"state": "ready"}
+    audit = [event for event in sink.recent(limit=5) if event["event_type"] == "skill.audit"][-1]
+    assert audit["metadata"]["error_code"] == "SKILL_RESULT_INVALID"
+
+
 def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):
     service = KernelService(config=make_config(tmp_path))
     service.start()

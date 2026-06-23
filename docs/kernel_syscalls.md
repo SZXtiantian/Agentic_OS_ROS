@@ -61,7 +61,7 @@ Configured external LLM provider calls require explicit `llm.external.call` perm
 
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.cancel(call_id)` cancels only the matching active runtime call in the current session; missing call IDs return `SYSCALL_NOT_FOUND`, while session-level cancel remains available for compatibility when no `call_id` is supplied.
 
-Runtime skill backend responses must explicitly include `success` or, for human replies, `answered`. Missing or non-object backend responses fail with `SKILL_RESULT_INVALID` and are audited instead of being treated as successful.
+Runtime skill backend responses must explicitly include `success` or, for human replies, `answered`. The kernel skill manager also rejects non-object responses or responses missing `success` with `SKILL_RESULT_INVALID`; these failures are audited instead of being treated as successful.
 
 Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.cancel` forwards the same `call_id`/`correlation_id` to the runtime cancellation manager; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 
