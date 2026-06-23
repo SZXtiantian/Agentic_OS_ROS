@@ -153,7 +153,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 455 passed, 3 skipped
+# 456 passed, 3 skipped
 scripts/run_tests.sh
-# 455 passed, 3 deselected; Agentic OS MVP checks passed.
+# 456 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

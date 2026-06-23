@@ -115,3 +115,12 @@ def test_agentic_entrypoint_supports_environment_and_natural_language_shell(runt
     assert 'if [ "${1:-}" = "chat" ]' in installer
     assert "python -m agentic_runtime.nl_gateway" in installer
     assert "var/tasks" in installer
+
+
+def test_demo_app_script_uses_real_runtime_mode(runtime_src):
+    script = (runtime_src / "scripts" / "run_demo_app.sh").read_text(encoding="utf-8")
+
+    assert "python -m agentic_runtime.cli run-app room_inspection_app" in script
+    assert "--real" in script
+    assert "--mock" not in script
+    assert "../agentic_runtime\"" not in script

@@ -79,12 +79,14 @@ python /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/check_forbidden_i
 cd /home/ubuntu/agentic_ws/src/agentic_runtime_src
 python -m pip install -e ".[dev]"
 pytest -q
-/opt/agentic/bin/agentic --mock --json "拍一张照片"
+/opt/agentic/bin/agentic --real --json "拍一张照片"
 AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
-  /opt/agentic/bin/agentic --mock --json --require-llm "拍一张工作区照片"
+  /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"
 ```
 
 Agentic ROS2 bridge packages live under `/home/ubuntu/agentic_ws/ros2_bridge_src/agentic_*`. They are adapters, not the Agentic Runtime itself. The robot ROS2 workspace `/home/ubuntu/ros2_ws/src` should not contain Agentic source packages.
+
+The production CLI no longer provides simulated success mode. If the real ROS2 bridge, human channel, or LLM provider is unavailable, commands return stable error codes such as `ROS_BRIDGE_UNAVAILABLE`, `HUMAN_BACKEND_UNAVAILABLE`, or `LLM_PROVIDER_UNCONFIGURED`.
 
 ## LLM Boundary
 
