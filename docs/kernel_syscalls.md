@@ -85,6 +85,7 @@ Tool management never receives implicit admin rights from the manager. `tool.loa
 
 Without an operator intervention backend, high-risk operations that pass the permission check return `ACCESS_INTERVENTION_REQUIRED`.
 Memory delete/export/import also require a kernel access manager; direct manager construction without one returns `ACCESS_MANAGER_UNAVAILABLE` and audits the rejected operation before touching the provider.
+Storage overwrite/delete/rollback/share also require a kernel access manager; direct manager construction without one returns `ACCESS_MANAGER_UNAVAILABLE` and audits the rejected operation before mutating files or share policy.
 
 ## Audit Events
 
@@ -142,7 +143,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 429 passed, 3 skipped
+# 430 passed, 3 skipped
 scripts/run_tests.sh
-# 429 passed, 3 deselected; Agentic OS MVP checks passed.
+# 430 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

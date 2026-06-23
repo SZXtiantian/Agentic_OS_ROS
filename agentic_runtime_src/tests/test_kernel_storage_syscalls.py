@@ -210,6 +210,27 @@ def test_dangerous_storage_operations_emit_audit_events(tmp_path):
     assert all(event["metadata"]["success"] is True for event in dangerous_events)
 
 
+def test_dangerous_storage_operations_require_access_manager(tmp_path):
+    sink = InMemoryKernelEventSink()
+    storage = StorageManager(tmp_path / "storage", event_sink=sink)
+    storage.write("reports/x.md", "old")
+
+    overwrite = storage.write("reports/x.md", "new")
+    rollback = storage.rollback("reports/x.md")
+    share = storage.share("reports/x.md", {"scope": "operator"})
+    delete = storage.delete("reports/x.md")
+
+    assert overwrite["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert rollback["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert share["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert delete["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert storage.read("reports/x.md")["content"] == "old"
+    events = [event for event in sink.recent(limit=20) if event["event_type"] == "storage.audit"]
+    dangerous_events = [event for event in events if event["metadata"]["irreversible"] is True]
+    assert [event["metadata"]["action"] for event in dangerous_events] == ["overwrite", "rollback", "share", "delete"]
+    assert all(event["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE" for event in dangerous_events)
+
+
 def test_denied_dangerous_storage_operation_emits_audit_event(tmp_path):
     sink = InMemoryKernelEventSink()
     storage = StorageManager(tmp_path / "storage", access_manager=AccessManager(), event_sink=sink)
@@ -236,7 +257,8 @@ def test_lsfs_adapter_status_implemented_true_when_enabled(tmp_path):
 
 
 def test_lsfs_adapter_mount_write_retrieve_and_version(tmp_path):
-    adapter = LSFSAdapter(tmp_path / "lsfs")
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    adapter = LSFSAdapter(tmp_path / "lsfs", access_manager=access)
 
     mounted = adapter.mount("workspace")
     first = adapter.write("workspace/reports/x.md", "old kitchen semantic note")

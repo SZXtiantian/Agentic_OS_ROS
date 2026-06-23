@@ -13,13 +13,14 @@ class LSFSAdapter:
         root: str | Path | None = None,
         use_vector_db: bool = False,
         embedding_provider: Any | None = None,
+        access_manager: Any | None = None,
         enabled: bool = True,
     ) -> None:
         self.enabled = enabled
         self.use_vector_db = use_vector_db
         self.embedding_provider = embedding_provider
         self.root = Path(root) if root is not None else Path(tempfile.gettempdir()) / "agentic_lsfs"
-        self.storage = StorageManager(self.root)
+        self.storage = StorageManager(self.root, access_manager=access_manager)
 
     def mount(self, collection_name: str) -> dict[str, Any]:
         return self.storage.mount(collection_name)

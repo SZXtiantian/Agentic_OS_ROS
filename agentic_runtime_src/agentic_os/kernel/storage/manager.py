@@ -523,6 +523,13 @@ class StorageManager:
         irreversible: bool = False,
     ) -> dict[str, Any]:
         if self.access_manager is None:
+            if irreversible:
+                return {
+                    "success": False,
+                    "error_code": "ACCESS_MANAGER_UNAVAILABLE",
+                    "reason": f"storage {action} requires a kernel access manager",
+                    "requires_intervention": False,
+                }
             return {"success": True}
         subject_agent = agent_name or "storage_manager"
         decision = self.access_manager.check(
