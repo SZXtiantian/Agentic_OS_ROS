@@ -117,7 +117,7 @@ def test_llm_client_rejects_markdown_fenced_json(monkeypatch):
     assert exc.value.code == "LLM_OUTPUT_MARKDOWN"
 
 
-def test_llm_client_returns_structured_request_error(monkeypatch):
+def test_llm_client_returns_structured_provider_error_for_network_failure(monkeypatch):
     client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key", base_url="https://example.test/v1", model="gpt-4o-mini"))
 
     def fake_urlopen(request, timeout):
@@ -128,4 +128,19 @@ def test_llm_client_returns_structured_request_error(monkeypatch):
     with pytest.raises(LLMError) as exc:
         client.chat_json(system_prompt="system", user_prompt="user")
 
-    assert exc.value.code == "LLM_REQUEST_FAILED"
+    assert exc.value.code == "LLM_PROVIDER_ERROR"
+
+
+def test_llm_client_returns_structured_provider_error_for_http_failure(monkeypatch):
+    client = OpenAICompatibleChatClient(config=LLMConfig(api_key="test-key", base_url="https://example.test/v1", model="gpt-4o-mini"))
+
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 503, "unavailable", {}, None)
+
+    monkeypatch.setattr("agentic_runtime.llm.client.urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(LLMError) as exc:
+        client.chat_json(system_prompt="system", user_prompt="user")
+
+    assert exc.value.code == "LLM_PROVIDER_ERROR"
+    assert "503" in exc.value.reason
