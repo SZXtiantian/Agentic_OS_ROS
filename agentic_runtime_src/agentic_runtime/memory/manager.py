@@ -19,7 +19,11 @@ class RuntimeMemoryProviderAdapter:
 
     def add_memory(self, note: MemoryNote) -> dict[str, Any]:
         session_id = str(note.metadata.get("session_id") or "")
-        self.provider.remember(note.owner_agent, session_id, note.id, note.content)
+        result = self.provider.remember(note.owner_agent, session_id, note.id, note.content)
+        if isinstance(result, dict):
+            if not result.get("success", False):
+                return {"memory_id": note.id, **result}
+            return {"success": True, "memory_id": note.id, **result}
         return {"success": True, "memory_id": note.id}
 
     def remove_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
@@ -30,7 +34,11 @@ class RuntimeMemoryProviderAdapter:
         session_id = str(note.metadata.get("session_id") or "")
         if self.provider.recall(note.owner_agent, note.id) is None:
             return {"success": False, "memory_id": note.id, "error_code": "MEMORY_NOT_FOUND"}
-        self.provider.remember(note.owner_agent, session_id, note.id, note.content)
+        result = self.provider.remember(note.owner_agent, session_id, note.id, note.content)
+        if isinstance(result, dict):
+            if not result.get("success", False):
+                return {"memory_id": note.id, **result}
+            return {"success": True, "memory_id": note.id, **result}
         return {"success": True, "memory_id": note.id}
 
     def get_memory(self, memory_id: str, agent_name: str = "") -> dict[str, Any]:
