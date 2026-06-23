@@ -31,7 +31,7 @@ Agent Apps call kernel capabilities through `ctx.kernel.*`. Public syscalls retu
 
 No default mock LLM, memory, context, storage, tool, skill, or human provider is selected. Missing external services fail with stable error codes and appear in `KernelService.status()`.
 
-Production `RuntimeServer.create()` wires one shared kernel `AccessManager` and event sink into `KernelService`, the skill executor, runtime memory, runtime storage, runtime context, and runtime tool wrappers. Runtime session context snapshots therefore go through `ctx_snapshot` access/audit instead of a separate unaudited manager instance. Runtime tool execution through the access-managed wrapper requires explicit `tool.execute` or tool-specific execute permission.
+Production `RuntimeServer.create()` wires one shared kernel `AccessManager` and event sink into `KernelService`, the skill executor, runtime memory, runtime storage, runtime context, and runtime tool wrappers. Runtime session context snapshots and recovery therefore go through `ctx_snapshot`/`ctx_recover` access/audit instead of a separate unaudited manager instance. Runtime tool execution through the access-managed wrapper requires explicit `tool.execute` or tool-specific execute permission.
 
 Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, and compact policy. Memory status exposes the real SQLite `path`/`db_path`, `fts_available`, `index`, and `last_error`. Memory import/export file failures return stable errors such as `MEMORY_IMPORT_INVALID_JSON`, `MEMORY_IMPORT_NOT_FOUND`, or `MEMORY_EXPORT_FAILED` and are emitted as `memory.audit` events.
 

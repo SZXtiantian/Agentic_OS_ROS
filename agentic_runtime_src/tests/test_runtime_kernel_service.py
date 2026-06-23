@@ -326,11 +326,20 @@ def test_runtime_server_shares_kernel_access_manager_with_runtime_wrappers(tmp_p
     assert server.executor.dispatcher.memory_store.kernel.event_sink is event_sink
 
     snapshot = server.context_manager.snapshot("sess_shared", "inspection_agent", task={"place": "lab"})
+    recovered = server.context_manager.recover("sess_shared")
 
     assert snapshot.task == {"place": "lab"}
+    assert recovered is not None
+    assert recovered.task == {"place": "lab"}
     assert any(
         event["event_type"] == "context.audit"
         and event["metadata"]["operation_type"] == "ctx_snapshot"
+        and event["metadata"]["session_id"] == "sess_shared"
+        for event in event_sink.recent(limit=20)
+    )
+    assert any(
+        event["event_type"] == "context.audit"
+        and event["metadata"]["operation_type"] == "ctx_recover"
         and event["metadata"]["session_id"] == "sess_shared"
         for event in event_sink.recent(limit=20)
     )

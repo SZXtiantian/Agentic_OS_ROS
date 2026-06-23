@@ -50,6 +50,8 @@ class ContextManager:
         return ContextSnapshot(session_id=session_id, app_id=app_id, **kwargs)
 
     def recover(self, session_id: str) -> ContextSnapshot | None:
+        if self.access_manager is not None:
+            return self._recover_via_syscall(session_id)
         try:
             kernel_snapshot = self.kernel.recover(session_id)
         except (KeyError, TypeError, ValueError):
@@ -71,3 +73,32 @@ class ContextManager:
             return None
         data = json.loads(path.read_text(encoding="utf-8"))
         return ContextSnapshot(**data)
+
+    def _recover_via_syscall(self, session_id: str) -> ContextSnapshot | None:
+        owner = self.kernel._latest_owner_for_session(session_id)
+        if not owner:
+            return self._recover_legacy(session_id)
+        response = self.kernel.address_request(
+            KernelSyscall.create(
+                owner,
+                "context",
+                "ctx_recover",
+                {
+                    "session_id": session_id,
+                    "checkpoint": "runtime_session",
+                },
+            )
+        )
+        if response.success:
+            payload = response.data if isinstance(response.data, dict) else dict(response.response_message or {})
+            return ContextSnapshot(
+                session_id=str(payload.get("session_id") or session_id),
+                app_id=str(payload.get("owner_agent") or owner),
+                **dict(payload.get("state") or {}),
+            )
+        if response.error_code == "CONTEXT_NOT_FOUND":
+            return self._recover_legacy(session_id)
+        raise AgenticRuntimeError(
+            response.error_code or "CONTEXT_RECOVER_FAILED",
+            str(response.metadata.get("reason") or "runtime context recover failed"),
+        )
