@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.app_result import normalize_app_invocation_result
 from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
 
 
@@ -29,8 +30,14 @@ class AppInvoker:
         task.setdefault("route_plan_id", route_plan_id)
         try:
             if entry.runtime_type == "aios_agent_package":
-                return await self._run_aios_app(entry, task)
-            return await self._run_legacy_app(entry, task)
+                return normalize_app_invocation_result(
+                    await self._run_aios_app(entry, task),
+                    source=f"{app_id}:{entry.aios_entrypoint or 'entry:RobotPhotographerAgent'}",
+                )
+            return normalize_app_invocation_result(
+                await self._run_legacy_app(entry, task),
+                source=f"{app_id}:{entry.entrypoint or 'legacy'}",
+            )
         except Exception as exc:
             return {
                 "success": False,
@@ -49,9 +56,7 @@ class AppInvoker:
         if hasattr(agent, "arun"):
             return await agent.arun(task_input)
         result = agent.run(task_input)
-        if isinstance(result, dict):
-            return result
-        return {"success": False, "error_code": "APP_RESULT_INVALID", "reason": "app returned non-dict result"}
+        return normalize_app_invocation_result(result, source=f"{entry.app_id}:{entry.aios_entrypoint or 'entry'}")
 
     async def _run_legacy_app(self, entry: AppIndexEntry, task_input: dict[str, Any]) -> dict[str, Any]:
         task = dict(task_input)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agentic_runtime.app_result import APP_RESULT_INVALID, validate_app_result_payload
 from agentic_runtime.app_factory import AppFactory
 from agentic_runtime.context_manager import ContextManager
 from agentic_runtime.simulation import simulated_backend_disabled
@@ -37,7 +38,10 @@ class SessionRunner:
         self.session_manager.start_session(session.session_id)
         try:
             app_result = await self.app_factory.run_app(app_id, session_id=session.session_id, **task)
-            result = dict(app_result.get("result") or {})
+            if not isinstance(app_result, dict):
+                result, _ = validate_app_result_payload(app_result, source=f"{app_id}:app_factory")
+            else:
+                result, _ = validate_app_result_payload(app_result.get("result"), source=f"{app_id}:result")
             if result.get("success"):
                 self.storage_manager.write_artifact(
                     session.session_id,
@@ -47,7 +51,7 @@ class SessionRunner:
                 )
                 record = self.session_manager.complete_session(session.session_id, result)
             else:
-                record = self.session_manager.fail_session(session.session_id, str(result.get("error_code") or "APP_FAILED"), result)
+                record = self.session_manager.fail_session(session.session_id, str(result.get("error_code") or APP_RESULT_INVALID), result)
             self.context_manager.snapshot(
                 session.session_id,
                 app_id,

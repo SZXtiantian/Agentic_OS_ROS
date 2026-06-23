@@ -1,6 +1,9 @@
 import asyncio
 
-from agentic_runtime.server import RuntimeServer
+from agentic_runtime.context_manager import ContextManager
+from agentic_runtime.scheduler import SessionRunner
+from agentic_runtime.session import SessionManager, SessionStore
+from agentic_runtime.storage import StorageManager
 from runtime_test_helpers import create_test_runtime_server
 
 
@@ -28,6 +31,34 @@ def test_inspection_agent_runs_through_kernel_session_path():
         assert context is not None
         assert context.app_id == "inspection_agent"
         assert context.error_code == "ROS_BRIDGE_UNAVAILABLE"
+
+    asyncio.run(run())
+
+
+def test_session_runner_fails_invalid_app_result_contract(tmp_path):
+    class InvalidAppFactory:
+        async def run_app(self, app_id, **kwargs):
+            return {"session_id": kwargs["session_id"], "app_id": app_id, "result": {"message": "missing"}}
+
+    session_manager = SessionManager(SessionStore(tmp_path / "sessions"))
+    runner = SessionRunner(
+        InvalidAppFactory(),
+        session_manager,
+        StorageManager(tmp_path / "storage"),
+        ContextManager(tmp_path / "context"),
+    )
+
+    async def run():
+        result = await runner.run_app("invalid_agent", place="lab")
+        assert result["status"] == "failed"
+        assert result["result"]["success"] is False
+        assert result["result"]["error_code"] == "APP_RESULT_INVALID"
+        assert result["result"]["metadata"]["keys"] == ["message"]
+
+        session = session_manager.get_session(result["session_id"])
+        assert session is not None
+        assert session.status == "failed"
+        assert session.error_code == "APP_RESULT_INVALID"
 
     asyncio.run(run())
 

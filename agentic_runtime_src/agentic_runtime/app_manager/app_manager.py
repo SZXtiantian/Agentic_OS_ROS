@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from agentic_runtime.app_result import validate_app_result_payload
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest, new_id
 
@@ -34,5 +35,8 @@ class AppManager:
         run = getattr(module, function_name)
         session_id = kwargs.pop("session_id", new_id("sess"))
         ctx = AgentContext(executor=self.executor, app_manifest=manifest, session_id=session_id)
-        result = await run(ctx, **kwargs)
+        result, _ = validate_app_result_payload(
+            await run(ctx, **kwargs),
+            source=f"{app_id}:{manifest.entrypoint}",
+        )
         return {"session_id": session_id, "app_id": app_id, "result": result}

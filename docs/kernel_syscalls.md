@@ -66,6 +66,8 @@ Runtime skill backend responses must explicitly include `success` or, for human 
 
 Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.cancel` forwards the same `call_id`/`correlation_id` to the runtime cancellation manager; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 
+Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful.
+
 ## Permissions And Intervention
 
 High-risk operations go through access/intervention/audit:
@@ -137,7 +139,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 399 passed, 3 skipped
+# 423 passed, 3 skipped
 scripts/run_tests.sh
-# 399 passed, 3 deselected; Agentic OS MVP checks passed.
+# 423 passed, 3 deselected; Agentic OS MVP checks passed.
 ```
