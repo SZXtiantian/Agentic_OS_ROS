@@ -10,7 +10,6 @@ import yaml
 
 from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest
@@ -49,13 +48,13 @@ def test_entry_loads_and_motion_rejected_without_permission(monkeypatch):
     assert result["error_code"] == "ARM_MOTION_DISABLED"
 
 
-def test_entry_rejects_mock_request_even_with_runtime():
+def test_entry_rejects_simulated_task_field_even_with_runtime():
     module = _load_entry()
     server = create_test_runtime_server()
-    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
+    agent = module.RobotPhotographerAgent(runtime=server)
     result = agent.run({"text": "拍一张照片", "mock": True})
     assert result["success"] is False
-    assert result["error_code"] == SIMULATED_BACKEND_DISABLED
+    assert result["error_code"] == "TASK_INPUT_FIELD_UNSUPPORTED"
     assert server.test_bridge_calls == []
 
 

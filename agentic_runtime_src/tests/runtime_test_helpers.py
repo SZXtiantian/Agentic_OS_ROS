@@ -15,6 +15,6 @@ def create_test_runtime_server() -> RuntimeServer:
         bridge_calls.append({"command": command, "timeout_s": timeout_s})
         raise FileNotFoundError("ros2")
 
-    server = RuntimeServer.create(mock=False, bridge_client=Ros2CliBridgeClient(runner=missing_ros2))
+    server = RuntimeServer.create(bridge_client=Ros2CliBridgeClient(runner=missing_ros2))
     server.test_bridge_calls = bridge_calls
     return server

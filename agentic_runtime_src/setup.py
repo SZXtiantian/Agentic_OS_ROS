@@ -4,7 +4,7 @@ from setuptools import find_packages, setup
 setup(
     name="agentic-runtime",
     version="0.1.0",
-    description="Agentic OS runtime MVP running above ROS2.",
+    description="Agentic OS real-only foundation runtime running above ROS2.",
     packages=find_packages("."),
     install_requires=[
         "pyyaml>=6",

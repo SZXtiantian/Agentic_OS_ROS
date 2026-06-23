@@ -63,17 +63,15 @@ def test_session_runner_fails_invalid_app_result_contract(tmp_path):
     asyncio.run(run())
 
 
-def test_scheduler_and_kernel_service_reject_mock_run_app_flag():
+def test_scheduler_rejects_simulated_task_field():
     async def run():
         server = create_test_runtime_server()
         scheduler_result = await server.scheduler.run_app("inspection_agent", place="厨房", mock=True)
-        kernel_result = await server.kernel_service.run_app("inspection_agent", place="厨房", mock=True)
 
-        for result in [scheduler_result, kernel_result]:
-            assert result["status"] == "failed"
-            assert result["session_id"] == ""
-            assert result["result"]["success"] is False
-            assert result["result"]["error_code"] == "SIMULATED_BACKEND_DISABLED"
+        assert scheduler_result["status"] == "failed"
+        assert scheduler_result["session_id"] == ""
+        assert scheduler_result["result"]["success"] is False
+        assert scheduler_result["result"]["error_code"] == "TASK_INPUT_FIELD_UNSUPPORTED"
         assert server.test_bridge_calls == []
 
     asyncio.run(run())

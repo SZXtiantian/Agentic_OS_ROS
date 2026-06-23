@@ -11,7 +11,6 @@ from agentic_runtime.photo_cli import build_parser as build_photo_parser
 from agentic_runtime.ros_bridge_client.cli_client import Ros2CliBridgeClient
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from agentic_runtime.session.models import SessionRecord
 
 
@@ -36,16 +35,27 @@ def test_bridge_factory_defaults_to_cli_client():
     assert isinstance(client, Ros2CliBridgeClient)
 
 
-def test_bridge_factory_rejects_simulated_mode():
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+def test_bridge_factory_has_no_simulated_mode_parameter():
+    with pytest.raises(TypeError):
         create_ros_bridge_client(RuntimeConfig.load(), mock=True)
 
 
-def test_runtime_server_create_rejects_simulated_mode_even_with_explicit_bridge():
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+def test_runtime_server_create_has_no_simulated_mode_parameter():
+    with pytest.raises(TypeError):
         RuntimeServer.create(mock=True)
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+    with pytest.raises(TypeError):
         RuntimeServer.create(mock=True, bridge_client=object())
+
+
+def test_runtime_config_rejects_simulated_values(tmp_path):
+    path = tmp_path / "runtime.yaml"
+    path.write_text("runtime:\n  ros_bridge_mode: mock\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
+        RuntimeConfig.load(path)
+
+    path.write_text("runtime:\n  ros_bridge_mode: cli\nkernel:\n  llm:\n    configs:\n      - name: x\n        backend: mock\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
+        RuntimeConfig.load(path)
 
 
 def test_session_and_kernel_request_defaults_are_real():
@@ -73,8 +83,8 @@ def test_execution_monitor_defaults_to_real_bridge_label():
 def test_runtime_cli_defaults_do_not_request_mock():
     parser = build_runtime_parser()
 
-    assert parser.parse_args(["status"]).mock is False
-    assert parser.parse_args(["run-app", "inspection_agent"]).mock is False
+    assert not hasattr(parser.parse_args(["status"]), "mock")
+    assert not hasattr(parser.parse_args(["run-app", "inspection_agent"]), "mock")
 
 
 def test_natural_language_gateway_defaults_to_real_mode():
@@ -82,14 +92,10 @@ def test_natural_language_gateway_defaults_to_real_mode():
     flags = _flags_from_args(args)
 
     assert GatewayFlags().real is True
-    assert GatewayFlags().mock is False
     assert flags.real is True
-    assert flags.mock is False
 
 
 def test_photo_cli_defaults_to_real_mode():
     args = build_photo_parser().parse_args(["拍一张照片"])
 
-    real = bool(not args.mock)
-
-    assert real is True
+    assert not hasattr(args, "mock")

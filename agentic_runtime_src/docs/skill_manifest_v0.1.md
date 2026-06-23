@@ -41,7 +41,7 @@ retry_policy:
   retry_on: string[]
 
 backend:
-  type: ros2_action | ros2_service | ros2_topic | runtime_internal | mock
+  type: ros2_action | ros2_service | ros2_topic | runtime_internal
   bridge: string
   ros2_action_name: string
   ros2_action_type: string
@@ -52,7 +52,7 @@ observability:
   record_result: bool
 ```
 
-## MVP Skills
+## Foundation Skills
 
 - `robot.get_state`
 - `world.resolve_place`

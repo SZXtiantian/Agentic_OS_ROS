@@ -6,7 +6,7 @@ from typing import Any
 from agentic_os.kernel.scheduler import FIFORequestScheduler
 from agentic_os.kernel.system_call import KernelSyscall, SyscallExecutor
 
-from agentic_runtime.simulation import simulated_backend_disabled
+from agentic_runtime.real_only import unsupported_task_field
 
 from .session_runner import SessionRunner
 
@@ -21,13 +21,9 @@ class SingleRobotScheduler:
         self.last_kernel_syscall_id = ""
 
     async def run_app(self, app_id: str, **kwargs: Any) -> dict[str, Any]:
-        if bool(kwargs.get("mock", False)):
-            return {
-                "session_id": "",
-                "app_id": app_id,
-                "status": "failed",
-                "result": simulated_backend_disabled("SingleRobotScheduler.run_app(mock=True)"),
-            }
+        unsupported = unsupported_task_field(dict(kwargs))
+        if unsupported is not None:
+            return {"session_id": "", "app_id": app_id, "status": "failed", "result": unsupported}
         syscall = KernelSyscall.create(app_id, "session", "run_app", dict(kwargs))
         self.last_kernel_syscall_id = self.kernel_scheduler.submit(syscall)
         async with self._lock:

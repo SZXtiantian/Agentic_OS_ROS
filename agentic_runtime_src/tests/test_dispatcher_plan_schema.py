@@ -10,7 +10,7 @@ def test_dispatcher_rule_plan_matches_schema(app_root):
     plan = planner.plan(
         "拍一张照片",
         AppIndex.load(app_root),
-        GatewayFlags(mock=True),
+        GatewayFlags(),
         task_id="task_test",
         route_plan_id="plan_route_test",
     )

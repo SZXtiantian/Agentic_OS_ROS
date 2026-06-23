@@ -31,7 +31,7 @@ runtime_limits:
 - `permissions` are checked against each Skill Manifest before execution.
 - `required_capabilities` names must exist in the Skill Registry.
 - `safety_policy.forbidden_zones` is merged with global safety configuration.
-- `llm_planning_enabled` is `false` for the MVP room inspection app.
+- `llm_planning_enabled` is `false` for the foundation room inspection app.
 - Direct ROS2 access is never granted by an App Manifest.
 
 ## Example

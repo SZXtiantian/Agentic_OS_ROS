@@ -9,7 +9,7 @@ Every dangerous robot action must pass through Agentic Runtime permission checks
 - Safety guard: forbidden zone, localization, estop, and duration constraints are checked before motion.
 - Audit log: every skill call writes JSONL with status and structured error code.
 
-## MVP Forbidden Zones
+## Foundation Forbidden Zones
 
 The global safety config includes:
 

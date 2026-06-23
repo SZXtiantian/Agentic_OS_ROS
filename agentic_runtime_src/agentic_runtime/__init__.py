@@ -1,3 +1,3 @@
-"""Agentic Runtime MVP."""
+"""Agentic Runtime real-only foundation."""
 
 __version__ = "0.1.0"

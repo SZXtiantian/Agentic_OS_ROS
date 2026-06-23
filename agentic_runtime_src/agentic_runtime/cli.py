@@ -6,7 +6,6 @@ import json
 
 from agentic_runtime.hardware_adapter import Ros2BridgeProfile
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import simulated_backend_disabled
 from agentic_runtime.task_log import TaskLogManager
 
 
@@ -15,16 +14,14 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     status = sub.add_parser("status")
-    status.add_argument("--mock", action="store_true", default=False)
-    status.add_argument("--real", action="store_false", dest="mock")
+    status.add_argument("--real", action="store_true", default=False)
     status.add_argument("--json", action="store_true")
 
     for name in ("run", "run-app"):
         run_app = sub.add_parser(name)
         run_app.add_argument("app_id")
         run_app.add_argument("--place", default="厨房")
-        run_app.add_argument("--mock", action="store_true", default=False)
-        run_app.add_argument("--real", action="store_false", dest="mock")
+        run_app.add_argument("--real", action="store_true", default=False)
         run_app.add_argument("--json", action="store_true")
 
     sessions = sub.add_parser("sessions")
@@ -266,9 +263,6 @@ def bridge(args) -> int:
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if bool(getattr(args, "mock", False)):
-        print_json(simulated_backend_disabled(f"agentic-runtime {args.command} --mock"))
-        return 1
     if args.command in {"run", "run-app"}:
         return asyncio.run(run_app(args))
     if args.command == "status":

@@ -13,7 +13,6 @@ from typing import Any
 
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import simulated_backend_disabled
 
 
 _RUNTIME_SRC = find_repo_root()
@@ -33,7 +32,6 @@ BRIDGE_PROCESS_PATTERN = "ros2 launch agentic_capability_bridge robot_test.launc
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agentic photo")
     parser.add_argument("--real", action="store_true", default=False)
-    parser.add_argument("--mock", action="store_true", default=False)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--allow-arm-motion", action="store_true")
     parser.add_argument("--yes", action="store_true")
@@ -43,16 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    if args.mock:
-        data = simulated_backend_disabled("agentic photo --mock")
-        if args.json:
-            print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
-        else:
-            print(data["message"])
-            print(f"error_code: {data['error_code']}")
-        return 1
-    real = bool(not args.mock)
-    cli = RobotPhotoCLI(real=real, json_output=args.json, allow_arm_motion=args.allow_arm_motion, assume_yes=args.yes)
+    cli = RobotPhotoCLI(json_output=args.json, allow_arm_motion=args.allow_arm_motion, assume_yes=args.yes)
     text = " ".join(args.command).strip()
     if text:
         return asyncio.run(cli.run_text(text))
@@ -60,8 +49,7 @@ def main(argv=None) -> int:
 
 
 class RobotPhotoCLI:
-    def __init__(self, *, real: bool, json_output: bool, allow_arm_motion: bool, assume_yes: bool) -> None:
-        self.real = real
+    def __init__(self, *, json_output: bool, allow_arm_motion: bool, assume_yes: bool) -> None:
         self.json_output = json_output
         self.allow_arm_motion = allow_arm_motion or os.environ.get("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION") == "1"
         self.assume_yes = assume_yes
@@ -96,11 +84,7 @@ class RobotPhotoCLI:
     async def run_text(self, text: str) -> int:
         if not text:
             return 0
-        if not self.real:
-            result = simulated_backend_disabled("agentic photo runtime mock mode")
-            self._print_result(result)
-            return 1
-        if self.real and not self._ensure_real_bridge_ready():
+        if not self._ensure_real_bridge_ready():
             result = {"success": False, "error_code": "ROS_BRIDGE_UNAVAILABLE", "reason": "AgenticOS real bridge services are unavailable"}
             self._print_result(result)
             return 1

@@ -6,7 +6,7 @@ from agentic_runtime.photo_cli import RobotPhotoCLI
 
 
 def test_photo_cli_waits_for_existing_bridge_process(monkeypatch):
-    cli = RobotPhotoCLI(real=True, json_output=True, allow_arm_motion=False, assume_yes=False)
+    cli = RobotPhotoCLI(json_output=True, allow_arm_motion=False, assume_yes=False)
     service_checks = iter([False, True])
 
     monkeypatch.setattr(cli, "_bridge_services_ready", lambda timeout_s: next(service_checks))
@@ -22,7 +22,7 @@ def test_photo_cli_waits_for_existing_bridge_process(monkeypatch):
 
 
 def test_photo_cli_parses_typed_ros_service_list_lines():
-    cli = RobotPhotoCLI(real=True, json_output=True, allow_arm_motion=False, assume_yes=False)
+    cli = RobotPhotoCLI(json_output=True, allow_arm_motion=False, assume_yes=False)
 
     assert (
         cli._service_name_from_line("/agentic/perception/capture_photo [agentic_msgs/srv/CapturePhoto]")
@@ -32,7 +32,7 @@ def test_photo_cli_parses_typed_ros_service_list_lines():
 
 
 def test_photo_cli_reports_ros_bridge_unavailable(monkeypatch, capsys):
-    cli = RobotPhotoCLI(real=True, json_output=True, allow_arm_motion=False, assume_yes=False)
+    cli = RobotPhotoCLI(json_output=True, allow_arm_motion=False, assume_yes=False)
     monkeypatch.setattr(cli, "_ensure_real_bridge_ready", lambda: False)
 
     rc = asyncio.run(cli.run_text("拍一张照片"))
@@ -45,7 +45,7 @@ def test_photo_cli_reports_ros_bridge_unavailable(monkeypatch, capsys):
 
 def test_photo_cli_task_input_does_not_include_mock_default(monkeypatch, capsys):
     captured: dict[str, object] = {}
-    cli = RobotPhotoCLI(real=True, json_output=True, allow_arm_motion=False, assume_yes=False)
+    cli = RobotPhotoCLI(json_output=True, allow_arm_motion=False, assume_yes=False)
 
     class Agent:
         async def arun(self, task_input):

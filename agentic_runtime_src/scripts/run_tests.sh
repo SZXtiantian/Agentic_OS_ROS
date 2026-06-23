@@ -17,4 +17,7 @@ test -d agentic_runtime
 
 pytest -m "$PYTEST_MARK_EXPR" -q
 
-echo "Agentic OS MVP checks passed."
+scripts/verify_no_mvp_language.sh
+scripts/verify_capability_truth.sh
+
+echo "Agentic OS foundation-complete checks passed."

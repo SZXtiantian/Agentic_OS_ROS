@@ -53,7 +53,7 @@ It is not a normal ROS2 package, not a simple LLM wrapper, and not a fork of ROS
 - LLM / Agent code must not perform realtime closed-loop control.
 - All robot motion must pass through Agentic Runtime permission checks, resource locks, safety guards, and audit logs.
 
-## MVP APIs
+## Foundation API Surface
 
 Agent Apps call only high-level APIs:
 
@@ -87,6 +87,15 @@ AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
 Agentic ROS2 bridge packages live under `/home/ubuntu/agentic_ws/ros2_bridge_src/agentic_*`. They are adapters, not the Agentic Runtime itself. The robot ROS2 workspace `/home/ubuntu/ros2_ws/src` should not contain Agentic source packages.
 
 The production CLI no longer provides simulated success mode. If the real ROS2 bridge, human channel, or LLM provider is unavailable, commands return stable error codes such as `ROS_BRIDGE_UNAVAILABLE`, `HUMAN_BACKEND_UNAVAILABLE`, or `LLM_PROVIDER_UNCONFIGURED`.
+
+## Real-Only Foundation Docs
+
+- `docs/runtime_real_only.md`
+- `docs/provider_contracts.md`
+- `docs/kernel_syscalls.md`
+- `docs/access_audit.md`
+- `docs/real_integration.md`
+- `docs/errors.md`
 
 ## LLM Boundary
 

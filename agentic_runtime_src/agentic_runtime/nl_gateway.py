@@ -15,7 +15,6 @@ from typing import Any
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.dispatcher import DispatcherAgent
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import simulated_backend_disabled
 
 
 BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_bridge.sh"))
@@ -33,7 +32,6 @@ EXIT_WORDS = {"退出", "exit", "quit", "q", "bye"}
 @dataclass(frozen=True)
 class GatewayFlags:
     real: bool = True
-    mock: bool = False
     json: bool = False
     allow_arm_motion: bool = False
     assume_yes: bool = False
@@ -48,7 +46,6 @@ class GatewayFlags:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agentic")
     parser.add_argument("--real", action="store_true", default=False)
-    parser.add_argument("--mock", action="store_true", default=False)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--allow-arm-motion", action="store_true")
     parser.add_argument("--yes", action="store_true")
@@ -80,8 +77,6 @@ async def run_once(user_text: str, flags: GatewayFlags) -> int:
 
 
 async def dispatch_text(user_text: str, flags: GatewayFlags) -> dict[str, Any]:
-    if flags.mock:
-        return simulated_backend_disabled("agentic natural language gateway --mock")
     if flags.real and _likely_needs_real_bridge(user_text, flags) and not _ensure_real_bridge_ready(flags):
         return {
             "success": False,
@@ -143,11 +138,8 @@ def print_result(result: dict[str, Any], *, as_json: bool) -> None:
 
 
 def _flags_from_args(args: argparse.Namespace) -> GatewayFlags:
-    real = bool(not args.mock)
-    mock = not real
     return GatewayFlags(
-        real=real,
-        mock=mock,
+        real=True,
         json=bool(args.json),
         allow_arm_motion=bool(args.allow_arm_motion),
         assume_yes=bool(args.yes),

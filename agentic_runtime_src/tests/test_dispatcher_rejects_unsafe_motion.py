@@ -12,11 +12,11 @@ def _validate_text(app_root, text: str, flags=None):
     plan = DispatcherPlanner().plan(
         text,
         app_index,
-        flags or GatewayFlags(mock=True),
+        flags or GatewayFlags(),
         task_id="task_test",
         route_plan_id="plan_route_test",
     )
-    return DispatcherValidator().validate(plan, app_index, flags or GatewayFlags(mock=True))
+    return DispatcherValidator().validate(plan, app_index, flags or GatewayFlags())
 
 
 def test_downward_camera_request_rejected(app_root):
@@ -44,7 +44,7 @@ def test_motion_requires_confirmation_with_flag(monkeypatch, app_root):
         _validate_text(
             app_root,
             "从中间、左边、右边、上面拍照并验证差异",
-            GatewayFlags(mock=True, allow_arm_motion=True),
+            GatewayFlags(allow_arm_motion=True),
         )
     assert exc.value.code == "DISPATCH_CONFIRMATION_REQUIRED"
 
@@ -54,15 +54,15 @@ def test_motion_validates_with_flag_and_yes(monkeypatch, app_root):
     validated = _validate_text(
         app_root,
         "从中间、左边、右边、上面拍照并验证差异",
-        GatewayFlags(mock=True, allow_arm_motion=True, assume_yes=True),
+        GatewayFlags(allow_arm_motion=True, assume_yes=True),
     )
     assert validated["risk_class"] == "named_motion"
 
 
 def test_unknown_app_rejected(app_root):
     app_index = AppIndex.load(app_root)
-    plan = DispatcherPlanner().plan("拍一张照片", app_index, GatewayFlags(mock=True), task_id="task_test", route_plan_id="plan_route_test")
+    plan = DispatcherPlanner().plan("拍一张照片", app_index, GatewayFlags(), task_id="task_test", route_plan_id="plan_route_test")
     plan["selected_app_id"] = "missing_app"
     with pytest.raises(DispatchError) as exc:
-        DispatcherValidator().validate(plan, app_index, GatewayFlags(mock=True))
+        DispatcherValidator().validate(plan, app_index, GatewayFlags())
     assert exc.value.code in {"DISPATCH_LLM_SCHEMA_INVALID", "DISPATCH_APP_NOT_FOUND"}

@@ -19,7 +19,13 @@ from agentic_os.kernel.system_call import KernelQuery, KernelResponse, SyscallEx
 from agentic_os.kernel.tool import ToolManager
 from agentic_runtime.kernel_service.human_backend import RuntimeHumanBackend
 from agentic_runtime.kernel_service.robot_backend import RuntimeRobotCapabilityBackend
-from agentic_runtime.simulation import simulated_backend_disabled
+from agentic_runtime.provider_contracts import (
+    TRUTH_STATUS_FIELDS,
+    human_operator_contract,
+    llm_provider_contracts,
+    manager_provider_contract,
+    ros_bridge_contract,
+)
 
 
 class KernelService:
@@ -111,6 +117,13 @@ class KernelService:
         return status
 
     def kernel_status(self) -> dict[str, Any]:
+        llm_status = self._llm_status()
+        context_status = self.context.status()
+        memory_status = self.memory.status()
+        storage_status = self.storage.status()
+        tool_status = self.tool.status()
+        skill_status = self.skill.status()
+        human_status = self.human.status()
         return {
             "scheduler": self.scheduler.status(),
             "queues": self.queue_store.snapshot(),
@@ -120,13 +133,22 @@ class KernelService:
             "access": {"policy": self.access_manager.policy.__class__.__name__},
             "audit": {"enabled": self.audit_logger is not None},
             "events": {"count": self.event_sink.count(), "recent": self.event_sink.recent(limit=25)},
-            "llm": self._llm_status(),
-            "context": self.context.status(),
-            "memory": self.memory.status(),
-            "storage": self.storage.status(),
-            "tool": self.tool.status(),
-            "skill": self.skill.status(),
-            "human": self.human.status(),
+            "providers": self._provider_status(
+                llm_status=llm_status,
+                human_status=human_status,
+                context_status=context_status,
+                memory_status=memory_status,
+                storage_status=storage_status,
+                tool_status=tool_status,
+                skill_status=skill_status,
+            ),
+            "llm": llm_status,
+            "context": context_status,
+            "memory": memory_status,
+            "storage": storage_status,
+            "tool": tool_status,
+            "skill": skill_status,
+            "human": human_status,
             "recent_syscalls": self.recent_syscalls(),
         }
 
@@ -144,14 +166,7 @@ class KernelService:
             )
         return status
 
-    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False) -> dict[str, Any]:
-        if mock:
-            return {
-                "session_id": "",
-                "app_id": app_id,
-                "status": "failed",
-                "result": simulated_backend_disabled("KernelService.run_app(mock=True)"),
-            }
+    async def run_app(self, app_id: str, place: str = "厨房") -> dict[str, Any]:
         if self.runtime_server is None:
             return {"success": False, "error_code": "RUNTIME_SERVER_NOT_WIRED"}
         return await self.runtime_server.scheduler.run_app(app_id, place=place)
@@ -387,3 +402,95 @@ class KernelService:
 
     def _storage_status(self) -> dict[str, Any]:
         return {"root": str(self._storage_root())}
+
+    def _provider_status(
+        self,
+        *,
+        llm_status: dict[str, Any],
+        human_status: dict[str, Any],
+        context_status: dict[str, Any],
+        memory_status: dict[str, Any],
+        storage_status: dict[str, Any],
+        tool_status: dict[str, Any],
+        skill_status: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.runtime_server is not None:
+            bridge_status = self._bridge_client_status()
+            bridge_contract = {
+                **ros_bridge_contract(str(getattr(self.config, "ros_bridge_mode", "cli"))),
+                **{
+                    key: bridge_status[key]
+                    for key in (
+                        "validate_config",
+                        "health",
+                        "capabilities",
+                        "error_code",
+                        "missing",
+                        "details",
+                        "implemented_modes",
+                        "available_modes",
+                        "unsupported_modes",
+                        "reserved_modes",
+                    )
+                    if key in bridge_status
+                },
+            }
+            bridge_contract["status"] = str(bridge_status.get("state") or bridge_contract.get("status") or "unavailable")
+        else:
+            bridge_contract = ros_bridge_contract(str(getattr(self.config, "ros_bridge_mode", "cli")))
+        providers = {
+            "ros_bridge": bridge_contract,
+            "llm": llm_provider_contracts(llm_status),
+            "human": human_operator_contract(human_status),
+            "context": manager_provider_contract(
+                name="context",
+                kind="context",
+                status=context_status,
+                capabilities=("put", "get", "snapshot", "recover", "clear", "compact", "status"),
+                implemented_modes=("sqlite",),
+                available_modes=("sqlite",),
+            ),
+            "memory": manager_provider_contract(
+                name="memory",
+                kind="memory",
+                status=memory_status,
+                capabilities=("remember", "recall", "retrieve", "delete", "export", "import", "status"),
+                implemented_modes=("sqlite_fts5",),
+                available_modes=("sqlite_fts5",),
+                reserved_modes=("semantic_vector",),
+            ),
+            "storage": manager_provider_contract(
+                name="storage",
+                kind="storage",
+                status=storage_status,
+                capabilities=("mount", "write", "read", "delete", "rollback", "share", "retrieve", "status"),
+                implemented_modes=("local_fs", "sqlite_fts5"),
+                available_modes=("local_fs", "sqlite_fts5"),
+                reserved_modes=("semantic_vector",),
+            ),
+            "tool": manager_provider_contract(
+                name="tool",
+                kind="tool",
+                status=tool_status,
+                capabilities=("list", "call", "load_manifest", "unload", "status", "cancel"),
+                implemented_modes=("builtin",),
+                available_modes=("builtin",),
+                reserved_modes=("mcp",),
+            ),
+            "skill": manager_provider_contract(
+                name="skill",
+                kind="skill",
+                status=skill_status,
+                capabilities=("list", "describe", "call", "status", "cancel"),
+                implemented_modes=("runtime_skill_backend",),
+                available_modes=("runtime_skill_backend",),
+            ),
+        }
+        for provider in providers.values():
+            for field in TRUTH_STATUS_FIELDS:
+                provider.setdefault(field, False if field == "validate_config" else ([] if field in {"capabilities", "missing"} else {} if field == "details" else ""))
+        return {
+            "contract": "capability_truth_v1",
+            "required_fields": list(TRUTH_STATUS_FIELDS),
+            **providers,
+        }

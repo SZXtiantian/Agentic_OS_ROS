@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 import re
 from pathlib import Path
 
@@ -9,7 +8,6 @@ import pytest
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 
 
 PRODUCTION_ROOTS = (
@@ -70,18 +68,19 @@ def test_production_sources_have_no_simulated_backend_success_paths(runtime_src)
     assert failures == []
 
 
-def test_runtime_server_create_mock_even_with_explicit_bridge_is_disabled():
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+def test_runtime_server_create_has_no_simulated_mode_parameter():
+    with pytest.raises(TypeError):
         RuntimeServer.create(mock=True)
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+    with pytest.raises(TypeError):
         RuntimeServer.create(mock=True, bridge_client=object())
 
 
-def test_ros_bridge_factory_rejects_mock_flag_and_config():
+def test_ros_bridge_factory_has_no_simulated_mode_parameter_and_config_rejects_it(tmp_path):
     config = RuntimeConfig.load()
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
+    with pytest.raises(TypeError):
         create_ros_bridge_client(config, mock=True)
 
-    simulated_config = replace(config, ros_bridge_mode="mock")
-    with pytest.raises(RuntimeError, match=SIMULATED_BACKEND_DISABLED):
-        create_ros_bridge_client(simulated_config)
+    config_path = tmp_path / "runtime.yaml"
+    config_path.write_text("runtime:\n  ros_bridge_mode: mock\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
+        RuntimeConfig.load(config_path)

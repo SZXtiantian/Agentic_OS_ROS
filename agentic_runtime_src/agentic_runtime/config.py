@@ -8,6 +8,10 @@ from typing import Any
 import yaml
 
 
+SIMULATED_CONFIG_VALUES = {"mock", "fake", "stub", "dummy", "simulated"}
+ROS_BRIDGE_MODES = {"cli", "service", "action", "topic", "http", "websocket"}
+
+
 def find_repo_root(start: Path | None = None) -> Path:
     env_src = os.environ.get("AGENTIC_RUNTIME_SRC")
     if env_src:
@@ -67,6 +71,7 @@ class RuntimeConfig:
             ]
         )
         raw_data = load_yaml(path) if path else {}
+        _validate_real_only_config(raw_data, source=path)
         data = raw_data.get("runtime", {})
         kernel_data = raw_data.get("kernel", {})
         config_base = _config_base(path, repo_root, agentic_home)
@@ -146,3 +151,27 @@ def _first_existing(paths: list[Path | None]) -> Path | None:
         if path and path.exists():
             return path if path.is_absolute() else (find_repo_root() / path)
     return None
+
+
+def _validate_real_only_config(raw_data: dict[str, Any], *, source: Path | None) -> None:
+    runtime = raw_data.get("runtime", {}) if isinstance(raw_data, dict) else {}
+    mode = str(runtime.get("ros_bridge_mode", "cli")) if isinstance(runtime, dict) else "cli"
+    if mode in SIMULATED_CONFIG_VALUES:
+        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.ros_bridge_mode={mode!r}")
+    if mode not in ROS_BRIDGE_MODES:
+        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.ros_bridge_mode={mode!r}")
+    for path, value in _walk_config_values(raw_data):
+        if path[-1:] in (("backend",), ("type",)) and isinstance(value, str) and value.lower() in SIMULATED_CONFIG_VALUES:
+            dotted = ".".join(path)
+            raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: {dotted}={value!r}")
+
+
+def _walk_config_values(value: Any, path: tuple[str, ...] = ()):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield from _walk_config_values(item, (*path, str(key)))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _walk_config_values(item, (*path, str(index)))
+    else:
+        yield path, value

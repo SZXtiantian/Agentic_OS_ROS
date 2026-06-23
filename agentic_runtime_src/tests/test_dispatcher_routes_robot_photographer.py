@@ -16,7 +16,7 @@ def _plan(app_root, text: str, flags=None):
     return planner.plan(
         text,
         AppIndex.load(app_root),
-        flags or GatewayFlags(mock=True),
+        flags or GatewayFlags(),
         task_id="task_test",
         route_plan_id="plan_route_test",
     )
@@ -54,7 +54,7 @@ def test_dispatcher_writes_failed_task_log_when_photo_bridge_unavailable(tmp_pat
 
     async def run():
         server = create_test_runtime_server()
-        result = await DispatcherAgent(server).arun("拍一张照片", GatewayFlags(mock=True, json=True))
+        result = await DispatcherAgent(server).arun("拍一张照片", GatewayFlags(json=True))
         assert result["success"] is False
         assert result["status"] == "failed"
         assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
@@ -85,7 +85,7 @@ def test_dispatcher_rejects_non_boolean_app_success(tmp_path, monkeypatch):
         server = create_test_runtime_server()
         result = await DispatcherAgent(server, executor=MalformedExecutor()).arun(
             "拍一张照片",
-            GatewayFlags(mock=True, json=True),
+            GatewayFlags(json=True),
         )
         assert result["success"] is False
         assert result["status"] == "failed"
@@ -113,7 +113,7 @@ def test_dispatcher_requires_nested_app_result_success(tmp_path, monkeypatch):
         server = create_test_runtime_server()
         result = await DispatcherAgent(server, executor=MissingNestedSuccessExecutor()).arun(
             "拍一张照片",
-            GatewayFlags(mock=True, json=True),
+            GatewayFlags(json=True),
         )
         assert result["success"] is False
         assert result["error_code"] == "DISPATCH_APP_RESULT_INVALID"
@@ -137,7 +137,7 @@ def test_show_plan_dry_run_does_not_execute_app(tmp_path, monkeypatch):
         server = create_test_runtime_server()
         result = await DispatcherAgent(server).arun(
             "拍一组多角度照片",
-            GatewayFlags(mock=True, show_plan=True, dry_run=True),
+            GatewayFlags(show_plan=True, dry_run=True),
         )
         assert result["success"] is True
         assert result["status"] == "dry_run"
@@ -149,7 +149,7 @@ def test_show_plan_dry_run_does_not_execute_app(tmp_path, monkeypatch):
 
 def test_route_validation_accepts_enabled_app(app_root):
     plan = _plan(app_root, "拍一张照片")
-    validated = DispatcherValidator().validate(plan, AppIndex.load(app_root), GatewayFlags(mock=True))
+    validated = DispatcherValidator().validate(plan, AppIndex.load(app_root), GatewayFlags())
     assert validated["validated"] is True
 
 
@@ -159,7 +159,7 @@ def test_require_llm_rejects_dispatcher_rule_fallback(app_root):
             raise RuntimeError("network down")
 
     planner = DispatcherPlanner(llm_chat=BadLLMChat())
-    flags = GatewayFlags(mock=True, require_llm=True)
+    flags = GatewayFlags(require_llm=True)
 
     try:
         planner.plan(

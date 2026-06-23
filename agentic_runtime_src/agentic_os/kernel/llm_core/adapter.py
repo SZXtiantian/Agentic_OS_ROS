@@ -5,6 +5,8 @@ import os
 import threading
 from typing import Any
 
+from agentic_runtime.provider_contracts import llm_provider_contracts
+
 from agentic_os.kernel.access import AccessManager, AccessRequest, AccessResource, AccessSubject
 from agentic_os.kernel.context import GenerationSnapshot
 from agentic_os.kernel.hooks import KernelEventSink
@@ -319,12 +321,18 @@ class LLMAdapter:
             }
             self._audit_status_result(call_id, result)
             return result
-        return {
+        status = {
             "providers": providers,
             "state": "ready" if any(item["state"] == "configured" for item in providers) else "unavailable",
             "active": active,
             "active_count": len(active),
         }
+        status["contract"] = llm_provider_contracts(status)
+        status["available_modes"] = status["contract"]["available_modes"]
+        status["implemented_modes"] = status["contract"]["implemented_modes"]
+        status["unsupported_modes"] = status["contract"]["unsupported_modes"]
+        status["reserved_modes"] = status["contract"]["reserved_modes"]
+        return status
 
     def _status_response(self, call_id: str = "") -> KernelResponse:
         status = self.status(call_id=call_id)

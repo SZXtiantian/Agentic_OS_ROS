@@ -6,12 +6,9 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import simulated_backend_disabled
 
 
-def run(host: str = "127.0.0.1", port: int = 8765, mock: bool = False) -> None:
-    if mock:
-        raise RuntimeError(simulated_backend_disabled("agenticd --mock")["error_code"])
+def run(host: str = "127.0.0.1", port: int = 8765) -> None:
     runtime = RuntimeServer.create()
     service = runtime.kernel_service
 
@@ -49,11 +46,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="agenticd")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--mock", action="store_true", default=False)
     args = parser.parse_args(argv)
-    if args.mock:
-        print(json.dumps(simulated_backend_disabled("agenticd --mock"), ensure_ascii=False, sort_keys=True))
-        return 1
     run(args.host, args.port)
     return 0
 

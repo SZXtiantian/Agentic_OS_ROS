@@ -98,18 +98,21 @@ The boundary remains unchanged: Runtime, kernel, SDK, and Agent Apps must not
 import `rclpy`; ROS2-specific imports belong only in bridge packages under
 `ros2_bridge_src/`.
 
-## Real-Only Runtime Convergence
+## Real-Only Foundation Runtime
 
-The next phase is to remove simulated production success paths and converge the
-runtime on real providers, real bridge backends, explicit access decisions,
-intervention gates, and auditable failure contracts. Missing dependencies must
-fail fast with stable error codes instead of returning mock success.
+The runtime foundation is real-only: production CLI/API/config/schema do not
+expose simulated runtime mode, and successful paths come from real providers,
+backends, bridges, or services. Missing dependencies fail fast with stable
+error codes and appear in status/audit instead of returning simulated success.
 
-Primary planning and contract docs:
+Primary contract docs:
 
-- `docs/agentic_os_next_phase_real_only_plan.md`
-- `docs/kernel_syscalls.md`
-- `docs/agentic_app_developer_guide.md`
+- `agentic_runtime_src/docs/runtime_real_only.md`
+- `agentic_runtime_src/docs/provider_contracts.md`
+- `agentic_runtime_src/docs/kernel_syscalls.md`
+- `agentic_runtime_src/docs/access_audit.md`
+- `agentic_runtime_src/docs/real_integration.md`
+- `agentic_runtime_src/docs/errors.md`
 
 ## Traditional ROS2 App Work
 
@@ -152,7 +155,6 @@ scripts/build_robot_bridge.sh
 Use the installed natural-language entrypoint:
 
 ```bash
-/opt/agentic/bin/agentic --mock --json "拍一张照片"
 /opt/agentic/bin/agentic --real --json "拍一张工作区照片"
 /opt/agentic/bin/agentic photo --real --json "拍一张照片"
 AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --real --json --require-llm "拍一张工作区照片"

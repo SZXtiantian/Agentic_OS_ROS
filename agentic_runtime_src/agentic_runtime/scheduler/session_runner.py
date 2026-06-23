@@ -5,7 +5,7 @@ from typing import Any
 from agentic_runtime.app_result import APP_RESULT_INVALID, validate_app_result_payload
 from agentic_runtime.app_factory import AppFactory
 from agentic_runtime.context_manager import ContextManager
-from agentic_runtime.simulation import simulated_backend_disabled
+from agentic_runtime.real_only import unsupported_task_field
 from agentic_runtime.session import SessionManager
 from agentic_runtime.storage import StorageManager
 
@@ -23,15 +23,11 @@ class SessionRunner:
         self.storage_manager = storage_manager
         self.context_manager = context_manager
 
-    async def run_app(self, app_id: str, place: str = "厨房", mock: bool = False, **kwargs: Any) -> dict[str, Any]:
-        if mock:
-            return {
-                "session_id": "",
-                "app_id": app_id,
-                "status": "failed",
-                "result": simulated_backend_disabled("SessionRunner.run_app(mock=True)"),
-            }
+    async def run_app(self, app_id: str, place: str = "厨房", **kwargs: Any) -> dict[str, Any]:
         task = dict(kwargs)
+        unsupported = unsupported_task_field(task)
+        if unsupported is not None:
+            return {"session_id": "", "app_id": app_id, "status": "failed", "result": unsupported}
         task.setdefault("place", place)
         session = self.session_manager.create_session(app_id, task=task)
         self.context_manager.snapshot(session.session_id, app_id, task=task)

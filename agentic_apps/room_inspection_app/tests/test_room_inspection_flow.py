@@ -19,7 +19,7 @@ def _runtime_with_missing_ros2() -> RuntimeServer:
         del command, timeout_s
         raise FileNotFoundError("ros2")
 
-    return RuntimeServer.create(mock=False, bridge_client=Ros2CliBridgeClient(runner=missing_ros2))
+    return RuntimeServer.create(bridge_client=Ros2CliBridgeClient(runner=missing_ros2))
 
 
 def test_room_inspection_app_reports_missing_ros_bridge():

@@ -6,7 +6,7 @@ from agentic_runtime.skill_registry import SkillRegistry
 from agentic_runtime.skill_registry.skill_manifest import validate_skill_manifest_dict
 
 
-def test_loads_all_mvp_skills():
+def test_loads_all_foundation_skills():
     registry = SkillRegistry(RuntimeConfig.load().skill_root).load()
     names = {skill.name for skill in registry.list_skills()}
     assert {

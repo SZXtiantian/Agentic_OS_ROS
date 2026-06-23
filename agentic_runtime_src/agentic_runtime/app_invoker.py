@@ -7,7 +7,7 @@ from typing import Any
 
 from agentic_runtime.app_result import normalize_app_invocation_result
 from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
-from agentic_runtime.simulation import simulated_backend_disabled
+from agentic_runtime.real_only import unsupported_task_field
 
 
 class AppInvoker:
@@ -27,12 +27,13 @@ class AppInvoker:
         if entry is None:
             return {"success": False, "error_code": "APP_NOT_FOUND", "reason": f"app not found: {app_id}"}
         task = dict(task_input)
-        if bool(task.pop("mock", False)):
+        unsupported = unsupported_task_field(task)
+        if unsupported is not None:
             return {
                 "session_id": "",
                 "app_id": app_id,
                 "status": "failed",
-                "result": simulated_backend_disabled("AppInvoker.run_app(task_input.mock=True)"),
+                "result": unsupported,
             }
         task.setdefault("parent_session_id", parent_session_id)
         task.setdefault("route_plan_id", route_plan_id)

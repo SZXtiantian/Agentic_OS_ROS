@@ -5,7 +5,7 @@ from dataclasses import replace
 import agentic_runtime.ros_bridge_client as ros_bridge_client_pkg
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.ros_bridge_client import Ros2CliBridgeClient
-from agentic_runtime.ros_bridge_client.client import create_ros_bridge_client
+from agentic_runtime.ros_bridge_client.client import RosBridgeModeUnsupportedError, create_ros_bridge_client
 
 
 def test_ros2_cli_bridge_client_calls_services_and_actions():
@@ -126,9 +126,23 @@ def test_bridge_factory_can_select_cli_without_rclpy(tmp_path):
     config = RuntimeConfig.load()
     config = replace(config, ros_bridge_mode="cli", repo_root=tmp_path)
 
-    client = create_ros_bridge_client(config, mock=False)
+    client = create_ros_bridge_client(config)
 
     assert isinstance(client, Ros2CliBridgeClient)
+
+
+def test_bridge_factory_reports_stable_error_for_unimplemented_real_modes(tmp_path):
+    config = replace(RuntimeConfig.load(), ros_bridge_mode="service", repo_root=tmp_path)
+
+    try:
+        create_ros_bridge_client(config)
+    except RosBridgeModeUnsupportedError as exc:
+        assert exc.error_code == "ROS_BRIDGE_MODE_UNSUPPORTED"
+        assert exc.status["error_code"] == "ROS_BRIDGE_MODE_UNSUPPORTED"
+        assert exc.status["available_modes"] == []
+        assert "service" in exc.status["unsupported_modes"]
+    else:
+        raise AssertionError("unimplemented ROS bridge mode must not create a client")
 
 
 def test_ros_bridge_package_does_not_export_mock_client():

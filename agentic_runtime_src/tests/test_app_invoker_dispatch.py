@@ -2,7 +2,6 @@ import asyncio
 
 from agentic_runtime.app_invoker import AppInvoker
 from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
-from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from runtime_test_helpers import create_test_runtime_server
 
 
@@ -27,7 +26,7 @@ def test_app_invoker_loads_aios_robot_photographer_and_reports_missing_bridge(tm
     asyncio.run(run())
 
 
-def test_app_invoker_rejects_mock_task_input_before_loading_runtime(app_root):
+def test_app_invoker_rejects_simulated_task_input_before_loading_runtime(app_root):
     async def run():
         server = create_test_runtime_server()
         invoker = AppInvoker(server, AppIndex.load(app_root))
@@ -40,7 +39,7 @@ def test_app_invoker_rejects_mock_task_input_before_loading_runtime(app_root):
         assert result["status"] == "failed"
         assert result["session_id"] == ""
         assert result["result"]["success"] is False
-        assert result["result"]["error_code"] == SIMULATED_BACKEND_DISABLED
+        assert result["result"]["error_code"] == "TASK_INPUT_FIELD_UNSUPPORTED"
         assert server.test_bridge_calls == []
 
     asyncio.run(run())

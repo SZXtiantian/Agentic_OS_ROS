@@ -1,6 +1,6 @@
 # room_inspection_app
 
-MVP Agent App for inspecting a named room through Agentic OS high-level APIs.
+Foundation-complete Agent App for inspecting a named room through Agentic OS high-level APIs.
 
 Run:
 

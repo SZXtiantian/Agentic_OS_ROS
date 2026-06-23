@@ -219,7 +219,7 @@ Runtime 当前提供：
 
 Agent App 通过 `AgentContext` 调用高层 API，不直接调用 ROS2。
 
-当前 MVP / 已扩展 API：
+当前 foundation-complete / 已扩展 API：
 
 ```text
 ctx.robot.get_state()
@@ -366,7 +366,7 @@ manipulation_bridge_node.py
 
 ### 6.5 `agentic_app_runtime_bridge`
 
-当前是 MVP skeleton / bridge 聚合入口，保留作为后续 Runtime 与 ROS2 更紧密集成的扩展点。
+当前是 foundation skeleton / bridge 聚合入口，保留作为后续 Runtime 与 ROS2 更紧密集成的扩展点。
 
 ## 7. 真实机器人接入现状
 
@@ -759,7 +759,7 @@ ROS graph 查询时观察到真实硬件相关 topic：
 forbidden import/static guard ok
 filesystem layout guard ok
 80 passed
-Agentic OS MVP checks passed.
+Agentic OS foundation-complete checks passed.
 ```
 
 ### 14.2 Bridge Build

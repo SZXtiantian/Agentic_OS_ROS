@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.real_only import unsupported_task_field
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -17,10 +17,9 @@ from validation import PhotoPlanValidationError, validate_plan
 
 
 class RobotPhotographerAgent:
-    def __init__(self, agent_name: str = "robot_photographer_agent", runtime: RuntimeServer | None = None, mock: bool = False) -> None:
+    def __init__(self, agent_name: str = "robot_photographer_agent", runtime: RuntimeServer | None = None) -> None:
         self.agent_name = agent_name
         self.runtime = runtime
-        self._legacy_simulated_requested = bool(mock)
 
     def run(self, task_input: Any) -> dict[str, Any]:
         try:
@@ -31,16 +30,14 @@ class RobotPhotographerAgent:
 
     async def arun(self, task_input: Any) -> dict[str, Any]:
         task = _normalize_task(task_input)
-        requested_simulated = bool(task.pop("mock", False) or self._legacy_simulated_requested)
-        if requested_simulated:
+        unsupported = unsupported_task_field(task)
+        if unsupported is not None:
             return {
                 "schema_version": "1.0",
-                "success": False,
                 "plan_id": "",
                 "planner_mode": "",
                 "steps": [],
-                "error_code": SIMULATED_BACKEND_DISABLED,
-                "reason": "robot_photographer_agent mock runtime mode is disabled for production entrypoints",
+                **unsupported,
             }
         runtime = self.runtime or RuntimeServer.create()
         try:

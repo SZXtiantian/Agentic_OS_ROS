@@ -9,6 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from agentic_runtime.provider_contracts import human_operator_contract
 from agentic_runtime.types import new_id
 
 
@@ -169,7 +170,7 @@ class FileHumanQueueChannel:
     def status(self) -> dict[str, Any]:
         with self._lock:
             active = sorted(self._active)
-        return {
+        status = {
             "success": True,
             "state": "ready",
             "backend": "file_human_queue",
@@ -180,6 +181,22 @@ class FileHumanQueueChannel:
             "pending_count": self._pending_count(),
             "last_error": self._last_error,
         }
+        contract = human_operator_contract(status)
+        status.update(
+            {
+                "validate_config": contract["validate_config"],
+                "health": contract["health"],
+                "capabilities": contract["capabilities"],
+                "error_code": contract["error_code"],
+                "missing": contract["missing"],
+                "details": contract["details"],
+                "implemented_modes": contract["implemented_modes"],
+                "available_modes": contract["available_modes"],
+                "unsupported_modes": contract["unsupported_modes"],
+                "reserved_modes": contract["reserved_modes"],
+            }
+        )
+        return status
 
     def _find_response(self, correlation_id: str) -> dict[str, Any] | None:
         for record in reversed(self._read_jsonl(self.paths.responses)):

@@ -141,4 +141,4 @@ Run it only after:
 4. The robot is localized.
 5. `configs/places.yaml` poses are valid in the `map` frame.
 
-The MVP code keeps the Nav2 import isolated inside the ROS2 bridge package. Runtime and Agent Apps remain free of ROS2 client imports.
+The foundation-complete code keeps the Nav2 import isolated inside the ROS2 bridge package. Runtime and Agent Apps remain free of ROS2 client imports.

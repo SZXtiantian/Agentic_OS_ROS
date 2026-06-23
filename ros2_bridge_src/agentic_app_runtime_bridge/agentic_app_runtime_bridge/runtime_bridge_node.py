@@ -6,7 +6,7 @@ class RuntimeBridgeNode(Node):
     def __init__(self) -> None:
         super().__init__("runtime_bridge_node")
         self.get_logger().info(
-            "agentic runtime bridge skeleton ready; MVP Runtime uses direct bridge client abstraction"
+            "agentic runtime bridge skeleton ready; foundation Runtime uses direct bridge client abstraction"
         )
 
 

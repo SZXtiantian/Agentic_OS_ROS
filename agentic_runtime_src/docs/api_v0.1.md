@@ -1,6 +1,6 @@
 # API v0.1
 
-MVP Agent Apps may call only high-level Agentic APIs:
+Foundation Agent Apps may call only high-level Agentic APIs:
 
 - `ctx.robot.get_state()`
 - `ctx.robot.navigate_to(place)`
@@ -29,7 +29,7 @@ Failure codes include `PLACE_NOT_FOUND`, `FORBIDDEN_ZONE`, `PERMISSION_DENIED`, 
 
 ## Demo Flow
 
-For “去厨房看看” the MVP app executes:
+For “去厨房看看” the foundation app executes:
 
 1. `ctx.world.resolve_place("厨房")`
 2. `ctx.robot.get_state()`

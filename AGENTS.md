@@ -40,7 +40,7 @@ User
   -> Robot Hardware
 ```
 
-## MVP APIs
+## Foundation API Surface
 
 Agent Apps may only call high-level APIs:
 
@@ -60,7 +60,7 @@ For every implementation task:
 
 1. Code compiles.
 2. Unit tests pass.
-3. Integration or mock demo command is documented.
+3. Integration or real-runtime smoke command is documented.
 4. No forbidden ROS2 calls appear in Agent App code.
 5. All dangerous robot actions go through permission checks, resource locks, safety guards, and audit logs.
 6. Errors return structured error codes.
@@ -69,13 +69,13 @@ For every implementation task:
 
 ## Preferred Implementation Style
 
-- Python for MVP Runtime and ROS2 bridge packages.
+- Python for the foundation-complete Runtime and ROS2 bridge packages.
 - `rclpy` only inside ROS2 bridge packages.
 - No `rclpy` inside `agentic_runtime`, SDK, or Agent Apps.
 - YAML / JSON Schema for manifests.
-- SQLite for MVP memory.
-- JSONL for MVP audit logs.
-- Mock backends are acceptable where real robot integrations are unavailable.
+- SQLite for foundation memory.
+- JSONL for foundation audit logs.
+- Missing real integrations must return structured errors or `UNVERIFIED_REAL_DEPENDENCY`; they must not fabricate success.
 
 ## Build And Test
 

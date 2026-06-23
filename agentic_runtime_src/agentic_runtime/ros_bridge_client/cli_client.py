@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from agentic_runtime.provider_contracts import ros_bridge_contract
 from agentic_runtime.types import new_id
 
 CommandRunner = Callable[[list[str], int], Awaitable[str]]
@@ -45,9 +46,20 @@ class Ros2CliBridgeClient:
         }
 
     def status(self) -> dict[str, Any]:
+        contract = ros_bridge_contract("cli")
         return {
             "state": "ready" if shutil.which("ros2") else "unavailable",
             "provider": "ros2_cli",
+            "validate_config": contract["validate_config"],
+            "health": contract["health"],
+            "capabilities": contract["capabilities"],
+            "error_code": contract["error_code"],
+            "missing": contract["missing"],
+            "details": contract["details"],
+            "implemented_modes": contract["implemented_modes"],
+            "available_modes": contract["available_modes"],
+            "unsupported_modes": contract["unsupported_modes"],
+            "reserved_modes": contract["reserved_modes"],
             "ros2_cli_available": shutil.which("ros2") is not None,
             "last_operation": str(self._last_status.get("operation") or ""),
             "last_command": list(self._last_status.get("command") or []),

@@ -15,7 +15,6 @@ from typing import Any
 
 from agentic_runtime.config import find_repo_root
 from agentic_runtime.server import RuntimeServer
-from agentic_runtime.simulation import simulated_backend_disabled
 
 
 HELP_TEXT = """AgenticOS natural language CLI
@@ -99,16 +98,12 @@ def _extract_place(text: str) -> str:
 
 
 class AgenticNaturalLanguageCLI:
-    def __init__(self, *, real: bool = True, json_output: bool = False, allow_arm_motion: bool = False) -> None:
-        self.real = real
+    def __init__(self, *, json_output: bool = False, allow_arm_motion: bool = False) -> None:
         self.json_output = json_output
         self.allow_arm_motion = allow_arm_motion or os.environ.get("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION") == "1"
         self._bridge_process: subprocess.Popen | None = None
 
     async def run_text(self, text: str) -> int:
-        if not self.real:
-            self._print_simulated_disabled()
-            return 1
         intent = parse_natural_language(text)
         if intent.action == "noop":
             return 0
@@ -240,8 +235,6 @@ class AgenticNaturalLanguageCLI:
             print(f"gripper_action: {app_result.get('gripper_action')}")
 
     def _ensure_real_bridge_ready(self) -> bool:
-        if not self.real:
-            return True
         if self._bridge_services_ready(timeout_s=5):
             return True
         if not BRIDGE_SCRIPT.exists():
@@ -293,14 +286,6 @@ class AgenticNaturalLanguageCLI:
         print("AgenticOS bridge 没有 ready，无法执行真实机器人命令。")
         print(f"日志: {BRIDGE_LOG}")
 
-    def _print_simulated_disabled(self) -> None:
-        data = simulated_backend_disabled("agentic chat --mock")
-        if self.json_output:
-            print_json(data)
-            return
-        print(data["message"])
-        print(f"error_code: {data['error_code']}")
-
     def close(self) -> None:
         if self._bridge_process is None or self._bridge_process.poll() is not None:
             return
@@ -319,11 +304,8 @@ def print_json(data: object) -> None:
 
 
 async def interactive(args: argparse.Namespace) -> int:
-    cli = AgenticNaturalLanguageCLI(real=args.real, json_output=args.json, allow_arm_motion=args.allow_arm_motion)
+    cli = AgenticNaturalLanguageCLI(json_output=args.json, allow_arm_motion=args.allow_arm_motion)
     try:
-        if not args.real:
-            cli._print_simulated_disabled()
-            return 1
         if args.command:
             return await cli.run_text(" ".join(args.command))
         print("AgenticOS chat ready. 输入 `帮助` 查看命令，输入 `退出` 结束。")
@@ -342,9 +324,7 @@ async def interactive(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="agentic chat")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--real", action="store_true", dest="real", default=True)
-    mode.add_argument("--mock", action="store_false", dest="real")
+    parser.add_argument("--real", action="store_true", default=False)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--allow-arm-motion", action="store_true")
     parser.add_argument("command", nargs="*")
