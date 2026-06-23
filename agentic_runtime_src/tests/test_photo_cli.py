@@ -1,5 +1,6 @@
 import asyncio
 import json
+from types import SimpleNamespace
 
 from agentic_runtime.photo_cli import RobotPhotoCLI
 
@@ -40,3 +41,27 @@ def test_photo_cli_reports_ros_bridge_unavailable(monkeypatch, capsys):
     assert rc == 1
     assert payload["success"] is False
     assert payload["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+
+
+def test_photo_cli_task_input_does_not_include_mock_default(monkeypatch, capsys):
+    captured: dict[str, object] = {}
+    cli = RobotPhotoCLI(real=True, json_output=True, allow_arm_motion=False, assume_yes=False)
+
+    class Agent:
+        async def arun(self, task_input):
+            captured.update(task_input)
+            return {"success": True, "result": {"success": True}}
+
+    monkeypatch.setattr(cli, "_ensure_real_bridge_ready", lambda: True)
+    monkeypatch.setattr("agentic_runtime.photo_cli.RuntimeServer.create", staticmethod(lambda: SimpleNamespace()))
+    monkeypatch.setattr(cli, "_load_agent", lambda runtime: Agent())
+
+    rc = asyncio.run(cli.run_text("拍一张照片"))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["success"] is True
+    assert captured["text"] == "拍一张照片"
+    assert captured["allow_arm_motion"] is False
+    assert captured["assume_yes"] is False
+    assert "mock" not in captured

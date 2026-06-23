@@ -81,7 +81,7 @@ class RuntimeServer:
         session_manager = SessionManager(session_store)
         syscall_store = SyscallStore(config.session_root)
         resource_manager = ResourceManager()
-        bridge_client = bridge_client or create_ros_bridge_client(config, mock=False)
+        bridge_client = bridge_client or create_ros_bridge_client(config)
         human_channel = FileHumanQueueChannel(config.session_root.parent / "human")
         dispatcher = SkillDispatcher(bridge_client, memory_manager, human_channel=human_channel)
         executor = SkillExecutor(

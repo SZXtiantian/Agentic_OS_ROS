@@ -60,7 +60,7 @@ class AppInvoker:
         app_dir = Path(entry.root)
         module = _load_module(app_dir / f"{module_name}.py", f"{entry.app_id}.{module_name}.dispatch")
         cls = getattr(module, class_name)
-        agent = cls(runtime=self.runtime, mock=False)
+        agent = cls(runtime=self.runtime)
         if hasattr(agent, "arun"):
             return await agent.arun(task_input)
         result = agent.run(task_input)

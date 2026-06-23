@@ -86,6 +86,7 @@ Human backend status must come from a real backend `status()` contract with bool
 Human ask backend responses must include boolean `success` or the legacy `answered` field; malformed dict responses return `HUMAN_RESULT_INVALID` instead of being converted to backend-unavailable or unanswered results.
 
 Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful. `AppInvoker` also strips falsy legacy `mock` task fields and rejects truthy `mock` requests with `SIMULATED_BACKEND_DISABLED` before loading an app or touching a bridge.
+Runtime, natural-language, photo, and kernel-service CLI compatibility `--mock` flags are rejected at the CLI boundary; accepted production calls create the runtime and app tasks without propagating `mock=False` defaults into scheduler kwargs, app constructor kwargs, or task input.
 Tool and MCP tool handlers may return arbitrary domain data, but if they explicitly include `success`, it must be boolean; explicit `success: false` is propagated as a failed tool syscall and non-boolean success returns `TOOL_RESULT_INVALID`.
 
 ## Permissions And Intervention
@@ -161,7 +162,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 480 passed, 3 skipped
+# 483 passed, 3 skipped
 scripts/run_tests.sh
-# 480 passed, 3 deselected; Agentic OS MVP checks passed.
+# 483 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

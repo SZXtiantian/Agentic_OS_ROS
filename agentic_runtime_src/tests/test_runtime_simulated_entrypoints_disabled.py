@@ -41,7 +41,7 @@ def test_runtime_cli_status_json_exposes_kernel_bridge_health(monkeypatch, capsy
                 "recent_syscalls": [],
             }
 
-    monkeypatch.setattr(runtime_cli.RuntimeServer, "create", staticmethod(lambda mock=False: SimpleNamespace(kernel_service=KernelService())))
+    monkeypatch.setattr(runtime_cli.RuntimeServer, "create", staticmethod(lambda: SimpleNamespace(kernel_service=KernelService())))
 
     rc = runtime_cli.main(["status", "--json"])
 
@@ -50,6 +50,26 @@ def test_runtime_cli_status_json_exposes_kernel_bridge_health(monkeypatch, capsy
     assert payload["bridge_client"]["provider"] == "Ros2CliBridgeClient"
     assert payload["bridge_client"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
     assert payload["events"]["recent"][0]["event_type"] == "ros_bridge.status"
+
+
+def test_runtime_cli_run_app_does_not_forward_mock_default(monkeypatch, capsys):
+    class Scheduler:
+        async def run_app(self, app_id, **kwargs):
+            return {
+                "session_id": "sess_real",
+                "app_id": app_id,
+                "status": "completed",
+                "result": {"success": True, "kwargs": kwargs},
+            }
+
+    monkeypatch.setattr(runtime_cli.RuntimeServer, "create", staticmethod(lambda: SimpleNamespace(scheduler=Scheduler())))
+
+    rc = runtime_cli.main(["run-app", "inspection_agent", "--json"])
+
+    payload = _last_json(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["result"]["kwargs"] == {"place": "厨房"}
+    assert "mock" not in payload["result"]["kwargs"]
 
 
 def test_kernel_service_server_mock_flag_is_rejected(capsys):

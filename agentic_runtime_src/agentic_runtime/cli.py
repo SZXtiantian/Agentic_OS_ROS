@@ -77,8 +77,8 @@ def print_json(data: object) -> None:
 
 
 async def run_app(args) -> int:
-    server = RuntimeServer.create(mock=args.mock)
-    result = await server.scheduler.run_app(args.app_id, place=args.place, mock=args.mock)
+    server = RuntimeServer.create()
+    result = await server.scheduler.run_app(args.app_id, place=args.place)
     if args.json:
         print_json(result)
     else:
@@ -92,7 +92,7 @@ async def run_app(args) -> int:
 
 
 def status(args) -> int:
-    server = RuntimeServer.create(mock=args.mock)
+    server = RuntimeServer.create()
     data = server.kernel_service.status()
     if args.json:
         print_json(data)

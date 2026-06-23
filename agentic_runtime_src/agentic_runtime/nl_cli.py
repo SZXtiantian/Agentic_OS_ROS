@@ -154,7 +154,6 @@ class AgenticNaturalLanguageCLI:
             result = await server.scheduler.run_app(
                 "camera_arm_inspection_agent",
                 place=intent.place,
-                mock=False,
             )
         finally:
             if previous is None:

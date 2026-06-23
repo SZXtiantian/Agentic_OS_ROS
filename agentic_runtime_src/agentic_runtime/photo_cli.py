@@ -108,10 +108,9 @@ class RobotPhotoCLI:
             "text": text,
             "allow_arm_motion": self.allow_arm_motion,
             "assume_yes": self.assume_yes,
-            "mock": False,
         }
         server = RuntimeServer.create()
-        agent = self._load_agent(runtime=server, mock=False)
+        agent = self._load_agent(runtime=server)
         result = await agent.arun(task_input)
         self._print_result(result)
         app_result = dict(result.get("result") or result)
@@ -119,7 +118,7 @@ class RobotPhotoCLI:
             return 2
         return 0 if bool(app_result.get("success")) else 1
 
-    def _load_agent(self, runtime: RuntimeServer, mock: bool):
+    def _load_agent(self, runtime: RuntimeServer):
         if str(APP_DIR) not in sys.path:
             sys.path.insert(0, str(APP_DIR))
         entry = APP_DIR / "entry.py"
@@ -128,7 +127,7 @@ class RobotPhotoCLI:
             raise RuntimeError(f"cannot load Robot Photographer entry: {entry}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return module.RobotPhotographerAgent(runtime=runtime, mock=mock)
+        return module.RobotPhotographerAgent(runtime=runtime)
 
     def _ensure_real_bridge_ready(self) -> bool:
         if self._bridge_services_ready(timeout_s=12):

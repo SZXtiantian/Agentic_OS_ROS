@@ -12,7 +12,7 @@ from agentic_runtime.simulation import simulated_backend_disabled
 def run(host: str = "127.0.0.1", port: int = 8765, mock: bool = False) -> None:
     if mock:
         raise RuntimeError(simulated_backend_disabled("agenticd --mock")["error_code"])
-    runtime = RuntimeServer.create(mock=mock)
+    runtime = RuntimeServer.create()
     service = runtime.kernel_service
 
     class Handler(BaseHTTPRequestHandler):
@@ -54,7 +54,7 @@ def main(argv=None) -> int:
     if args.mock:
         print(json.dumps(simulated_backend_disabled("agenticd --mock"), ensure_ascii=False, sort_keys=True))
         return 1
-    run(args.host, args.port, mock=args.mock)
+    run(args.host, args.port)
     return 0
 
 

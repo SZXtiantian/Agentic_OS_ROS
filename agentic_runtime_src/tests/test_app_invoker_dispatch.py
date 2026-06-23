@@ -84,6 +84,44 @@ def test_app_invoker_rejects_aios_result_missing_success(tmp_path):
     asyncio.run(run())
 
 
+def test_app_invoker_aios_constructor_does_not_receive_mock_default(tmp_path):
+    app_dir = tmp_path / "runtime_only_agent"
+    app_dir.mkdir()
+    (app_dir / "entry.py").write_text(
+        "\n".join(
+            [
+                "class RuntimeOnlyAgent:",
+                "    def __init__(self, runtime):",
+                "        self.runtime = runtime",
+                "    async def arun(self, task_input):",
+                "        return {'success': True, 'task_input': task_input}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    entry = AppIndexEntry(
+        app_id="runtime_only_agent",
+        root=str(app_dir),
+        dispatch_enabled=True,
+        runtime_type="aios_agent_package",
+        aios_entrypoint="entry:RuntimeOnlyAgent",
+    )
+    invoker = AppInvoker(create_test_runtime_server(), AppIndex([entry]))
+
+    async def run():
+        result = await invoker.run_app(
+            "runtime_only_agent",
+            {"text": "run"},
+            parent_session_id="sess_parent",
+            route_plan_id="plan",
+        )
+        assert result["success"] is True
+        assert result["task_input"]["text"] == "run"
+        assert "mock" not in result["task_input"]
+
+    asyncio.run(run())
+
+
 def test_app_invoker_legacy_app_uses_scheduler(monkeypatch):
     async def fake_run_app(app_id, **kwargs):
         return {"session_id": "sess_legacy", "app_id": app_id, "status": "completed", "result": {"success": True, "kwargs": kwargs}}
