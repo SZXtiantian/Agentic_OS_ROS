@@ -39,6 +39,7 @@ Runtime `memory.recall` skill dispatch uses the structured kernel result path; p
 Runtime artifact writes check the kernel storage response before creating `ArtifactRecord`; storage provider failures preserve stable `STORAGE_*` error codes instead of surfacing as missing-field exceptions.
 Runtime `report.say` writes to a real JSONL report sink at `AGENTIC_REPORT_LOG` or `AGENTIC_VAR/reports/report.jsonl`; write failures return `REPORT_BACKEND_UNAVAILABLE` and appear in bridge client status instead of returning stdout-only success.
 ROS bridge `ask_human` responses use the same `success` contract as other public results: answered requests return `success: true`, bridge failures return their stable ROS error code with `success: false`, and unanswered responses without a backend error are `HUMAN_UNANSWERED`.
+The kernel `HumanInteractionManager` normalizes legacy human backends that return only `answered`; non-object backend responses fail as `HUMAN_RESULT_INVALID`.
 
 OpenAI-compatible and vLLM-compatible LLM providers require explicit `base_url`, `api_key` or `api_key_env`, and `model`. LiteLLM, HuggingFace, and local providers require an explicit `model` before dependency or service checks. Provider `name` is only an internal route name and is not used as a model fallback.
 LiteLLM `llm_embed` uses the real `litellm.embedding(...)` API and never falls back to chat completion; missing `litellm` returns `LLM_PROVIDER_DEPENDENCY_MISSING`, provider failures return `LLM_PROVIDER_ERROR`, and malformed embedding responses return `LLM_RESPONSE_INVALID`.
@@ -151,7 +152,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 445 passed, 3 skipped
+# 447 passed, 3 skipped
 scripts/run_tests.sh
-# 445 passed, 3 deselected; Agentic OS MVP checks passed.
+# 447 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

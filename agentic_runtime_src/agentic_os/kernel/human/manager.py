@@ -47,17 +47,17 @@ class HumanInteractionManager:
             self._audit_result(syscall, access)
             return self._kernel_response(access)
         if hasattr(self.human_adapter, "address_request"):
-            result = self.human_adapter.address_request(syscall)
+            result = self._normalize_backend_result(self.human_adapter.address_request(syscall))
             self._record(syscall, result)
             self._audit_result(syscall, result)
             return self._kernel_response(result)
         if hasattr(self.human_adapter, "ask"):
-            result = self.human_adapter.ask(syscall)
+            result = self._normalize_backend_result(self.human_adapter.ask(syscall))
             self._record(syscall, result)
             self._audit_result(syscall, result)
             return self._kernel_response(result)
         if callable(self.human_adapter):
-            result = self.human_adapter(syscall)
+            result = self._normalize_backend_result(self.human_adapter(syscall))
             self._record(syscall, result)
             self._audit_result(syscall, result)
             return self._kernel_response(result)
@@ -154,6 +154,22 @@ class HumanInteractionManager:
                 error_code=str(result.get("error_code") or ""),
                 backend=self.human_adapter.__class__.__name__ if self.human_adapter is not None else "",
             )
+
+    def _normalize_backend_result(self, result: Any) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "answered": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": f"human backend returned {type(result).__name__}",
+            }
+        normalized = dict(result)
+        if "success" not in normalized and "answered" in normalized:
+            answered = bool(normalized.get("answered", False))
+            normalized["success"] = answered
+            if not answered and not normalized.get("error_code"):
+                normalized["error_code"] = "HUMAN_UNANSWERED"
+        return normalized
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
         if result.get("success", False):

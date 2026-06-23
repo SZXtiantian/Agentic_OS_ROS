@@ -231,6 +231,85 @@ def test_human_ask_runs_after_operator_intervention_allows():
     assert any(event["event_type"] == "access.checked" for event in sink.recent(limit=10))
 
 
+def test_human_manager_normalizes_legacy_answered_backend_contract():
+    class Backend:
+        def __init__(self, result):
+            self.result = result
+
+        def address_request(self, syscall):
+            return dict(self.result)
+
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+
+    answered = HumanInteractionManager(
+        Backend({"answered": True, "answer": "yes"}),
+        access_manager=access,
+        event_sink=sink,
+    ).address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+    unanswered = HumanInteractionManager(
+        Backend({"answered": False, "answer": "", "reason": "operator declined"}),
+        access_manager=access,
+        event_sink=sink,
+    ).address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert answered.success is True
+    assert answered.data["success"] is True
+    assert answered.data["answered"] is True
+    assert unanswered.success is False
+    assert unanswered.error_code == "HUMAN_UNANSWERED"
+
+
+def test_human_manager_rejects_non_object_backend_result():
+    class Backend:
+        def address_request(self, syscall):
+            return "yes"
+
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider(), event_sink=sink)
+    manager = HumanInteractionManager(Backend(), access_manager=access, event_sink=sink)
+
+    result = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human.ask",
+            params={"session_id": "sess_human", "question": "Ready?"},
+            query=SimpleNamespace(
+                app_id="agent_a",
+                session_id="sess_human",
+                metadata={"permissions": ["human.ask"]},
+            ),
+        )
+    )
+
+    assert result.success is False
+    assert result.error_code == "HUMAN_RESULT_INVALID"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["error_code"] == "HUMAN_RESULT_INVALID"
+
+
 def test_runtime_human_backend_uses_skill_executor_contract():
     executor = RuntimeCompatibleExecutor()
     backend = RuntimeHumanBackend(SimpleNamespace(executor=executor, registry=SimpleNamespace()))
