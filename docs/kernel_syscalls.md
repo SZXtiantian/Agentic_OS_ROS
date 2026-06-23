@@ -34,6 +34,7 @@ No default mock LLM, memory, context, storage, tool, skill, or human provider is
 Context status exposes the real SQLite `path`/`db_path`, counts, `last_error`, and compact policy. Memory status exposes the real SQLite `path`/`db_path`, `fts_available`, `index`, and `last_error`. Memory import/export file failures return stable errors such as `MEMORY_IMPORT_INVALID_JSON`, `MEMORY_IMPORT_NOT_FOUND`, or `MEMORY_EXPORT_FAILED` and are emitted as `memory.audit` events.
 
 OpenAI-compatible and vLLM-compatible LLM providers require explicit `base_url`, `api_key` or `api_key_env`, and `model`. LiteLLM, HuggingFace, and local providers require an explicit `model` before dependency or service checks. Provider `name` is only an internal route name and is not used as a model fallback.
+LiteLLM `llm_embed` uses the real `litellm.embedding(...)` API and never falls back to chat completion; missing `litellm` returns `LLM_PROVIDER_DEPENDENCY_MISSING`, provider failures return `LLM_PROVIDER_ERROR`, and malformed embedding responses return `LLM_RESPONSE_INVALID`.
 
 The runtime dispatcher LLM facade also treats missing provider fields as unconfigured: no hardcoded base URL or model is injected when `models.yaml` and environment variables omit them.
 

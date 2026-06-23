@@ -142,6 +142,8 @@ class LiteLLMProvider:
         self.config = config
 
     def complete(self, query: LLMQuery) -> KernelResponse:
+        if query.action_type == "embed" or query.operation_type in {"llm_embed", "embed"}:
+            return self.embed(query)
         model = _configured_model(self.config)
         if not model:
             return _missing_model_response()
@@ -164,6 +166,28 @@ class LiteLLMProvider:
         except Exception as exc:
             return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
         return KernelResponse.ok(normalized.to_dict(), metadata={"provider": self.config.name})
+
+    def embed(self, query: LLMQuery) -> KernelResponse:
+        model = _configured_model(self.config)
+        if not model:
+            return _missing_model_response()
+        try:
+            import litellm  # type: ignore[import-not-found]
+        except ImportError:
+            return KernelResponse.error(
+                LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING,
+                metadata={"backend": self.config.backend, "dependency": "litellm"},
+            )
+        inputs = query.params.get("input", query.params.get("texts", query.params.get("text", "")))
+        try:
+            body = litellm.embedding(model=model, input=inputs, timeout=self.config.timeout_s)
+        except Exception as exc:
+            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+        embeddings = _extract_embeddings(body)
+        if not embeddings:
+            return KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": "missing embeddings"})
+        response_model = _response_value(body, "model") or model
+        return KernelResponse.ok({"embeddings": embeddings, "model": response_model}, metadata={"provider": self.config.name})
 
 
 class HuggingFaceProvider:
@@ -195,3 +219,24 @@ def _missing_model_response() -> KernelResponse:
         LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
         metadata={"reason": "model not configured", "required_config": ["model"]},
     )
+
+
+def _extract_embeddings(body: object) -> list[object]:
+    data = _response_value(body, "data")
+    if not isinstance(data, list):
+        return []
+    embeddings = []
+    for item in data:
+        if isinstance(item, dict) and "embedding" in item:
+            embeddings.append(item["embedding"])
+            continue
+        embedding = getattr(item, "embedding", None)
+        if embedding is not None:
+            embeddings.append(embedding)
+    return embeddings
+
+
+def _response_value(body: object, key: str) -> object:
+    if isinstance(body, dict):
+        return body.get(key)
+    return getattr(body, key, None)

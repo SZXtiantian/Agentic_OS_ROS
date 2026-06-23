@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import sys
 import threading
+import types
 import urllib.error
 
 from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
@@ -171,6 +173,42 @@ def test_optional_litellm_dependency_missing_is_structured():
 
     assert response.success is False
     assert response.error_code in {LLMCoreErrorCode.PROVIDER_DEPENDENCY_MISSING, LLMCoreErrorCode.PROVIDER_ERROR}
+
+
+def test_litellm_provider_embed_uses_real_embedding_api(monkeypatch):
+    calls = {}
+
+    def embedding(**kwargs):
+        calls["embedding"] = kwargs
+        return {"data": [{"embedding": [0.1, 0.2]}, {"embedding": [0.3, 0.4]}], "model": kwargs["model"]}
+
+    def completion(**kwargs):
+        raise AssertionError("embed requests must not use chat completion")
+
+    monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(embedding=embedding, completion=completion))
+    provider = LiteLLMProvider(LLMConfig(name="x", backend="litellm", model="embedding-model", timeout_s=7))
+
+    response = provider.complete(LLMQuery(operation_type="llm_embed", params={"texts": ["alpha", "beta"]}, action_type="embed"))
+
+    assert response.success is True
+    assert response.response_message["embeddings"] == [[0.1, 0.2], [0.3, 0.4]]
+    assert response.response_message["model"] == "embedding-model"
+    assert response.metadata["provider"] == "x"
+    assert calls["embedding"] == {"model": "embedding-model", "input": ["alpha", "beta"], "timeout": 7}
+
+
+def test_litellm_provider_embed_remote_failure_is_structured(monkeypatch):
+    def embedding(**kwargs):
+        raise RuntimeError("provider offline")
+
+    monkeypatch.setitem(sys.modules, "litellm", types.SimpleNamespace(embedding=embedding))
+    provider = LiteLLMProvider(LLMConfig(name="x", backend="litellm", model="embedding-model"))
+
+    response = provider.complete(LLMQuery(operation_type="llm_embed", params={"text": "alpha"}, action_type="embed"))
+
+    assert response.success is False
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_ERROR
+    assert "provider offline" in response.metadata["reason"]
 
 
 def test_optional_huggingface_dependency_missing_is_structured():
