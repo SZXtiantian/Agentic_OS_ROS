@@ -157,10 +157,11 @@ def test_memory_low_risk_operations_emit_access_and_audit_events(tmp_path):
     assert all(event["metadata"]["allowed"] is True for event in checked)
 
 
-def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_path):
+def test_memory_export_import_success_uses_real_file_with_access_manager(tmp_path):
     export_path = tmp_path / "export.jsonl"
-    source = MemoryManager(db_path=tmp_path / "source.sqlite3", access_manager=None)
-    target = MemoryManager(db_path=tmp_path / "target.sqlite3", access_manager=None)
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    source = MemoryManager(db_path=tmp_path / "source.sqlite3", access_manager=access)
+    target = MemoryManager(db_path=tmp_path / "target.sqlite3", access_manager=access)
     source.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
 
     exported = source.export("agent_a", str(export_path))
@@ -172,13 +173,38 @@ def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_
     assert fetched["memory"]["content"] == "report ready"
 
 
-def test_memory_import_invalid_json_returns_stable_error_and_audit(tmp_path):
-    import_path = tmp_path / "bad.jsonl"
-    import_path.write_text("{not-json}\n", encoding="utf-8")
+def test_dangerous_memory_operations_require_access_manager(tmp_path):
+    export_path = tmp_path / "export.jsonl"
     sink = InMemoryKernelEventSink()
     manager = MemoryManager(
         db_path=tmp_path / "memory.sqlite3",
         access_manager=None,
+        event_sink=sink,
+    )
+    manager.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))
+
+    exported = manager.export("agent_a", str(export_path))
+    imported = manager.import_("agent_a", str(export_path))
+    deleted = manager.remove("m1", "agent_a")
+
+    assert exported["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert imported["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert deleted["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    audits = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"]
+    dangerous = [event for event in audits if event["metadata"]["irreversible"] is True]
+    assert [event["metadata"]["action"] for event in dangerous] == ["export", "import", "delete"]
+    assert all(event["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE" for event in dangerous)
+    assert manager.get("m1", "agent_a")["success"] is True
+
+
+def test_memory_import_invalid_json_returns_stable_error_and_audit(tmp_path):
+    import_path = tmp_path / "bad.jsonl"
+    import_path.write_text("{not-json}\n", encoding="utf-8")
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=access,
         event_sink=sink,
     )
 
@@ -196,9 +222,10 @@ def test_memory_import_invalid_json_returns_stable_error_and_audit(tmp_path):
 
 def test_memory_export_file_error_returns_stable_error_and_audit(tmp_path):
     sink = InMemoryKernelEventSink()
+    access = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider())
     manager = MemoryManager(
         db_path=tmp_path / "memory.sqlite3",
-        access_manager=None,
+        access_manager=access,
         event_sink=sink,
     )
     manager.add(MemoryNote(id="m1", content="report ready", owner_agent="agent_a"))

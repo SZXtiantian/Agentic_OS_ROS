@@ -7,5 +7,5 @@ def test_sqlite_memory_provider_search_and_delete(tmp_path):
 
     assert manager.recall("app", "last_inspection") == {"summary": "厨房 ok"}
     assert manager.search("app", "厨房")[0]["key"] == "last_inspection"
-    assert manager.delete("app", "last_inspection") is True
-    assert manager.recall("app", "last_inspection") is None
+    assert manager.delete("app", "last_inspection") is False
+    assert manager.recall("app", "last_inspection") == {"summary": "厨房 ok"}

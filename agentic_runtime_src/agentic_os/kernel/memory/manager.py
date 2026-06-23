@@ -140,21 +140,38 @@ class MemoryManager:
         )
 
     def remove(self, memory_id: str, agent_name: str) -> dict[str, Any]:
-        if self.access_manager is not None:
-            decision = self.access_manager.check(
-                AccessRequest(
-                    subject=AccessSubject(agent_name=agent_name),
-                    action="delete",
-                    resource=AccessResource("memory", memory_id, owner_agent=agent_name),
-                )
+        if self.access_manager is None:
+            return self._audit_dangerous_result(
+                "delete",
+                agent_name,
+                {
+                    "success": False,
+                    "error_code": "ACCESS_MANAGER_UNAVAILABLE",
+                    "reason": "memory delete requires a kernel access manager",
+                    "requires_intervention": False,
+                },
+                memory_id=memory_id,
             )
-            if not decision.allowed:
-                return self._audit_dangerous_result(
-                    "delete",
-                    agent_name,
-                    {"success": False, "error_code": decision.error_code, "reason": decision.reason},
-                    memory_id=memory_id,
-                )
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(agent_name=agent_name),
+                action="delete",
+                resource=AccessResource("memory", memory_id, owner_agent=agent_name),
+                irreversible=True,
+            )
+        )
+        if not decision.allowed:
+            return self._audit_dangerous_result(
+                "delete",
+                agent_name,
+                {
+                    "success": False,
+                    "error_code": decision.error_code,
+                    "reason": decision.reason,
+                    "requires_intervention": decision.requires_intervention,
+                },
+                memory_id=memory_id,
+            )
         return self._audit_dangerous_result(
             "delete",
             agent_name,
@@ -306,7 +323,12 @@ class MemoryManager:
 
     def _check_dangerous_access(self, agent_name: str, action: str, memory_id: str) -> dict[str, Any]:
         if self.access_manager is None:
-            return {"success": True}
+            return {
+                "success": False,
+                "error_code": "ACCESS_MANAGER_UNAVAILABLE",
+                "reason": f"memory {action} requires a kernel access manager",
+                "requires_intervention": False,
+            }
         decision = self.access_manager.check(
             AccessRequest(
                 subject=AccessSubject(agent_name=agent_name),
