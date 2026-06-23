@@ -1,4 +1,5 @@
 import asyncio
+import json
 from dataclasses import replace
 
 import agentic_runtime.ros_bridge_client as ros_bridge_client_pkg
@@ -132,6 +133,48 @@ def test_bridge_factory_can_select_cli_without_rclpy(tmp_path):
 
 def test_ros_bridge_package_does_not_export_mock_client():
     assert not hasattr(ros_bridge_client_pkg, "MockRosBridgeClient")
+
+
+def test_ros2_cli_bridge_report_say_writes_real_report_log(tmp_path, monkeypatch, capsys):
+    report_path = tmp_path / "reports" / "report.jsonl"
+    monkeypatch.setenv("AGENTIC_REPORT_LOG", str(report_path))
+
+    async def run():
+        client = Ros2CliBridgeClient()
+        result = await client.report_say("inspection complete")
+        return result, client.status()
+
+    result, status = asyncio.run(run())
+
+    assert result["success"] is True
+    assert result["transport"] == "file_report_sink"
+    assert result["report_path"] == str(report_path)
+    assert capsys.readouterr().out.strip() == "inspection complete"
+    record = json.loads(report_path.read_text(encoding="utf-8").splitlines()[-1])
+    assert record["message"] == "inspection complete"
+    assert status["last_operation"] == "report_say"
+    assert status["last_success"] is True
+
+
+def test_ros2_cli_bridge_report_say_preserves_backend_failure(tmp_path, monkeypatch):
+    blocking_file = tmp_path / "not_a_directory"
+    blocking_file.write_text("x", encoding="utf-8")
+    report_path = blocking_file / "report.jsonl"
+    monkeypatch.setenv("AGENTIC_REPORT_LOG", str(report_path))
+
+    async def run():
+        client = Ros2CliBridgeClient()
+        result = await client.report_say("inspection complete")
+        return result, client.status()
+
+    result, status = asyncio.run(run())
+
+    assert result["success"] is False
+    assert result["error_code"] == "REPORT_BACKEND_UNAVAILABLE"
+    assert result["report_path"] == str(report_path)
+    assert status["last_operation"] == "report_say"
+    assert status["last_success"] is False
+    assert status["last_error"]["error_code"] == "REPORT_BACKEND_UNAVAILABLE"
 
 
 def test_ros2_cli_bridge_client_camera_arm_methods():

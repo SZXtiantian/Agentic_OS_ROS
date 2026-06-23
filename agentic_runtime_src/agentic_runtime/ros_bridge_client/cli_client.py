@@ -4,10 +4,12 @@ import asyncio
 import ast
 import json
 import math
+import os
 import re
 import shutil
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from agentic_runtime.types import new_id
@@ -327,8 +329,47 @@ class Ros2CliBridgeClient:
         }
 
     async def report_say(self, message: str) -> dict[str, Any]:
+        path = self._report_log_path()
+        record = {
+            "created_at": _utc_now(),
+            "message": message,
+            "transport": "file_report_sink",
+        }
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+        except OSError as exc:
+            self._last_status = {
+                "operation": "report_say",
+                "command": [str(path)],
+                "success": False,
+                "error_code": "REPORT_BACKEND_UNAVAILABLE",
+                "reason": str(exc),
+                "updated_at": _utc_now(),
+            }
+            return {
+                "success": False,
+                "error_code": "REPORT_BACKEND_UNAVAILABLE",
+                "reason": str(exc),
+                "report_path": str(path),
+            }
         print(message)
-        return {"success": True, "message": message, "transport": "runtime_stdout"}
+        self._last_status = {
+            "operation": "report_say",
+            "command": [str(path)],
+            "success": True,
+            "error_code": "",
+            "reason": "",
+            "updated_at": _utc_now(),
+        }
+        return {"success": True, "message": message, "transport": "file_report_sink", "report_path": str(path)}
+
+    def _report_log_path(self) -> Path:
+        if os.environ.get("AGENTIC_REPORT_LOG"):
+            return Path(os.environ["AGENTIC_REPORT_LOG"]).expanduser()
+        var_root = Path(os.environ.get("AGENTIC_VAR", "/opt/agentic/var")).expanduser()
+        return var_root / "reports" / "report.jsonl"
 
     async def _service_call(self, name: str, srv_type: str, payload: dict[str, Any], timeout_s: int | None = None) -> str:
         command = ["ros2", "service", "call", name, srv_type, _ros2_payload(payload)]
