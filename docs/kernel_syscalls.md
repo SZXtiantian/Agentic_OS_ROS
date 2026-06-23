@@ -75,6 +75,7 @@ Robot capability backends must return an object with explicit `success`; malform
 LLM status exposes provider configuration state and active `call_id`s. `llm_status(call_id=...)` and `llm_cancel` inspect the LLM active-call registry; unknown call IDs return `SYSCALL_NOT_FOUND`. Cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
 Configured external LLM provider calls require a kernel access manager and explicit `llm.external.call` permission in syscall metadata. Without an access manager the public syscall path returns `ACCESS_MANAGER_UNAVAILABLE` before any provider call. When a provider is configured and the permission is present, the call is still intervention-gated; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`. Missing provider configuration still fails as `LLM_PROVIDER_UNCONFIGURED` before any access prompt because no external call is attempted.
+LLM provider implementations must return `KernelResponse`; provider exceptions return `LLM_PROVIDER_ERROR`, and malformed provider results return `LLM_PROVIDER_RESULT_INVALID` instead of surfacing raw exceptions or being inferred as successful.
 
 Skill calls may pass an explicit `call_id` through `ctx.kernel.skill.call(..., call_id="...")`. `ctx.kernel.skill.status(call_id=...)` and `ctx.kernel.skill.cancel(call_id)` inspect the runtime active-call registry; empty or missing call IDs and unknown active calls return `SYSCALL_NOT_FOUND` instead of reporting session-level cancel success.
 
@@ -162,7 +163,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 483 passed, 3 skipped
+# 487 passed, 3 skipped
 scripts/run_tests.sh
-# 483 passed, 3 deselected; Agentic OS MVP checks passed.
+# 487 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

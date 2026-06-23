@@ -139,7 +139,7 @@ class LLMAdapter:
         last_response: KernelResponse | None = None
         for config in candidates:
             provider = self._provider_for(config)
-            response = enforce_json_response(query.response_format, provider.complete(query))
+            response = enforce_json_response(query.response_format, self._complete_with_provider(provider, query))
             self._audit_provider_result(query, config, response)
             if response.success:
                 response.metadata.setdefault("model", config.name)
@@ -169,9 +169,9 @@ class LLMAdapter:
         for config in candidates:
             provider = self._provider_for(config)
             if hasattr(provider, "complete_batch"):
-                responses = list(provider.complete_batch(queries))
+                responses = self._complete_batch_with_provider(provider, queries)
             else:
-                responses = [provider.complete(query) for query in queries]
+                responses = [self._complete_with_provider(provider, query) for query in queries]
             for response in responses:
                 response.metadata.setdefault("model", config.name)
             for query, response in zip(queries, responses, strict=False):
@@ -228,6 +228,41 @@ class LLMAdapter:
         if config.backend in {"local"}:
             return LocalBackendProvider(config)
         return UnsupportedLLMProvider(config)
+
+    def _complete_with_provider(self, provider: LLMProvider, query: LLMQuery) -> KernelResponse:
+        try:
+            result = provider.complete(query)
+        except Exception as exc:
+            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+        return self._normalize_provider_response(result, operation="complete")
+
+    def _complete_batch_with_provider(self, provider: LLMProvider, queries: list[LLMQuery]) -> list[KernelResponse]:
+        try:
+            result = provider.complete_batch(queries)
+        except Exception as exc:
+            return [
+                KernelResponse.error(
+                    LLMCoreErrorCode.PROVIDER_ERROR,
+                    metadata={"reason": str(exc), "batch": True},
+                )
+                for _query in queries
+            ]
+        if not isinstance(result, (list, tuple)):
+            return [
+                KernelResponse.error(
+                    LLMCoreErrorCode.PROVIDER_RESULT_INVALID,
+                    metadata={"reason": f"provider complete_batch returned {type(result).__name__}"},
+                )
+            ]
+        return [self._normalize_provider_response(item, operation="complete_batch") for item in result]
+
+    def _normalize_provider_response(self, result: Any, *, operation: str) -> KernelResponse:
+        if isinstance(result, KernelResponse):
+            return result
+        return KernelResponse.error(
+            LLMCoreErrorCode.PROVIDER_RESULT_INVALID,
+            metadata={"reason": f"provider {operation} returned {type(result).__name__}"},
+        )
 
     def status(self, call_id: str = "") -> dict[str, Any]:
         providers = []
