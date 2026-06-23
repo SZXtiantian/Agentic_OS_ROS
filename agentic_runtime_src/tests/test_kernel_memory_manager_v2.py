@@ -86,6 +86,33 @@ def test_memory_eviction_moves_to_persistent_provider():
     assert manager.get("n1", "agent_a")["success"] is True
 
 
+def test_memory_get_does_not_fallback_after_primary_forbidden():
+    ram = InMemoryMemoryProvider()
+    persistent = InMemoryMemoryProvider()
+    ram.add_memory(MemoryNote(id="n1", content="private primary", owner_agent="agent_a"))
+    persistent.add_memory(MemoryNote(id="n1", content="shared persistent", owner_agent="agent_a", sharing_policy="shared"))
+    manager = MemoryManager(provider=ram, persistent_provider=persistent)
+
+    result = manager.get("n1", "agent_b")
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_FORBIDDEN"
+
+
+def test_memory_get_reports_persistent_provider_failure():
+    class FailingPersistentProvider(InMemoryMemoryProvider):
+        def get_memory(self, memory_id: str, agent_name: str = ""):
+            return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE", "reason": "persistent db closed"}
+
+    manager = MemoryManager(provider=InMemoryMemoryProvider(), persistent_provider=FailingPersistentProvider())
+
+    result = manager.get("missing", "agent_a")
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
+    assert result["reason"] == "persistent db closed"
+
+
 def test_memory_retrieve_reports_persistent_provider_failure():
     class FailingPersistentProvider(InMemoryMemoryProvider):
         def retrieve_memory(self, query: str, agent_name: str, limit: int = 5, user_id: str = ""):

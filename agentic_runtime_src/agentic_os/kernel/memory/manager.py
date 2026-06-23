@@ -98,9 +98,13 @@ class MemoryManager:
         decision = self._check_read_access(agent_name, memory_id)
         if not decision.get("success", True):
             return self._audit_result("get", agent_name, decision, memory_id=memory_id)
-        result = self.provider.get_memory(memory_id, agent_name)
-        if not result.get("success") and self.persistent_provider is not None:
-            result = self.persistent_provider.get_memory(memory_id, agent_name)
+        result = self._call_provider("get", self.provider.get_memory, memory_id, agent_name)
+        if (
+            not result.get("success")
+            and result.get("error_code") == "MEMORY_NOT_FOUND"
+            and self.persistent_provider is not None
+        ):
+            result = self._call_provider("get_persistent", self.persistent_provider.get_memory, memory_id, agent_name)
         return self._audit_result("get", agent_name, result, memory_id=memory_id)
 
     def retrieve(self, agent_name: str, query: str, limit: int = 5, user_id: str = "") -> dict[str, Any]:
@@ -312,7 +316,12 @@ class MemoryManager:
     def _check_read_access(self, agent_name: str, memory_id: str) -> dict[str, Any]:
         if self.access_manager is None:
             return {"success": True}
-        probe = self.provider.get_memory(memory_id, "")
+        probe = self._call_provider("get_access_probe", self.provider.get_memory, memory_id, "")
+        if not probe.get("success", False) and str(probe.get("error_code") or "") in {
+            "MEMORY_PROVIDER_UNAVAILABLE",
+            "MEMORY_PROVIDER_RESULT_INVALID",
+        }:
+            return probe
         if not probe.get("success", False):
             return {"success": True}
         note = self._note_from_mapping(dict(probe.get("memory") or {}))
