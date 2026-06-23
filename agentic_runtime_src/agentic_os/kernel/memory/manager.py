@@ -88,22 +88,28 @@ class MemoryManager:
     def add(self, note: MemoryNote, subject_agent: str | None = None) -> dict[str, Any]:
         decision = self._check_access(subject_agent or note.owner_agent, "write", note)
         if not decision.get("success", True):
-            return decision
+            return self._audit_result("remember", subject_agent or note.owner_agent, decision, memory_id=note.id)
         result = self.provider.add_memory(note)
         if result.get("success"):
             self._evict_if_needed(note.owner_agent)
-        return result
+        return self._audit_result("remember", subject_agent or note.owner_agent, result, memory_id=note.id)
 
     def get(self, memory_id: str, agent_name: str) -> dict[str, Any]:
+        decision = self._check_read_access(agent_name, memory_id)
+        if not decision.get("success", True):
+            return self._audit_result("get", agent_name, decision, memory_id=memory_id)
         result = self.provider.get_memory(memory_id, agent_name)
         if not result.get("success") and self.persistent_provider is not None:
             result = self.persistent_provider.get_memory(memory_id, agent_name)
-        return result
+        return self._audit_result("get", agent_name, result, memory_id=memory_id)
 
     def retrieve(self, agent_name: str, query: str, limit: int = 5, user_id: str = "") -> dict[str, Any]:
+        decision = self._check_memory_operation_access(agent_name, "search", query or "*")
+        if not decision.get("success", True):
+            return self._audit_result("search", agent_name, decision, query=query)
         result = self.provider.retrieve_memory(query, agent_name, limit, user_id)
         if not result.get("success", False):
-            return result
+            return self._audit_result("search", agent_name, result, query=query)
         memories = list(result.get("memories") or [])
         memories.extend(self._retrieve_compressed_blocks(agent_name, query, limit - len(memories)))
         if self.persistent_provider is not None and len(memories) < limit:
@@ -120,13 +126,18 @@ class MemoryManager:
                         "metadata": {"source": "storage_memory_block"},
                     }
                 )
-        return {"success": True, "memories": memories[:limit]}
+        return self._audit_result("search", agent_name, {"success": True, "memories": memories[:limit]}, query=query)
 
     def update(self, note: MemoryNote, subject_agent: str | None = None) -> dict[str, Any]:
         decision = self._check_access(subject_agent or note.owner_agent, "write", note)
         if not decision.get("success", True):
-            return decision
-        return self.provider.update_memory(note)
+            return self._audit_result("update", subject_agent or note.owner_agent, decision, memory_id=note.id)
+        return self._audit_result(
+            "update",
+            subject_agent or note.owner_agent,
+            self.provider.update_memory(note),
+            memory_id=note.id,
+        )
 
     def remove(self, memory_id: str, agent_name: str) -> dict[str, Any]:
         if self.access_manager is not None:
@@ -152,13 +163,16 @@ class MemoryManager:
         )
 
     def list(self, agent_name: str, limit: int = 100) -> dict[str, Any]:
+        decision = self._check_memory_operation_access(agent_name, "list", "*")
+        if not decision.get("success", True):
+            return self._audit_result("list", agent_name, decision)
         if not hasattr(self.provider, "list_notes"):
-            return {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"}
+            return self._audit_result("list", agent_name, {"success": False, "error_code": "MEMORY_PROVIDER_UNAVAILABLE"})
         try:
             notes = self.provider.list_notes(agent_name, limit=limit)  # type: ignore[attr-defined]
         except TypeError:
             notes = self.provider.list_notes(agent_name)[:limit]  # type: ignore[attr-defined]
-        return {"success": True, "memories": [note.to_dict() for note in notes]}
+        return self._audit_result("list", agent_name, {"success": True, "memories": [note.to_dict() for note in notes]})
 
     def export(self, agent_name: str, path: str) -> dict[str, Any]:
         decision = self._check_dangerous_access(agent_name, "export", path)
@@ -267,6 +281,29 @@ class MemoryManager:
             return {"success": True}
         return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
 
+    def _check_read_access(self, agent_name: str, memory_id: str) -> dict[str, Any]:
+        if self.access_manager is None:
+            return {"success": True}
+        probe = self.provider.get_memory(memory_id, "")
+        if not probe.get("success", False):
+            return {"success": True}
+        note = self._note_from_mapping(dict(probe.get("memory") or {}))
+        return self._check_access(agent_name, "read", note)
+
+    def _check_memory_operation_access(self, agent_name: str, action: str, resource_id: str) -> dict[str, Any]:
+        if self.access_manager is None:
+            return {"success": True}
+        decision = self.access_manager.check(
+            AccessRequest(
+                subject=AccessSubject(agent_name=agent_name),
+                action=action,
+                resource=AccessResource("memory", resource_id, owner_agent=agent_name),
+            )
+        )
+        if decision.allowed:
+            return {"success": True}
+        return {"success": False, "error_code": decision.error_code, "reason": decision.reason}
+
     def _check_dangerous_access(self, agent_name: str, action: str, memory_id: str) -> dict[str, Any]:
         if self.access_manager is None:
             return {"success": True}
@@ -294,6 +331,17 @@ class MemoryManager:
         result: dict[str, Any],
         **metadata: Any,
     ) -> dict[str, Any]:
+        return self._audit_result(action, agent_name, result, irreversible=True, **metadata)
+
+    def _audit_result(
+        self,
+        action: str,
+        agent_name: str,
+        result: dict[str, Any],
+        *,
+        irreversible: bool = False,
+        **metadata: Any,
+    ) -> dict[str, Any]:
         if self.event_sink is not None:
             self.event_sink.emit(
                 "memory.audit",
@@ -301,11 +349,26 @@ class MemoryManager:
                 agent_name=agent_name,
                 success=bool(result.get("success", False)),
                 error_code=str(result.get("error_code") or ""),
-                irreversible=True,
+                irreversible=irreversible,
                 provider=self.provider.__class__.__name__,
                 **metadata,
             )
         return result
+
+    def _note_from_mapping(self, data: dict[str, Any]) -> MemoryNote:
+        return MemoryNote(
+            id=str(data.get("id") or ""),
+            content=data.get("content", ""),
+            owner_agent=str(data.get("owner_agent") or ""),
+            user_id=str(data.get("user_id") or ""),
+            context=str(data.get("context") or ""),
+            keywords=list(data.get("keywords") or []),
+            tags=list(data.get("tags") or []),
+            category=str(data.get("category") or ""),
+            sharing_policy=str(data.get("sharing_policy") or "private"),
+            memory_type=str(data.get("memory_type") or "episodic"),
+            metadata=dict(data.get("metadata") or {}),
+        )
 
     def _call_provider_dangerous(self, action: str, fn: Any, *args: Any) -> dict[str, Any]:
         try:

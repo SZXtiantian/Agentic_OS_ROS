@@ -121,6 +121,42 @@ def test_memory_update_and_delete_permission_denied_is_stable(tmp_path):
     assert deleted.error_code == "ACCESS_INTERVENTION_REQUIRED"
 
 
+def test_memory_low_risk_operations_emit_access_and_audit_events(tmp_path):
+    sink = InMemoryKernelEventSink()
+    access = AccessManager(event_sink=sink)
+    manager = MemoryManager(
+        db_path=tmp_path / "memory.sqlite3",
+        access_manager=access,
+        event_sink=sink,
+    )
+
+    remembered = manager.add(MemoryNote(id="m1", content="blue cube on bench", owner_agent="agent_a"))
+    fetched = manager.get("m1", "agent_a")
+    searched = manager.retrieve("agent_a", "blue", limit=5)
+    listed = manager.list("agent_a", limit=5)
+    updated = manager.update(MemoryNote(id="m1", content="blue cube moved", owner_agent="agent_a"))
+
+    assert all(item["success"] is True for item in (remembered, fetched, searched, listed, updated))
+    audits = [event for event in sink.recent(limit=30) if event["event_type"] == "memory.audit"]
+    checked = [event for event in sink.recent(limit=30) if event["event_type"] == "access.checked"]
+    assert [event["metadata"]["action"] for event in audits] == [
+        "remember",
+        "get",
+        "search",
+        "list",
+        "update",
+    ]
+    assert [event["metadata"]["action"] for event in checked] == [
+        "write",
+        "read",
+        "search",
+        "list",
+        "write",
+    ]
+    assert all(event["metadata"]["irreversible"] is False for event in audits)
+    assert all(event["metadata"]["allowed"] is True for event in checked)
+
+
 def test_memory_export_import_success_uses_real_file_without_access_manager(tmp_path):
     export_path = tmp_path / "export.jsonl"
     source = MemoryManager(db_path=tmp_path / "source.sqlite3", access_manager=None)
@@ -197,9 +233,9 @@ def test_dangerous_memory_operations_emit_audit_events(tmp_path):
     assert deleted["success"] is True
     assert imported["success"] is True
     events = [event for event in sink.recent(limit=20) if event["event_type"] == "memory.audit"]
-    assert [event["metadata"]["action"] for event in events] == ["export", "delete", "import"]
-    assert all(event["metadata"]["success"] is True for event in events)
-    assert all(event["metadata"]["irreversible"] is True for event in events)
+    dangerous_events = [event for event in events if event["metadata"]["irreversible"] is True]
+    assert [event["metadata"]["action"] for event in dangerous_events] == ["export", "delete", "import"]
+    assert all(event["metadata"]["success"] is True for event in dangerous_events)
 
 
 def test_denied_memory_delete_emits_audit_event(tmp_path):
