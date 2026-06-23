@@ -50,11 +50,16 @@ def test_tool_describe_status_and_cancel_are_stable(tmp_path):
         SimpleNamespace(agent_name="agent_a", operation_type="tool_describe", params={"name": "calculator.add"})
     )
     status = manager.address_request(SimpleNamespace(agent_name="agent_a", operation_type="tool_status", params={}))
+    missing_status = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_status", params={"call_id": "missing"})
+    )
     cancel = manager.address_request(SimpleNamespace(agent_name="agent_a", operation_type="tool_cancel", params={"call_id": "x"}))
 
     assert described["success"] is True
     assert described["builtin"] is True
     assert status["status"]["registered"]
+    assert missing_status["success"] is False
+    assert missing_status["error_code"] == "SYSCALL_NOT_FOUND"
     assert cancel["success"] is False
     assert cancel["error_code"] == "SYSCALL_NOT_FOUND"
 
@@ -123,18 +128,27 @@ def test_tool_cancel_active_call_is_cooperative_and_audited(tmp_path):
     assert started.wait(timeout=1.0)
 
     status = manager.status()
+    active_status = manager.address_request(
+        SimpleNamespace(agent_name="agent_a", operation_type="tool_status", params={"call_id": "tool_call_1"})
+    )
     cancel = manager.address_request(
         SimpleNamespace(agent_name="agent_a", operation_type="tool_cancel", params={"call_id": "tool_call_1"})
     )
     thread.join(timeout=1.0)
 
     assert status["active_calls"] == [{"call_id": "tool_call_1", "agent_name": "agent_a", "tool": "slow.tool"}]
+    assert active_status["success"] is True
+    assert active_status["active_call"] == {"call_id": "tool_call_1", "agent_name": "agent_a", "tool": "slow.tool"}
     assert cancel["success"] is True
     assert result["success"] is False
     assert result["error_code"] == "TOOL_CANCELLED"
     assert manager.status()["active_calls"] == []
     assert any(
         event["event_type"] == "tool.cancel_requested" and event["metadata"]["call_id"] == "tool_call_1"
+        for event in sink.recent(limit=20)
+    )
+    assert any(
+        event["event_type"] == "tool.status" and event["metadata"]["call_id"] == "tool_call_1"
         for event in sink.recent(limit=20)
     )
 

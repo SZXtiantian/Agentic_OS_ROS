@@ -122,7 +122,7 @@ The kernel registers only real builtin tools:
 
 Robot, ROS2, Nav2, MoveIt, arm, gripper, perception, and `/cmd_vel` names are rejected as generic tools.
 
-`tool_cancel` uses the ToolManager active call registry. Unknown call IDs return `SYSCALL_NOT_FOUND`. For running tools, the manager sets a cooperative `_cancel_event` in the handler args and returns `cancel_requested`; a handler that observes the event exits with `TOOL_CANCELLED`. Non-cooperative handlers are not reported as successfully stopped.
+`tool_status(call_id=...)` and `tool_cancel` use the ToolManager active call registry. Unknown call IDs return `SYSCALL_NOT_FOUND`. For running tools, the manager sets a cooperative `_cancel_event` in the handler args and returns `cancel_requested`; a handler that observes the event exits with `TOOL_CANCELLED`. Non-cooperative handlers are not reported as successfully stopped.
 
 ## Verification
 

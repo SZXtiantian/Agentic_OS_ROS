@@ -374,8 +374,8 @@ class KernelToolAPI(_KernelBaseAPI):
         query = ToolQuery(operation_type="tool_register_builtin", params={"name": name, "permissions": permissions, **metadata})
         return self._execute(query, timeout_s=timeout_s)
 
-    async def status(self, **kwargs):
-        query = ToolQuery(operation_type="tool_status", params={})
+    async def status(self, call_id: str = "", **kwargs):
+        query = ToolQuery(operation_type="tool_status", params={"call_id": call_id})
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
     async def cancel(self, call_id: str, **kwargs):

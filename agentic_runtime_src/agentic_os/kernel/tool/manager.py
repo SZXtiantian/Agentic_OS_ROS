@@ -179,7 +179,11 @@ class ToolManager:
                     )
                 )
             if operation == "tool_status":
-                return self._kernel_response({"success": True, "status": self.status()})
+                call_id = str(params.get("call_id") or params.get("syscall_id") or params.get("correlation_id") or "")
+                status = self.status(call_id=call_id)
+                if call_id:
+                    return self._kernel_response(status)
+                return self._kernel_response({"success": True, "status": status})
             if operation == "tool_cancel":
                 return self._kernel_response(
                     self.cancel(str(params.get("call_id") or params.get("syscall_id") or params.get("correlation_id") or ""))
@@ -368,14 +372,30 @@ class ToolManager:
             "requires_intervention": decision.requires_intervention,
         }
 
-    def status(self) -> dict[str, Any]:
+    def status(self, call_id: str = "") -> dict[str, Any]:
+        active_calls = [
+            {"call_id": call.call_id, "agent_name": call.agent_name, "tool": call.tool_name}
+            for call in sorted(self._active_calls.values(), key=lambda item: item.call_id)
+        ]
+        if call_id:
+            match = next((call for call in active_calls if call["call_id"] == call_id), None)
+            if match is None:
+                result = {
+                    "success": False,
+                    "error_code": "SYSCALL_NOT_FOUND",
+                    "reason": "tool call_id is not active",
+                    "call_id": call_id,
+                    "active_calls": active_calls,
+                }
+                self._record_tool_event("tool.status", "", "", result)
+                return result
+            result = {"success": True, "call_id": call_id, "active_call": match, "active_calls": active_calls}
+            self._record_tool_event("tool.status", match["agent_name"], match["tool"], {"call_id": call_id, "success": True})
+            return result
         return {
             "tool_count": len(self._registry),
             "active": sorted(self._active),
-            "active_calls": [
-                {"call_id": call.call_id, "agent_name": call.agent_name, "tool": call.tool_name}
-                for call in sorted(self._active_calls.values(), key=lambda item: item.call_id)
-            ],
+            "active_calls": active_calls,
             "registered": sorted(self._registry),
             "mcp": self.mcp_server.status(),
             "sandbox": self.sandbox_policy.to_dict(),
