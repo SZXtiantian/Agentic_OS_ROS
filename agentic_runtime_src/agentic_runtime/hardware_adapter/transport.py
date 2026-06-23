@@ -67,8 +67,34 @@ class RosBridgeClientTransport:
 
     async def health_check(self) -> dict[str, Any]:
         state = await self.client.get_robot_state()
+        if not isinstance(state, dict):
+            return {
+                "success": False,
+                "error_code": "BRIDGE_HEALTH_RESULT_INVALID",
+                "reason": f"bridge health check returned {type(state).__name__}",
+                "transport": self.transport_kind,
+                "endpoint": self.endpoint,
+                "state": {},
+            }
+        if "success" not in state or not isinstance(state.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "BRIDGE_HEALTH_RESULT_INVALID",
+                "reason": "bridge health check result missing boolean success field",
+                "transport": self.transport_kind,
+                "endpoint": self.endpoint,
+                "state": state,
+            }
+        success = state["success"]
+        error_code = str(state.get("error_code") or "")
+        reason = str(state.get("reason") or "")
+        if not success and not error_code:
+            error_code = "BRIDGE_HEALTH_CHECK_FAILED"
+            reason = reason or "bridge health check failed without error_code"
         return {
-            "success": bool(state.get("success", False)),
+            "success": success,
+            "error_code": error_code,
+            "reason": reason,
             "transport": self.transport_kind,
             "endpoint": self.endpoint,
             "state": state,

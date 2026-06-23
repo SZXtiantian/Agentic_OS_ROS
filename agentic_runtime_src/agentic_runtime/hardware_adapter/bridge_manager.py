@@ -46,20 +46,32 @@ class BridgeManager:
         return self._installer(profile).build_workspace(dry_run=dry_run)
 
     def activate(self, profile: Ros2BridgeProfile) -> dict:
-        result = self._installer(profile).activate()
+        result = self._normalize_result(
+            self._installer(profile).activate(),
+            invalid_code="BRIDGE_LIFECYCLE_RESULT_INVALID",
+            failure_code="BRIDGE_LIFECYCLE_FAILED",
+        )
         self._write_lifecycle_status(profile, "active", result)
         return result
 
     def rollback(self, profile: Ros2BridgeProfile) -> dict:
-        result = self._installer(profile).rollback()
+        result = self._normalize_result(
+            self._installer(profile).rollback(),
+            invalid_code="BRIDGE_LIFECYCLE_RESULT_INVALID",
+            failure_code="BRIDGE_LIFECYCLE_FAILED",
+        )
         self._write_lifecycle_status(profile, "rolled_back", result)
         return result
 
     def install_profile(self, profile: Ros2BridgeProfile, *, dry_run: bool = True) -> dict:
         self.bridge_root.mkdir(parents=True, exist_ok=True)
         installer = self._installer(profile)
-        install_result = installer.install(dry_run=dry_run)
-        if not install_result.get("success", False):
+        install_result = self._normalize_result(
+            installer.install(dry_run=dry_run),
+            invalid_code="BRIDGE_INSTALL_RESULT_INVALID",
+            failure_code="BRIDGE_INSTALL_FAILED",
+        )
+        if not install_result["success"]:
             return install_result
         plan = install_result["plan"]
         status = {
@@ -99,7 +111,7 @@ class BridgeManager:
 
     def _write_lifecycle_status(self, profile: Ros2BridgeProfile, lifecycle_status: str, result: dict[str, Any]) -> None:
         status = {
-            "success": bool(result.get("success", False)),
+            "success": result.get("success", False),
             "profile": profile.name,
             "bridge_type": profile.bridge_type,
             "source_workspace": profile.source_workspace,
@@ -146,6 +158,29 @@ class BridgeManager:
     def _health_check_command(self, plan: dict[str, Any]) -> str:
         workspace_root = plan.get("workspace_root", "/home/ubuntu/agentic_ws")
         return f"source {workspace_root}/install/ros2_bridge/setup.bash && ros2 node list"
+
+    def _normalize_result(self, result: Any, *, invalid_code: str, failure_code: str) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": invalid_code,
+                "reason": f"bridge operation returned {type(result).__name__}",
+            }
+        if "success" not in result or not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": invalid_code,
+                "reason": "bridge operation result missing boolean success field",
+                "result": dict(result),
+            }
+        if result["success"]:
+            return result
+        if result.get("error_code"):
+            return result
+        normalized = dict(result)
+        normalized["error_code"] = failure_code
+        normalized.setdefault("reason", "bridge operation failed without error_code")
+        return normalized
 
 
 def _utc_now() -> str:

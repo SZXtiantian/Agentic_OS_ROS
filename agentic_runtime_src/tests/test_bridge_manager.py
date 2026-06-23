@@ -165,6 +165,48 @@ def test_bridge_manager_lifecycle_plan_validate_activate_rollback(tmp_path, monk
     assert manager.status()["metadata"]["status"] == "rolled_back"
 
 
+def test_bridge_manager_rejects_malformed_install_result(tmp_path):
+    class MalformedInstaller:
+        def install(self, dry_run=True):
+            return {"success": "false", "plan": {}}
+
+    manager = BridgeManager(tmp_path / "bridges" / "ros2", tmp_path / "profiles")
+    manager._installer = lambda profile: MalformedInstaller()
+    profile = Ros2BridgeProfile(name="ros2_default", source_workspace=str(tmp_path / "src"))
+
+    result = manager.install_profile(profile, dry_run=True)
+
+    assert result["success"] is False
+    assert result["error_code"] == "BRIDGE_INSTALL_RESULT_INVALID"
+    assert not (tmp_path / "bridges" / "ros2" / "status.json").exists()
+
+
+def test_bridge_manager_rejects_malformed_lifecycle_result(tmp_path):
+    class MalformedInstaller:
+        def activate(self):
+            return {"success": "false", "reason": "string success"}
+
+        def rollback(self):
+            return {"success": False, "reason": "missing code"}
+
+    manager = BridgeManager(tmp_path / "bridges" / "ros2", tmp_path / "profiles")
+    manager._installer = lambda profile: MalformedInstaller()
+    profile = Ros2BridgeProfile(name="ros2_default", source_workspace=str(tmp_path / "src"))
+
+    activated = manager.activate(profile)
+    status_after_activate = manager.status()
+    rolled_back = manager.rollback(profile)
+    status_after_rollback = manager.status()
+
+    assert activated["success"] is False
+    assert activated["error_code"] == "BRIDGE_LIFECYCLE_RESULT_INVALID"
+    assert status_after_activate["metadata"]["success"] is False
+    assert status_after_activate["metadata"]["result"]["error_code"] == "BRIDGE_LIFECYCLE_RESULT_INVALID"
+    assert rolled_back["success"] is False
+    assert rolled_back["error_code"] == "BRIDGE_LIFECYCLE_FAILED"
+    assert status_after_rollback["metadata"]["result"]["error_code"] == "BRIDGE_LIFECYCLE_FAILED"
+
+
 def test_bridge_transport_request_contract_routes_to_client():
     class FakeClient:
         async def resolve_place(self, name):
@@ -181,6 +223,36 @@ def test_bridge_transport_request_contract_routes_to_client():
         assert resolved["place"]["name"] == "厨房"
         assert health["success"] is True
         assert unsupported["error_code"] == "BRIDGE_CAPABILITY_UNSUPPORTED"
+
+    asyncio.run(run())
+
+
+def test_bridge_transport_health_rejects_malformed_success():
+    class FakeClient:
+        async def get_robot_state(self):
+            return {"success": "false", "error_code": "", "reason": "string success"}
+
+    async def run():
+        transport = RosBridgeClientTransport(FakeClient())
+        health = await transport.health_check()
+        assert health["success"] is False
+        assert health["error_code"] == "BRIDGE_HEALTH_RESULT_INVALID"
+        assert health["state"]["success"] == "false"
+
+    asyncio.run(run())
+
+
+def test_bridge_transport_health_failure_without_error_code_gets_stable_code():
+    class FakeClient:
+        async def get_robot_state(self):
+            return {"success": False, "reason": "not ready"}
+
+    async def run():
+        transport = RosBridgeClientTransport(FakeClient())
+        health = await transport.health_check()
+        assert health["success"] is False
+        assert health["error_code"] == "BRIDGE_HEALTH_CHECK_FAILED"
+        assert health["reason"] == "not ready"
 
     asyncio.run(run())
 
