@@ -101,7 +101,7 @@ class RobotPhotoCLI:
             self._print_result(result)
             return 1
         if self.real and not self._ensure_real_bridge_ready():
-            result = {"success": False, "error_code": "AGENTIC_BRIDGE_UNAVAILABLE", "reason": "AgenticOS real bridge services are unavailable"}
+            result = {"success": False, "error_code": "ROS_BRIDGE_UNAVAILABLE", "reason": "AgenticOS real bridge services are unavailable"}
             self._print_result(result)
             return 1
         task_input = {

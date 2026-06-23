@@ -86,7 +86,7 @@ async def dispatch_text(user_text: str, flags: GatewayFlags) -> dict[str, Any]:
         return {
             "success": False,
             "status": "failed",
-            "error_code": "AGENTIC_BRIDGE_UNAVAILABLE",
+            "error_code": "ROS_BRIDGE_UNAVAILABLE",
             "message": "AgenticOS real bridge services are unavailable",
         }
     server = RuntimeServer.create(mock=flags.mock)

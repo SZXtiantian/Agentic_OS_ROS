@@ -1,4 +1,7 @@
-from agentic_runtime.nl_gateway import _flags_from_args, build_parser, _service_name_from_line
+import asyncio
+
+from agentic_runtime import nl_gateway
+from agentic_runtime.nl_gateway import GatewayFlags, _flags_from_args, build_parser, _service_name_from_line
 
 
 def test_nl_gateway_parser_defaults_to_real():
@@ -28,3 +31,12 @@ def test_nl_gateway_parser_real_flags():
 
 def test_nl_gateway_service_line_parser():
     assert _service_name_from_line("/agentic/robot/stop [agentic_msgs/srv/StopRobot]") == "/agentic/robot/stop"
+
+
+def test_nl_gateway_reports_ros_bridge_unavailable(monkeypatch):
+    monkeypatch.setattr(nl_gateway, "_ensure_real_bridge_ready", lambda flags: False)
+
+    result = asyncio.run(nl_gateway.dispatch_text("拍一张照片", GatewayFlags(real=True, mock=False, json=True)))
+
+    assert result["success"] is False
+    assert result["error_code"] == "ROS_BRIDGE_UNAVAILABLE"

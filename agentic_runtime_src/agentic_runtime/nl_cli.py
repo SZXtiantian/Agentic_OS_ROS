@@ -285,7 +285,7 @@ class AgenticNaturalLanguageCLI:
     def _print_bridge_unavailable(self) -> None:
         data = {
             "success": False,
-            "error_code": "AGENTIC_BRIDGE_UNAVAILABLE",
+            "error_code": "ROS_BRIDGE_UNAVAILABLE",
             "reason": f"AgenticOS bridge services did not become ready; see {BRIDGE_LOG}",
         }
         if self.json_output:

@@ -5,7 +5,7 @@ import json
 
 from agentic_runtime import cli as runtime_cli
 from agentic_runtime.kernel_service import server as kernel_server
-from agentic_runtime.nl_cli import main as nl_cli_main
+from agentic_runtime.nl_cli import AgenticNaturalLanguageCLI, main as nl_cli_main
 from agentic_runtime.nl_gateway import GatewayFlags, dispatch_text
 from agentic_runtime.photo_cli import RobotPhotoCLI, main as photo_cli_main
 from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
@@ -70,3 +70,15 @@ def test_nl_cli_mock_flag_is_rejected(capsys):
     assert rc == 1
     assert payload["success"] is False
     assert payload["error_code"] == SIMULATED_BACKEND_DISABLED
+
+
+def test_nl_cli_reports_ros_bridge_unavailable(monkeypatch, capsys):
+    cli = AgenticNaturalLanguageCLI(real=True, json_output=True, allow_arm_motion=False)
+    monkeypatch.setattr(cli, "_ensure_real_bridge_ready", lambda: False)
+
+    rc = asyncio.run(cli.run_text("看一下工作区"))
+
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["success"] is False
+    assert payload["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
