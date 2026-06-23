@@ -151,6 +151,48 @@ def test_kernel_service_default_config_reports_llm_unavailable(tmp_path):
     assert status["llm"]["providers"][0]["error_code"] == "LLM_PROVIDER_UNCONFIGURED"
 
 
+def _runtime_with_bridge_client(bridge_client):
+    return SimpleNamespace(
+        bridge_client=bridge_client,
+        config=SimpleNamespace(ros_bridge_mode="cli", storage_root="/tmp/agentic-test-storage", tool_root="/tmp/agentic-test-tools"),
+        registry=SimpleNamespace(list_skills=lambda: []),
+        monitor=SimpleNamespace(status=lambda skills, ros_bridge="cli": {"ros_bridge": ros_bridge, "skills": skills}),
+    )
+
+
+def test_kernel_service_status_rejects_bridge_client_without_status():
+    service = KernelService(runtime_server=_runtime_with_bridge_client(object()))
+
+    status = service.status()
+
+    assert status["bridge_client"]["success"] is False
+    assert status["bridge_client"]["error_code"] == "ROS_BRIDGE_STATUS_UNAVAILABLE"
+    assert status["bridge_client"]["reason"] == "bridge client does not expose status()"
+    assert any(
+        event["event_type"] == "ros_bridge.status"
+        and event["metadata"]["error_code"] == "ROS_BRIDGE_STATUS_UNAVAILABLE"
+        for event in status["events"]["recent"]
+    )
+
+
+def test_kernel_service_status_rejects_invalid_bridge_status_result():
+    class BadStatusClient:
+        def status(self):
+            return "ready"
+
+    service = KernelService(runtime_server=_runtime_with_bridge_client(BadStatusClient()))
+
+    status = service.status()
+
+    assert status["bridge_client"]["success"] is False
+    assert status["bridge_client"]["error_code"] == "ROS_RESULT_INVALID"
+    assert status["bridge_client"]["reason"] == "bridge client status returned str"
+    assert any(
+        event["event_type"] == "ros_bridge.status" and event["metadata"]["error_code"] == "ROS_RESULT_INVALID"
+        for event in status["events"]["recent"]
+    )
+
+
 def test_kernel_service_uses_rr_scheduler_from_kernel_config(tmp_path):
     service = KernelService(config=make_kernel_config(tmp_path, {"scheduler_policy": "rr"}))
 

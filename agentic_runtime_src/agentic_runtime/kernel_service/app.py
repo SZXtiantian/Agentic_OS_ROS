@@ -101,12 +101,13 @@ class KernelService:
         return response
 
     def status(self) -> dict[str, Any]:
+        bridge_status = self._bridge_client_status() if self.runtime_server is not None else None
         status = self.kernel_status()
         if self.runtime_server is None:
             return status
         skills = [skill.name for skill in self.runtime_server.registry.list_skills()]
         status["runtime"] = self.runtime_server.monitor.status(skills, ros_bridge=self.runtime_server.config.ros_bridge_mode)
-        status["bridge_client"] = self._bridge_client_status()
+        status["bridge_client"] = bridge_status
         return status
 
     def kernel_status(self) -> dict[str, Any]:
@@ -130,6 +131,7 @@ class KernelService:
         }
 
     def core_status(self) -> dict[str, Any]:
+        bridge_status = self._bridge_client_status() if self.runtime_server is not None else None
         status = {"kernel": self.kernel_status()}
         if self.runtime_server is not None:
             status.update(
@@ -137,7 +139,7 @@ class KernelService:
                     "runtime_scheduler": self.runtime_server.scheduler.status(),
                     "sessions": len(self.runtime_server.session_manager.list_sessions(limit=100)),
                     "bridge": self.runtime_server.bridge_manager.status(),
-                    "bridge_client": self._bridge_client_status(),
+                    "bridge_client": bridge_status,
                 }
             )
         return status
@@ -318,21 +320,66 @@ class KernelService:
 
     def _bridge_client_status(self) -> dict[str, Any]:
         bridge_client = getattr(self.runtime_server, "bridge_client", None)
-        if bridge_client is not None and hasattr(bridge_client, "status"):
-            try:
-                return bridge_client.status()
-            except Exception as exc:
-                return {
-                    "state": "unavailable",
-                    "provider": bridge_client.__class__.__name__,
-                    "error_code": "ROS_BRIDGE_STATUS_UNAVAILABLE",
-                    "reason": str(exc),
-                }
+        provider = bridge_client.__class__.__name__ if bridge_client is not None else ""
+        if bridge_client is None:
+            return self._bridge_status_error(
+                provider=provider,
+                error_code="ROS_BRIDGE_STATUS_UNAVAILABLE",
+                reason="bridge client is not configured",
+            )
+        if not hasattr(bridge_client, "status"):
+            return self._bridge_status_error(
+                provider=provider,
+                error_code="ROS_BRIDGE_STATUS_UNAVAILABLE",
+                reason="bridge client does not expose status()",
+            )
+        try:
+            result = bridge_client.status()
+        except Exception as exc:
+            return self._bridge_status_error(
+                provider=provider,
+                error_code="ROS_BRIDGE_STATUS_UNAVAILABLE",
+                reason=str(exc),
+            )
+        if not isinstance(result, dict):
+            return self._bridge_status_error(
+                provider=provider,
+                error_code="ROS_RESULT_INVALID",
+                reason=f"bridge client status returned {type(result).__name__}",
+            )
+        result.setdefault("provider", provider)
+        result.setdefault("state", "ready")
+        if str(result.get("state") or "").lower() not in {"ready", "unavailable", "degraded", "starting", "stopped"}:
+            return self._bridge_status_error(
+                provider=provider,
+                error_code="ROS_RESULT_INVALID",
+                reason=f"bridge client status returned invalid state {result.get('state')!r}",
+                data=result,
+            )
+        return result
+
+    def _bridge_status_error(
+        self,
+        *,
+        provider: str,
+        error_code: str,
+        reason: str,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.event_sink.emit(
+            "ros_bridge.status",
+            success=False,
+            provider=provider,
+            error_code=error_code,
+            reason=reason,
+        )
         return {
             "state": "unavailable",
-            "provider": bridge_client.__class__.__name__ if bridge_client is not None else "",
-            "error_code": "ROS_BRIDGE_STATUS_UNAVAILABLE",
-            "reason": "bridge client status is not implemented",
+            "provider": provider,
+            "success": False,
+            "error_code": error_code,
+            "reason": reason,
+            "data": data or {},
         }
 
     def _llm_status(self) -> dict[str, Any]:
