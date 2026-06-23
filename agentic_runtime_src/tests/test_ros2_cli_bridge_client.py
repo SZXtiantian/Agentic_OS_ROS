@@ -398,3 +398,97 @@ def test_ros2_cli_bridge_client_unparseable_response_returns_stable_error():
         assert status["last_error"]["operation"] == "capture_photo"
 
     asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_rejects_string_success_field():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"success": "false", "error_code": "", "reason": "", "state": {}}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.get_robot_state()
+        status = client.status()
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert "must be boolean" in result["reason"]
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "ROS_RESULT_INVALID"
+        assert status["last_error"]["operation"] == "get_robot_state"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_failure_without_error_code_is_invalid():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"success": false, "reason": "no frame", "image_path": "", "metadata_path": "", "evidence_json": "{}"}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.capture_photo("workspace", "photo", 5)
+        status = client.status()
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert result["reason"] == "no frame"
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "ROS_RESULT_INVALID"
+        assert status["last_error"]["operation"] == "capture_photo"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_safety_rejects_string_allowed_field():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"allowed": "false", "error_code": "", "reason": ""}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.check_safety("robot.navigate_to", {"place": "厨房"}, "app")
+        status = client.status()
+        assert result["allowed"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert "must be boolean" in result["reason"]
+        assert status["last_success"] is False
+        assert status["last_error"]["operation"] == "check_safety"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_safety_rejection_gets_stable_default_error():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"allowed": false, "reason": "forbidden zone"}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.check_safety("robot.navigate_to", {"place": "楼梯"}, "app")
+        status = client.status()
+        assert result["allowed"] is False
+        assert result["error_code"] == "SAFETY_REJECTED"
+        assert result["reason"] == "forbidden zone"
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "SAFETY_REJECTED"
+        assert status["last_error"]["operation"] == "check_safety"
+
+    asyncio.run(run())
+
+
+def test_ros2_cli_bridge_client_human_rejects_string_answered_field():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"answered": "false", "answer": "", "reason": ""}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.ask_human("Ready?", timeout_s=1)
+        status = client.status()
+        assert result["success"] is False
+        assert result["answered"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert "must be boolean" in result["reason"]
+        assert status["last_success"] is False
+        assert status["last_error"]["operation"] == "ask_human"
+
+    asyncio.run(run())

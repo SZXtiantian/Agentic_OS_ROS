@@ -58,7 +58,7 @@ Context syscalls run through the kernel access manager and emit `access.checked`
 Storage `sto_retrieve` is lexical SQLite FTS by default and returns `retrieval_mode: lexical_fts` with `semantic: false`. Semantic/vector retrieval may only be marked available when a real embedding/vector provider is configured; otherwise `status()["storage"]["semantic_retrieval"]` reports `STORAGE_SEMANTIC_PROVIDER_UNCONFIGURED`.
 Storage share policies live in the persistent SQLite share registry; deleting a file removes its share entry, and querying share policy for a missing file returns `STORAGE_NOT_FOUND` instead of stale success. `sto_share` checks access/intervention before revealing whether the target path exists.
 
-Runtime ROS bridge status includes `bridge_client` when a runtime server is wired. The real `Ros2CliBridgeClient.status()` exposes `ros2_cli_available`, `last_command`, `last_success`, and `last_error` so missing `ros2`, unavailable services/actions, timeouts, and invalid bridge responses remain visible after fail-fast errors. Bridge clients without a real `status()` contract report `ROS_BRIDGE_STATUS_UNAVAILABLE`; non-object or invalid status payloads report `ROS_RESULT_INVALID` and emit `ros_bridge.status`. `agentic-runtime status --json` returns the same kernel status surface instead of the legacy monitor-only view.
+Runtime ROS bridge status includes `bridge_client` when a runtime server is wired. The real `Ros2CliBridgeClient.status()` exposes `ros2_cli_available`, `last_command`, `last_success`, and `last_error` so missing `ros2`, unavailable services/actions, timeouts, invalid bridge responses, and structured backend failures remain visible after fail-fast errors. Bridge service/action results must include real boolean `success`, `allowed`, or `answered` fields according to the operation; string booleans such as `"false"` are rejected as `ROS_RESULT_INVALID`. Structured ROS capability failures without an error code are normalized to a stable failure code such as `ROS_RESULT_INVALID`, `SAFETY_REJECTED`, or `HUMAN_UNANSWERED` and reflected in `last_error`. Bridge clients without a real `status()` contract report `ROS_BRIDGE_STATUS_UNAVAILABLE`; non-object or invalid status payloads report `ROS_RESULT_INVALID` and emit `ros_bridge.status`. `agentic-runtime status --json` returns the same kernel status surface instead of the legacy monitor-only view.
 ROS2 bridge source packages do not provide a simulated navigation success path: `navigation_bridge_node` always dispatches to real Nav2 and reports `ROS_BRIDGE_UNAVAILABLE`, `ROS_SERVICE_UNAVAILABLE`, or `ROS_ACTION_TIMEOUT` when the dependency is missing or unavailable. `state_bridge_node` defaults to a real identity, reports unknown robot state fields as unknown/not localized, and returns `ROS_BRIDGE_PROFILE_UNAVAILABLE` or `ROS_BRIDGE_UNAVAILABLE` when the profile or concrete camera/arm/gripper backends are not visible.
 Runtime CLI, photo CLI, and natural-language gateway bridge readiness failures use the same stable `ROS_BRIDGE_UNAVAILABLE` code; older `AGENTIC_BRIDGE_UNAVAILABLE` text is historical and must not be emitted by production entrypoints.
 
@@ -164,7 +164,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 490 passed, 3 skipped
+# 495 passed, 3 skipped
 scripts/run_tests.sh
-# 490 passed, 3 deselected; Agentic OS MVP checks passed.
+# 495 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

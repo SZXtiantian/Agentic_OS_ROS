@@ -68,12 +68,13 @@ class Ros2CliBridgeClient:
                 {"name": name},
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("resolve_place", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("resolve_place", exc)
             return _bridge_error(exc, place=_normalize_place({}, fallback_name=name))
         place = _normalize_place(data.get("place") or {}, fallback_name=name)
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "place": place,
@@ -83,12 +84,13 @@ class Ros2CliBridgeClient:
         try:
             output = await self._service_call("/agentic/robot/get_state", "agentic_msgs/srv/GetRobotState", {})
             data = _parse_required_response(output)
+            success = self._finalize_response("get_robot_state", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("get_robot_state", exc)
             return _bridge_error(exc, state={})
         state = _normalize_state(data.get("state") or {})
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "state": state,
@@ -113,11 +115,12 @@ class Ros2CliBridgeClient:
             return {"allowed": False, "error_code": "SAFETY_BACKEND_UNAVAILABLE", "reason": str(exc)}
         try:
             data = _parse_required_response(output)
+            allowed = self._finalize_response("check_safety", data, "allowed", default_failure_code="SAFETY_REJECTED")
         except RosBridgeCommandError as exc:
             self._record_error("check_safety", exc)
             return {"allowed": False, "error_code": exc.error_code, "reason": exc.reason}
         return {
-            "allowed": bool(data.get("allowed", False)),
+            "allowed": allowed,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
         }
@@ -133,12 +136,13 @@ class Ros2CliBridgeClient:
                 timeout_s,
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("navigate_to", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("navigate_to", exc)
             return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "result": result_json,
@@ -153,12 +157,13 @@ class Ros2CliBridgeClient:
                 timeout_s + 5,
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("inspect_area", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("inspect_area", exc)
             return _bridge_error(exc, summary="", objects=[], anomalies=[], evidence_path="", evidence={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "summary": str(data.get("summary") or result_json.get("summary", "")),
             "objects": list(data.get("objects") or result_json.get("objects", [])),
@@ -176,12 +181,13 @@ class Ros2CliBridgeClient:
                 timeout_s + 5,
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("observe", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("observe", exc)
             return _bridge_error(exc, summary="", objects=[], evidence_path="", evidence={})
         evidence = _decode_json_field(data.get("evidence_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", data.get("summary", ""))),
             "summary": str(data.get("summary", "")),
@@ -199,12 +205,13 @@ class Ros2CliBridgeClient:
                 timeout_s + 5,
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("capture_photo", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("capture_photo", exc)
             return _bridge_error(exc, image_path="", metadata_path="", evidence={})
         evidence = _decode_json_field(data.get("evidence_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "image_path": str(data.get("image_path", "")),
@@ -220,12 +227,13 @@ class Ros2CliBridgeClient:
                 {"request_id": new_id("arm_state")},
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("get_arm_state", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("get_arm_state", exc)
             return _bridge_error(exc, state=_normalize_arm_state({}))
         state = _normalize_arm_state(data.get("state") or {})
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "state": state,
@@ -242,12 +250,13 @@ class Ros2CliBridgeClient:
                 timeout_s + 2,
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("move_arm_named", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("move_arm_named", exc)
             return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "result": result_json,
@@ -270,12 +279,13 @@ class Ros2CliBridgeClient:
         try:
             output = await self._service_call("/agentic/gripper/set", "agentic_msgs/srv/SetGripper", payload, timeout_s + 1)
             data = _parse_required_response(output)
+            success = self._finalize_response("set_gripper", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("set_gripper", exc)
             return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "reason": str(data.get("reason", "")),
             "result": result_json,
@@ -289,11 +299,12 @@ class Ros2CliBridgeClient:
                 {"reason": reason, "request_id": new_id("stop")},
             )
             data = _parse_required_response(output)
+            success = self._finalize_response("stop_robot", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("stop_robot", exc)
             return _bridge_error(exc, message="", reason=reason)
         return {
-            "success": bool(data.get("success", False)),
+            "success": success,
             "error_code": str(data.get("error_code", "")),
             "message": str(data.get("message", "")),
             "reason": reason,
@@ -319,10 +330,10 @@ class Ros2CliBridgeClient:
                 timeout_s,
             )
             data = _parse_required_response(output)
+            answered = self._finalize_response("ask_human", data, "answered", default_failure_code="HUMAN_UNANSWERED")
         except RosBridgeCommandError as exc:
             self._record_error("ask_human", exc)
             return {"success": False, "answered": False, "answer": "", "error_code": exc.error_code, "reason": exc.reason}
-        answered = bool(data.get("answered", False))
         return {
             "success": answered,
             "answered": answered,
@@ -440,6 +451,48 @@ class Ros2CliBridgeClient:
             "updated_at": _utc_now(),
         }
 
+    def _record_operation_result(
+        self,
+        operation: str,
+        *,
+        success: bool,
+        error_code: str = "",
+        reason: str = "",
+    ) -> None:
+        previous_command = list(self._last_status.get("command") or [])
+        self._last_status = {
+            "operation": operation,
+            "command": previous_command,
+            "success": success,
+            "error_code": error_code,
+            "reason": reason,
+            "updated_at": _utc_now(),
+        }
+
+    def _finalize_response(
+        self,
+        operation: str,
+        data: dict[str, Any],
+        bool_field: str,
+        *,
+        default_failure_code: str = "",
+    ) -> bool:
+        success = _require_bool_response_field(data, bool_field)
+        if success:
+            self._record_operation_result(operation, success=True)
+            return True
+
+        error_code = str(data.get("error_code") or default_failure_code)
+        reason = str(data.get("reason") or data.get("message") or "")
+        if not error_code:
+            error_code = "ROS_RESULT_INVALID"
+            reason = reason or f"ROS2 bridge result reported {bool_field}=False without error_code"
+        data["error_code"] = error_code
+        if reason:
+            data["reason"] = reason
+        self._record_operation_result(operation, success=False, error_code=error_code, reason=reason)
+        return False
+
     def _record_error(
         self,
         operation: str,
@@ -520,6 +573,15 @@ def _parse_required_response(output: str) -> dict[str, Any]:
     if not parsed:
         raise RosBridgeCommandError("ROS_RESULT_INVALID", "ROS2 bridge returned an empty or unparseable result")
     return parsed
+
+
+def _require_bool_response_field(data: dict[str, Any], field: str) -> bool:
+    if field not in data:
+        raise RosBridgeCommandError("ROS_RESULT_INVALID", f"ROS2 bridge result missing boolean {field} field")
+    value = data[field]
+    if not isinstance(value, bool):
+        raise RosBridgeCommandError("ROS_RESULT_INVALID", f"ROS2 bridge result field {field} must be boolean")
+    return value
 
 
 def _bridge_error(exc: RosBridgeCommandError, **extra: Any) -> dict[str, Any]:
