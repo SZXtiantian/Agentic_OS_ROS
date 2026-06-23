@@ -89,8 +89,8 @@ class MemoryManager:
         decision = self._check_access(subject_agent or note.owner_agent, "write", note)
         if not decision.get("success", True):
             return self._audit_result("remember", subject_agent or note.owner_agent, decision, memory_id=note.id)
-        result = self.provider.add_memory(note)
-        if result.get("success"):
+        result = self._call_provider("remember", self.provider.add_memory, note)
+        if self._is_success(result):
             self._evict_if_needed(note.owner_agent)
         return self._audit_result("remember", subject_agent or note.owner_agent, result, memory_id=note.id)
 
@@ -112,7 +112,7 @@ class MemoryManager:
         if not decision.get("success", True):
             return self._audit_result("search", agent_name, decision, query=query)
         result = self._call_provider("search", self.provider.retrieve_memory, query, agent_name, limit, user_id)
-        if not result.get("success", False):
+        if not self._is_success(result):
             return self._audit_result("search", agent_name, result, query=query)
         memories = list(result.get("memories") or [])
         memories.extend(self._retrieve_compressed_blocks(agent_name, query, limit - len(memories)))
@@ -125,12 +125,12 @@ class MemoryManager:
                 limit - len(memories),
                 user_id,
             )
-            if not persistent.get("success", False):
+            if not self._is_success(persistent):
                 return self._audit_result("search", agent_name, persistent, query=query)
             memories.extend(persistent.get("memories") or [])
         if self.two_tier_enabled and self.storage_manager is not None and len(memories) < limit:
             storage_matches = self._call_storage_retrieve(query, limit - len(memories))
-            if not storage_matches.get("success", False):
+            if not self._is_success(storage_matches):
                 return self._audit_result("search", agent_name, storage_matches, query=query)
             for match in storage_matches.get("matches", []):
                 memories.append(
@@ -150,7 +150,7 @@ class MemoryManager:
         return self._audit_result(
             "update",
             subject_agent or note.owner_agent,
-            self.provider.update_memory(note),
+            self._call_provider("update", self.provider.update_memory, note),
             memory_id=note.id,
         )
 
@@ -317,12 +317,12 @@ class MemoryManager:
         if self.access_manager is None:
             return {"success": True}
         probe = self._call_provider("get_access_probe", self.provider.get_memory, memory_id, "")
-        if not probe.get("success", False) and str(probe.get("error_code") or "") in {
+        if not self._is_success(probe) and str(probe.get("error_code") or "") in {
             "MEMORY_PROVIDER_UNAVAILABLE",
             "MEMORY_PROVIDER_RESULT_INVALID",
         }:
             return probe
-        if not probe.get("success", False):
+        if not self._is_success(probe):
             return {"success": True}
         note = self._note_from_mapping(dict(probe.get("memory") or {}))
         return self._check_access(agent_name, "read", note)
@@ -423,15 +423,7 @@ class MemoryManager:
                 "operation": action,
                 "provider_status": self._safe_provider_status(),
             }
-        if not isinstance(result, dict):
-            return {
-                "success": False,
-                "error_code": "MEMORY_PROVIDER_RESULT_INVALID",
-                "reason": f"provider returned {type(result).__name__}",
-                "operation": action,
-                "provider_status": self._safe_provider_status(),
-            }
-        return result
+        return self._normalize_result(result, action, "MEMORY_PROVIDER_RESULT_INVALID")
 
     def _call_provider(self, action: str, fn: Any, *args: Any) -> dict[str, Any]:
         try:
@@ -444,15 +436,7 @@ class MemoryManager:
                 "operation": action,
                 "provider_status": self._safe_provider_status(),
             }
-        if not isinstance(result, dict):
-            return {
-                "success": False,
-                "error_code": "MEMORY_PROVIDER_RESULT_INVALID",
-                "reason": f"provider returned {type(result).__name__}",
-                "operation": action,
-                "provider_status": self._safe_provider_status(),
-            }
-        return result
+        return self._normalize_result(result, action, "MEMORY_PROVIDER_RESULT_INVALID")
 
     def _call_storage_retrieve(self, query: str, limit: int) -> dict[str, Any]:
         try:
@@ -471,7 +455,14 @@ class MemoryManager:
                 "reason": f"storage retrieve returned {type(result).__name__}",
                 "operation": "search_storage_blocks",
             }
-        if not result.get("success", False):
+        if "success" in result and not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "MEMORY_STORAGE_RETRIEVE_FAILED",
+                "reason": "storage retrieve result success field must be boolean",
+                "operation": "search_storage_blocks",
+            }
+        if not self._is_success(result):
             forwarded = dict(result)
             forwarded.setdefault("operation", "search_storage_blocks")
             return forwarded
@@ -514,8 +505,12 @@ class MemoryManager:
             del blocks[: len(blocks) - self.max_blocks_per_agent]
         if self.two_tier_enabled and self.storage_manager is not None:
             relative_path = f"memory_blocks/{owner_agent}/{block.block_id}.json"
-            result = self.storage_manager.write(relative_path, block.to_dict())
-            if result.get("success"):
+            result = self._normalize_result(
+                self.storage_manager.write(relative_path, block.to_dict()),
+                "write_storage_block",
+                "MEMORY_STORAGE_WRITE_FAILED",
+            )
+            if self._is_success(result):
                 block.storage_ref = relative_path
 
     def _retrieve_compressed_blocks(self, agent_name: str, query: str, limit: int) -> list[dict[str, Any]]:
@@ -539,9 +534,31 @@ class MemoryManager:
         return matches
 
     def _kernel_response(self, result: dict[str, Any]) -> KernelResponse:
-        if result.get("success", False):
+        if self._is_success(result):
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "MEMORY_PROVIDER_UNAVAILABLE"), metadata=result)
+
+    def _normalize_result(self, result: Any, operation: str, invalid_code: str) -> dict[str, Any]:
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": invalid_code,
+                "reason": f"provider returned {type(result).__name__}",
+                "operation": operation,
+                "provider_status": self._safe_provider_status(),
+            }
+        if "success" in result and not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": invalid_code,
+                "reason": "provider result success field must be boolean",
+                "operation": operation,
+                "provider_status": self._safe_provider_status(),
+            }
+        return result
+
+    def _is_success(self, result: dict[str, Any]) -> bool:
+        return result.get("success") is True
 
     def _default_db_path(self) -> Path:
         return Path(tempfile.gettempdir()) / f"agentic_kernel_memory_{uuid4().hex}.sqlite3"

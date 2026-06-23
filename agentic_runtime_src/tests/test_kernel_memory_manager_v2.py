@@ -1,4 +1,4 @@
-from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.memory import (
     ChromaMemoryProvider,
     CompressedMemoryBlock,
@@ -113,6 +113,49 @@ def test_memory_get_reports_persistent_provider_failure():
     assert result["reason"] == "persistent db closed"
 
 
+def test_memory_provider_success_field_must_be_boolean_on_remember():
+    class MalformedProvider(InMemoryMemoryProvider):
+        def add_memory(self, note):
+            return {"success": "true", "memory_id": note.id}
+
+    manager = MemoryManager(provider=MalformedProvider())
+
+    result = manager.add(MemoryNote(id="n1", content="kitchen", owner_agent="agent_a"))
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_RESULT_INVALID"
+    assert "success field must be boolean" in result["reason"]
+
+
+def test_memory_provider_success_field_must_be_boolean_on_get():
+    class MalformedProvider(InMemoryMemoryProvider):
+        def get_memory(self, memory_id: str, agent_name: str = ""):
+            return {"success": "false", "error_code": "MEMORY_NOT_FOUND"}
+
+    manager = MemoryManager(provider=MalformedProvider())
+
+    result = manager.get("n1", "agent_a")
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_RESULT_INVALID"
+
+
+def test_memory_provider_success_field_must_be_boolean_on_delete():
+    class MalformedProvider(InMemoryMemoryProvider):
+        def remove_memory(self, memory_id: str, agent_name: str = ""):
+            return {"success": "false", "error_code": "MEMORY_NOT_FOUND"}
+
+    manager = MemoryManager(
+        provider=MalformedProvider(),
+        access_manager=AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider()),
+    )
+
+    result = manager.remove("n1", "agent_a")
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_RESULT_INVALID"
+
+
 def test_memory_retrieve_reports_persistent_provider_failure():
     class FailingPersistentProvider(InMemoryMemoryProvider):
         def retrieve_memory(self, query: str, agent_name: str, limit: int = 5, user_id: str = ""):
@@ -126,6 +169,19 @@ def test_memory_retrieve_reports_persistent_provider_failure():
     assert result["success"] is False
     assert result["error_code"] == "MEMORY_PROVIDER_UNAVAILABLE"
     assert result["reason"] == "persistent db closed"
+
+
+def test_memory_retrieve_rejects_non_boolean_provider_success():
+    class MalformedProvider(InMemoryMemoryProvider):
+        def retrieve_memory(self, query: str, agent_name: str, limit: int = 5, user_id: str = ""):
+            return {"success": "true", "memories": []}
+
+    manager = MemoryManager(provider=MalformedProvider())
+
+    result = manager.retrieve("agent_a", "kitchen", limit=5)
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_PROVIDER_RESULT_INVALID"
 
 
 def test_two_tier_eviction_writes_compressed_block_to_storage(tmp_path):
@@ -164,6 +220,19 @@ def test_two_tier_eviction_writes_compressed_block_to_storage(tmp_path):
     assert retrieved["memories"][0]["metadata"]["compressed_block"]["notes"] == ["n1"]
 
 
+def test_two_tier_eviction_rejects_non_boolean_storage_write_success():
+    class MalformedStorage:
+        def write(self, relative_path, content):
+            return {"success": "true", "path": relative_path}
+
+    manager = MemoryManager(max_notes_per_agent=1, two_tier_enabled=True, storage_manager=MalformedStorage())
+
+    manager.add(MemoryNote(id="n1", content="old kitchen note", owner_agent="agent_a"))
+    manager.add(MemoryNote(id="n2", content="new kitchen note", owner_agent="agent_a"))
+
+    assert not manager.compressed_blocks["agent_a"][0].storage_ref
+
+
 def test_memory_retrieve_reports_storage_block_backend_failure():
     class FailingStorage:
         def retrieve(self, query: str, collection_name: str = "", limit: int = 5):
@@ -177,6 +246,20 @@ def test_memory_retrieve_reports_storage_block_backend_failure():
     assert result["error_code"] == "STORAGE_INDEX_UNAVAILABLE"
     assert result["reason"] == "fts db missing"
     assert result["operation"] == "search_storage_blocks"
+
+
+def test_memory_retrieve_rejects_non_boolean_storage_success():
+    class MalformedStorage:
+        def retrieve(self, query: str, collection_name: str = "", limit: int = 5):
+            return {"success": "true", "matches": []}
+
+    manager = MemoryManager(provider=InMemoryMemoryProvider(), two_tier_enabled=True, storage_manager=MalformedStorage())
+
+    result = manager.retrieve("agent_a", "red block", limit=5)
+
+    assert result["success"] is False
+    assert result["error_code"] == "MEMORY_STORAGE_RETRIEVE_FAILED"
+    assert "success field must be boolean" in result["reason"]
 
 
 def test_hash_embedding_provider_is_deterministic():
