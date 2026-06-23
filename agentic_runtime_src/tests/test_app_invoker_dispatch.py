@@ -2,6 +2,7 @@ import asyncio
 
 from agentic_runtime.app_invoker import AppInvoker
 from agentic_runtime.dispatcher.app_index import AppIndex, AppIndexEntry
+from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from runtime_test_helpers import create_test_runtime_server
 
 
@@ -14,7 +15,7 @@ def test_app_invoker_loads_aios_robot_photographer_and_reports_missing_bridge(tm
         invoker = AppInvoker(server, AppIndex.load(app_root))
         result = await invoker.run_app(
             "robot_photographer_agent",
-            {"text": "拍一张照片", "mock": True},
+            {"text": "拍一张照片"},
             parent_session_id="sess_parent",
             route_plan_id="plan_route",
         )
@@ -22,6 +23,25 @@ def test_app_invoker_loads_aios_robot_photographer_and_reports_missing_bridge(tm
         assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         assert result["session_id"]
         assert server.test_bridge_calls[0]["command"][3] == "/agentic/safety/check"
+
+    asyncio.run(run())
+
+
+def test_app_invoker_rejects_mock_task_input_before_loading_runtime(app_root):
+    async def run():
+        server = create_test_runtime_server()
+        invoker = AppInvoker(server, AppIndex.load(app_root))
+        result = await invoker.run_app(
+            "robot_photographer_agent",
+            {"text": "拍一张照片", "mock": True},
+            parent_session_id="sess_parent",
+            route_plan_id="plan_route",
+        )
+        assert result["status"] == "failed"
+        assert result["session_id"] == ""
+        assert result["result"]["success"] is False
+        assert result["result"]["error_code"] == SIMULATED_BACKEND_DISABLED
+        assert server.test_bridge_calls == []
 
     asyncio.run(run())
 

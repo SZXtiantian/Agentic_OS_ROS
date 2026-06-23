@@ -78,7 +78,7 @@ Runtime skill backend responses must explicitly include `success` or, for human 
 
 Human ask runs through the runtime `human.ask` skill backend with timeout and correlation/call ID metadata. When no explicit `correlation_id` is supplied, the runtime uses the skill `call_id` as the durable queue correlation ID, so JSONL requests, status, and cancel requests refer to the same active operation. `human.status(call_id=...)` and `human.cancel` inspect the active human/skill registry; unavailable managers fail with `SKILL_BACKEND_UNAVAILABLE`, and missing active calls return `SYSCALL_NOT_FOUND`.
 
-Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful.
+Runtime app invocation results are contract-checked at the `AppInvoker`, `AppManager`, and `SessionRunner` boundaries. Direct app results must be objects with an explicit boolean `success`; session-wrapper results must contain `result.success` as a boolean. Non-object results, missing `success`, or non-boolean success fields fail with `APP_RESULT_INVALID` and are recorded as failed sessions instead of being inferred as successful. `AppInvoker` also strips falsy legacy `mock` task fields and rejects truthy `mock` requests with `SIMULATED_BACKEND_DISABLED` before loading an app or touching a bridge.
 
 ## Permissions And Intervention
 
@@ -153,7 +153,7 @@ Latest full local verification for this document update baseline:
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pytest -q
-# 456 passed, 3 skipped
+# 458 passed, 3 skipped
 scripts/run_tests.sh
-# 456 passed, 3 deselected; Agentic OS MVP checks passed.
+# 458 passed, 3 deselected; Agentic OS MVP checks passed.
 ```

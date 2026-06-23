@@ -10,6 +10,7 @@ import yaml
 
 from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_runtime.server import RuntimeServer
+from agentic_runtime.simulation import SIMULATED_BACKEND_DISABLED
 from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest
@@ -42,10 +43,20 @@ def test_entry_loads_and_motion_rejected_without_permission(monkeypatch):
     monkeypatch.delenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", raising=False)
     module = _load_entry()
     server = create_test_runtime_server()
-    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
-    result = agent.run({"text": "把相机抬起来再拍一张", "mock": True})
+    agent = module.RobotPhotographerAgent(runtime=server)
+    result = agent.run({"text": "把相机抬起来再拍一张"})
     assert result["success"] is False
     assert result["error_code"] == "ARM_MOTION_DISABLED"
+
+
+def test_entry_rejects_mock_request_even_with_runtime():
+    module = _load_entry()
+    server = create_test_runtime_server()
+    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
+    result = agent.run({"text": "拍一张照片", "mock": True})
+    assert result["success"] is False
+    assert result["error_code"] == SIMULATED_BACKEND_DISABLED
+    assert server.test_bridge_calls == []
 
 
 def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, monkeypatch):
@@ -58,8 +69,8 @@ def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, mo
         module = _load_entry()
         server = create_test_runtime_server()
         server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
-        agent = module.RobotPhotographerAgent(runtime=server, mock=True)
-        result = await agent.arun({"text": "拍一张照片", "mock": True})
+        agent = module.RobotPhotographerAgent(runtime=server)
+        result = await agent.arun({"text": "拍一张照片"})
         app_result = result["result"]
         assert result["status"] == "failed"
         assert app_result["success"] is False
@@ -71,7 +82,7 @@ def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, mo
         session = server.session_manager.get_session(result["session_id"])
         assert session is not None
         assert "mock" not in session.task["task_input"]
-        recent = await agent.arun({"text": "查看最近照片", "mock": True})
+        recent = await agent.arun({"text": "查看最近照片"})
         photos = recent["result"]["steps"][0]["photos"]
         assert photos == []
 
@@ -82,8 +93,8 @@ def test_motion_requires_confirmation_even_with_env(monkeypatch):
     monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
     module = _load_entry()
     server = create_test_runtime_server()
-    agent = module.RobotPhotographerAgent(runtime=server, mock=True)
-    result = agent.run({"text": "把相机抬起来再拍一张", "allow_arm_motion": True, "mock": True})
+    agent = module.RobotPhotographerAgent(runtime=server)
+    result = agent.run({"text": "把相机抬起来再拍一张", "allow_arm_motion": True})
     assert result["success"] is False
     assert result["error_code"] == "ARM_CONFIRMATION_REQUIRED"
 
@@ -95,13 +106,12 @@ def test_motion_allowed_with_env_flag_and_confirmation(monkeypatch):
         module = _load_entry()
         server = create_test_runtime_server()
         server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
-        agent = module.RobotPhotographerAgent(runtime=server, mock=True)
+        agent = module.RobotPhotographerAgent(runtime=server)
         result = await agent.arun(
             {
                 "text": "把相机抬起来再拍一张",
                 "allow_arm_motion": True,
                 "assume_yes": True,
-                "mock": True,
             }
         )
         app_result = result["result"]
@@ -125,13 +135,12 @@ def test_multi_angle_capture_reports_missing_robot_bridge(tmp_path, monkeypatch)
         module = _load_entry()
         server = create_test_runtime_server()
         server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
-        agent = module.RobotPhotographerAgent(runtime=server, mock=True)
+        agent = module.RobotPhotographerAgent(runtime=server)
         result = await agent.arun(
             {
                 "text": "拍一组多角度照片并验证差异",
                 "allow_arm_motion": True,
                 "assume_yes": True,
-                "mock": True,
             }
         )
         app_result = result["result"]

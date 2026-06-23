@@ -32,7 +32,7 @@ class RobotPhotographerAgent:
     async def arun(self, task_input: Any) -> dict[str, Any]:
         task = _normalize_task(task_input)
         requested_simulated = bool(task.pop("mock", False) or self._legacy_simulated_requested)
-        if self.runtime is None and requested_simulated:
+        if requested_simulated:
             return {
                 "schema_version": "1.0",
                 "success": False,
