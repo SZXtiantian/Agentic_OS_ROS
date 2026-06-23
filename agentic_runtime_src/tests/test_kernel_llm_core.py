@@ -472,7 +472,12 @@ def test_llm_adapter_cancel_missing_call_returns_syscall_not_found():
 
 def test_llm_adapter_can_cancel_active_syscall_by_id():
     provider = BlockingProvider()
-    adapter = LLMAdapter([LLMConfig(name="blocking", backend="openai_compatible")], providers={"blocking": provider})
+    sink = InMemoryKernelEventSink()
+    adapter = LLMAdapter(
+        [LLMConfig(name="blocking", backend="openai_compatible")],
+        providers={"blocking": provider},
+        event_sink=sink,
+    )
     syscall = create_syscall("agent_a", LLMQuery(operation_type="chat"))
     result: dict[str, KernelResponse] = {}
 
@@ -481,14 +486,30 @@ def test_llm_adapter_can_cancel_active_syscall_by_id():
     assert provider.entered.wait(timeout=1.0)
     assert syscall.syscall_id in adapter.status()["active"]
 
+    active_status = adapter.address_request(
+        create_syscall("agent_a", LLMQuery(operation_type="status", params={"call_id": syscall.syscall_id}))
+    )
+    missing_status = adapter.address_request(
+        create_syscall("agent_a", LLMQuery(operation_type="status", params={"call_id": "missing"}))
+    )
     cancel = adapter.address_request(create_syscall("agent_a", LLMQuery(operation_type="cancel", params={"call_id": syscall.syscall_id})))
     provider.release.set()
     thread.join(timeout=1.0)
 
+    assert active_status.success is True
+    assert active_status.data["active_call"] == {"call_id": syscall.syscall_id}
+    assert missing_status.success is False
+    assert missing_status.error_code == "SYSCALL_NOT_FOUND"
     assert cancel.success is True
     assert result["response"].success is False
     assert result["response"].error_code == LLMCoreErrorCode.CANCELLED
     assert adapter.status()["active"] == []
+    assert any(
+        event["event_type"] == "llm.audit"
+        and event["metadata"]["action"] == "status"
+        and event["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
+        for event in sink.recent(limit=20)
+    )
 
 
 def test_llm_adapter_batch_handles_cancel_without_provider_call():

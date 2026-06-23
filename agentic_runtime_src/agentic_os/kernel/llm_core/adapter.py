@@ -47,7 +47,7 @@ class LLMAdapter:
 
     def address_request(self, syscall: KernelSyscall) -> KernelResponse:
         if syscall.operation_type in {"llm_status", "status"}:
-            return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+            return self._status_response(_cancel_call_id(syscall.params))
         if syscall.operation_type in {"llm_cancel", "cancel"}:
             return self.cancel(_cancel_call_id(syscall.params))
         query = getattr(syscall, "query", None)
@@ -80,7 +80,7 @@ class LLMAdapter:
         indexed_queries: list[tuple[int, KernelSyscall, LLMQuery, threading.Event]] = []
         for index, syscall in enumerate(syscalls):
             if syscall.operation_type in {"llm_status", "status"}:
-                responses[index] = KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+                responses[index] = self._status_response(_cancel_call_id(syscall.params))
                 continue
             if syscall.operation_type in {"llm_cancel", "cancel"}:
                 responses[index] = self.cancel(_cancel_call_id(syscall.params))
@@ -124,7 +124,7 @@ class LLMAdapter:
 
     def complete(self, query: LLMQuery) -> KernelResponse:
         if query.operation_type in {"llm_status", "status"}:
-            return KernelResponse.ok({"status": self.status()}, data={"status": self.status()})
+            return self._status_response(_cancel_call_id(query.params))
         if query.operation_type in {"llm_cancel", "cancel"}:
             return self.cancel(str(query.params.get("call_id") or query.params.get("syscall_id") or ""))
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
@@ -229,7 +229,7 @@ class LLMAdapter:
             return LocalBackendProvider(config)
         return UnsupportedLLMProvider(config)
 
-    def status(self) -> dict[str, Any]:
+    def status(self, call_id: str = "") -> dict[str, Any]:
         providers = []
         for config in self.llm_configs:
             provider_status = self._config_status(config)
@@ -246,12 +246,41 @@ class LLMAdapter:
             )
         with self._active_lock:
             active = sorted(self._active)
+        if call_id:
+            if call_id not in active:
+                result = {
+                    "success": False,
+                    "error_code": "SYSCALL_NOT_FOUND",
+                    "reason": "LLM call_id is not active",
+                    "call_id": call_id,
+                    "active": active,
+                    "active_count": len(active),
+                }
+                self._audit_status_result(call_id, result)
+                return result
+            result = {
+                "success": True,
+                "call_id": call_id,
+                "active_call": {"call_id": call_id},
+                "active": active,
+                "active_count": len(active),
+            }
+            self._audit_status_result(call_id, result)
+            return result
         return {
             "providers": providers,
             "state": "ready" if any(item["state"] == "configured" for item in providers) else "unavailable",
             "active": active,
             "active_count": len(active),
         }
+
+    def _status_response(self, call_id: str = "") -> KernelResponse:
+        status = self.status(call_id=call_id)
+        if call_id:
+            if status.get("success", False):
+                return KernelResponse.ok(status, data=status)
+            return KernelResponse.error(str(status.get("error_code") or "SYSCALL_NOT_FOUND"), metadata=status)
+        return KernelResponse.ok({"status": status}, data={"status": status})
 
     def cancel(self, call_id: str = "") -> KernelResponse:
         if not call_id:
@@ -438,6 +467,19 @@ class LLMAdapter:
             call_id=call_id,
             success=response.success,
             error_code=response.error_code,
+            external_provider="",
+        )
+
+    def _audit_status_result(self, call_id: str, result: dict[str, Any]) -> None:
+        if self.event_sink is None:
+            return
+        self.event_sink.emit(
+            "llm.audit",
+            action="status",
+            operation_type="llm_status",
+            call_id=call_id,
+            success=bool(result.get("success", False)),
+            error_code=str(result.get("error_code") or ""),
             external_provider="",
         )
 

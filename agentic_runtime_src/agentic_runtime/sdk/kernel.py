@@ -139,8 +139,8 @@ class KernelLLMAPI(_KernelBaseAPI):
         )
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
-    async def status(self, **kwargs):
-        query = LLMQuery(operation_type="llm_status", action_type="status")
+    async def status(self, call_id: str = "", **kwargs):
+        query = LLMQuery(operation_type="llm_status", params={"call_id": call_id}, action_type="status")
         return self._execute(query, timeout_s=kwargs.get("timeout_s"))
 
     async def cancel(self, call_id: str = "", **kwargs):
