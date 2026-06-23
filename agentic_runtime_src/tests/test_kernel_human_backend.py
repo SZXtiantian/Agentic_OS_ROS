@@ -531,3 +531,56 @@ def test_runtime_human_backend_does_not_inject_default_permission(tmp_path, monk
 
     assert result["success"] is False
     assert result["error_code"] == "PERMISSION_DENIED"
+
+
+def test_runtime_human_backend_status_exposes_channel_status_exception():
+    class ExplodingHumanChannel:
+        def status(self):
+            raise OSError("queue path unavailable")
+
+    executor = RuntimeCompatibleExecutor()
+    backend = RuntimeHumanBackend(
+        SimpleNamespace(executor=executor, registry=SimpleNamespace(), human_channel=ExplodingHumanChannel())
+    )
+
+    status = backend.status()
+
+    assert status["success"] is False
+    assert status["state"] == "unavailable"
+    assert status["error_code"] == "HUMAN_BACKEND_STATUS_UNAVAILABLE"
+    assert status["reason"] == "queue path unavailable"
+    assert status["human_channel"]["error_code"] == "HUMAN_BACKEND_STATUS_UNAVAILABLE"
+
+
+def test_runtime_human_backend_rejects_malformed_channel_cancel_without_skill_fallback():
+    class MalformedHumanChannel:
+        def cancel(self, correlation_id, *, session_id=""):
+            return {"cancelled": [correlation_id]}
+
+    executor = RuntimeCompatibleExecutor()
+    backend = RuntimeHumanBackend(
+        SimpleNamespace(executor=executor, registry=SimpleNamespace(), human_channel=MalformedHumanChannel())
+    )
+
+    result = backend.cancel("sess_human", call_id="call_1")
+
+    assert result["success"] is False
+    assert result["error_code"] == "HUMAN_RESULT_INVALID"
+    assert result["reason"] == "human channel cancel missing boolean success field"
+    assert executor.cancelled_calls == []
+
+
+def test_runtime_human_backend_falls_back_to_skill_cancel_only_for_missing_channel_call():
+    class MissingHumanChannel:
+        def cancel(self, correlation_id, *, session_id=""):
+            return {"success": False, "error_code": "SYSCALL_NOT_FOUND", "correlation_id": correlation_id}
+
+    executor = RuntimeCompatibleExecutor()
+    backend = RuntimeHumanBackend(
+        SimpleNamespace(executor=executor, registry=SimpleNamespace(), human_channel=MissingHumanChannel())
+    )
+
+    result = backend.cancel("sess_human", call_id="call_1")
+
+    assert result["success"] is True
+    assert executor.cancelled_calls == [("sess_human", "call_1")]

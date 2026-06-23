@@ -39,17 +39,89 @@ class RuntimeHumanBackend:
 
     def status(self) -> dict[str, Any]:
         status = self.skill_backend.status()
+        if not isinstance(status, dict):
+            status = {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": f"skill backend status returned {type(status).__name__}",
+            }
         if status.get("success", False):
             status["backend"] = "runtime_human_skill"
         human_channel = getattr(self.runtime_server, "human_channel", None)
         if human_channel is not None and hasattr(human_channel, "status"):
-            status["human_channel"] = human_channel.status()
+            channel_status = self._channel_status(human_channel)
+            status["human_channel"] = channel_status
+            if not channel_status.get("success", False):
+                status["success"] = False
+                status["state"] = "unavailable"
+                status["error_code"] = str(channel_status.get("error_code") or "HUMAN_BACKEND_STATUS_UNAVAILABLE")
+                status["reason"] = str(channel_status.get("reason") or "human channel status unavailable")
         return status
 
     def cancel(self, session_id: str, call_id: str = "") -> dict[str, Any]:
         human_channel = getattr(self.runtime_server, "human_channel", None)
         if call_id and human_channel is not None and hasattr(human_channel, "cancel"):
-            result = human_channel.cancel(call_id, session_id=session_id)
+            result = self._channel_cancel(human_channel, session_id, call_id)
             if result.get("success", False):
                 return result
+            if result.get("error_code") != "SYSCALL_NOT_FOUND":
+                return result
         return self.skill_backend.cancel(session_id, call_id=call_id)
+
+    def _channel_status(self, human_channel: Any) -> dict[str, Any]:
+        try:
+            result = human_channel.status()
+        except Exception as exc:
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_BACKEND_STATUS_UNAVAILABLE",
+                "reason": str(exc),
+            }
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": f"human channel status returned {type(result).__name__}",
+            }
+        if "success" not in result or not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human channel status missing boolean success field",
+                "data": dict(result),
+            }
+        return dict(result)
+
+    def _channel_cancel(self, human_channel: Any, session_id: str, call_id: str) -> dict[str, Any]:
+        try:
+            result = human_channel.cancel(call_id, session_id=session_id)
+        except Exception as exc:
+            return {
+                "success": False,
+                "error_code": "HUMAN_BACKEND_UNAVAILABLE",
+                "reason": str(exc),
+                "session_id": session_id,
+                "call_id": call_id,
+            }
+        if not isinstance(result, dict):
+            return {
+                "success": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": f"human channel cancel returned {type(result).__name__}",
+                "session_id": session_id,
+                "call_id": call_id,
+            }
+        if "success" not in result or not isinstance(result.get("success"), bool):
+            return {
+                "success": False,
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human channel cancel missing boolean success field",
+                "session_id": session_id,
+                "call_id": call_id,
+                "data": dict(result),
+            }
+        return dict(result)
