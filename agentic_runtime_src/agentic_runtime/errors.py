@@ -52,8 +52,8 @@ class AgenticRuntimeError(Exception):
 
 
 class PermissionDeniedError(AgenticRuntimeError):
-    def __init__(self, message: str = "permission denied") -> None:
-        super().__init__("PERMISSION_DENIED", message, True, ["ask_human", "cancel"])
+    def __init__(self, message: str = "permission denied", code: str = "PERMISSION_DENIED") -> None:
+        super().__init__(code, message, True, ["ask_human", "cancel"])
 
 
 class SafetyRejectedError(AgenticRuntimeError):

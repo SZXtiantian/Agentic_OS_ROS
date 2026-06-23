@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
 from agentic_runtime.sdk import AgentContext
@@ -56,6 +57,7 @@ def test_read_only_robot_photographer_reports_missing_camera_bridge(tmp_path, mo
     async def run():
         module = _load_entry()
         server = create_test_runtime_server()
+        server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun({"text": "拍一张照片", "mock": True})
         app_result = result["result"]
@@ -92,6 +94,7 @@ def test_motion_allowed_with_env_flag_and_confirmation(monkeypatch):
     async def run():
         module = _load_entry()
         server = create_test_runtime_server()
+        server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun(
             {
@@ -121,6 +124,7 @@ def test_multi_angle_capture_reports_missing_robot_bridge(tmp_path, monkeypatch)
     async def run():
         module = _load_entry()
         server = create_test_runtime_server()
+        server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
         agent = module.RobotPhotographerAgent(runtime=server, mock=True)
         result = await agent.arun(
             {
@@ -148,6 +152,7 @@ def test_multi_angle_verification_failure_still_runs_arm_home(tmp_path, monkeypa
 
     async def run():
         server = create_test_runtime_server()
+        server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
         spec = importlib.util.spec_from_file_location("robot_photographer_agent.main", APP_DIR / "main.py")
         module = importlib.util.module_from_spec(spec)
         assert spec and spec.loader

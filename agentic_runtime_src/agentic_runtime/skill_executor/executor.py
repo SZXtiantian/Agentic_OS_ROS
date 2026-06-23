@@ -86,10 +86,15 @@ class SkillExecutor:
                         subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),
                         action="execute",
                         resource=AccessResource(self._access_resource_type(skill.name), skill.name),
+                        irreversible=self._requires_intervention(skill.name),
+                        reason=f"runtime skill execution: {skill.name}",
                     )
                 )
                 if not access_decision.allowed:
-                    raise PermissionDeniedError(access_decision.reason or access_decision.error_code)
+                    raise PermissionDeniedError(
+                        access_decision.reason or access_decision.error_code,
+                        code=access_decision.error_code or "PERMISSION_DENIED",
+                    )
 
             if skill.name == "robot.stop":
                 self.cancellation_manager.cancel_session(session_id)
@@ -257,6 +262,14 @@ class SkillExecutor:
         if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo"}:
             return "robot_sensor"
         return "robot_motion"
+
+    def _requires_intervention(self, skill_name: str) -> bool:
+        return skill_name in {
+            "robot.navigate_to",
+            "robot.inspect_area",
+            "arm.move_named",
+            "gripper.set",
+        }
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
         if not isinstance(raw, dict):

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.system_call import RobotCapabilityQuery, ToolQuery
 from agentic_runtime.errors import ResourceLockedError
 from agentic_runtime.kernel_service import KernelService
@@ -60,6 +61,7 @@ def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
 
 def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge(tmp_path, monkeypatch):
     server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
+    server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
 
     class SpyAccessManager:
         def __init__(self, delegate) -> None:
@@ -99,6 +101,30 @@ def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge
     assert record["resource_lock_result"] == "not_required"
     assert record["status"] == "rejected"
     assert record["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+
+
+def test_robot_skill_motion_requires_intervention_before_bridge_call(tmp_path, monkeypatch):
+    server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
+
+    async def run():
+        result = await server.executor.execute(
+            _robot_app(),
+            "robot.navigate_to",
+            {"place": "厨房", "timeout_s": 2},
+            "sess_robot_intervention",
+        )
+        assert result.success is False
+        assert result.error_code == "ACCESS_INTERVENTION_REQUIRED"
+
+    asyncio.run(run())
+
+    assert bridge_calls == []
+    record = server.audit_logger.recent(limit=1)[0]
+    assert record["skill_name"] == "robot.navigate_to"
+    assert record["permission_result"] == "denied"
+    assert record["safety_result"] == "not_required"
+    assert record["status"] == "rejected"
+    assert record["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
 
 
 def test_same_base_motion_lock_rejects_parallel_sessions_without_bridge_dependency():
@@ -166,6 +192,7 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
     server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     service = server.kernel_service
+    service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
     service.start()
     try:
         result = service.execute_request(
@@ -200,6 +227,37 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
     assert status["bridge_client"]["last_success"] is False
     assert status["bridge_client"]["last_error"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
     assert status["bridge_client"]["last_command"][:4] == ["ros2", "service", "call", "/agentic/safety/check"]
+
+
+def test_kernel_service_robot_motion_requires_intervention_before_bridge(tmp_path, monkeypatch):
+    server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
+
+    service = server.kernel_service
+    service.start()
+    try:
+        result = service.execute_request(
+            "robot_kernel_app",
+            RobotCapabilityQuery(
+                operation_type="execute_skill",
+                skill_name="robot.navigate_to",
+                params={"place": "厨房", "timeout_s": 2},
+                app_id="robot_kernel_app",
+                session_id="sess_kernel_robot_intervention",
+                metadata={"permissions": ["robot.move"]},
+            ),
+            timeout_s=3.0,
+        )
+        status = service.status()
+    finally:
+        service.stop()
+
+    assert result.success is False
+    assert result.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert bridge_calls == []
+    assert any(
+        event["event_type"] == "robot.audit" and event["metadata"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+        for event in status["events"]["recent"]
+    )
 
 
 def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monkeypatch):

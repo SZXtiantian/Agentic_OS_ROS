@@ -201,6 +201,24 @@ def test_robot_motion_requires_robot_operator_group():
     assert allowed.allowed is True
 
 
+def test_robot_motion_with_permission_requires_intervention_when_marked_irreversible():
+    request = AccessRequest(
+        subject=AccessSubject(agent_name="agent_a", permissions=("robot.move",)),
+        action="execute",
+        resource=AccessResource("robot_motion", "robot.navigate_to"),
+        irreversible=True,
+    )
+
+    intervention = AccessManager().check(request)
+    allowed = AccessManager(intervention_provider=AlwaysAllowTestInterventionProvider()).check(request)
+
+    assert intervention.allowed is False
+    assert intervention.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert intervention.requires_intervention is True
+    assert allowed.allowed is True
+    assert allowed.requires_intervention is True
+
+
 def test_dynamic_acl_can_allow_private_resource():
     store = InMemoryAccessStore(
         [

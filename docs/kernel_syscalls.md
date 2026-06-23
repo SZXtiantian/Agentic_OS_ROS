@@ -52,6 +52,8 @@ Human requests are durable JSONL queue records under the runtime human channel r
 
 `human.ask` requires explicit `human.ask` permission in syscall metadata before the runtime backend is called. With permission present, it is still treated as an intervention-gated operation; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`.
 
+Runtime robot motion skills such as `robot.navigate_to`, `robot.inspect_area`, `arm.move_named`, and `gripper.set` require both explicit robot permissions and operator intervention before safety checks or ROS bridge calls run. Without an intervention backend they fail with `ACCESS_INTERVENTION_REQUIRED` and emit audit/status evidence; `robot.stop` remains permission-gated but is not delayed by intervention.
+
 LLM status exposes provider configuration state and active `call_id`s. Cancelling an unknown LLM call returns `SYSCALL_NOT_FOUND`; cancelling an active call returns a cancel-request acknowledgement and the in-flight syscall returns `LLM_CANCELLED` once control returns from the provider call.
 
 Configured external LLM provider calls require explicit `llm.external.call` permission in syscall metadata. When a provider is configured and the permission is present, the call is still intervention-gated; without an operator intervention backend it returns `ACCESS_INTERVENTION_REQUIRED`. Missing provider configuration still fails as `LLM_PROVIDER_UNCONFIGURED` before any access prompt because no external call is attempted.
