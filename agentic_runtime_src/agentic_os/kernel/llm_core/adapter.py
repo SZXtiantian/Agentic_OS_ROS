@@ -354,11 +354,17 @@ class LLMAdapter:
         }
 
     def _check_external_access(self, syscall: KernelSyscall | None, query: LLMQuery) -> KernelResponse | None:
-        if self.access_manager is None:
-            return None
         candidates = self.router.candidates(selected_llms=query.selected_llms, capability=query.action_type)
         if not any(self._config_status(config).get("state") == "configured" for config in candidates):
             return None
+        if self.access_manager is None:
+            return KernelResponse.error(
+                "ACCESS_MANAGER_UNAVAILABLE",
+                metadata={
+                    "reason": "external LLM provider calls require a kernel access manager",
+                    "requires_intervention": False,
+                },
+            )
         syscall_params = syscall.params if syscall is not None else {}
         permissions = tuple(query.metadata.get("permissions") or syscall_params.get("permissions") or ())
         if "llm.external.call" not in permissions:

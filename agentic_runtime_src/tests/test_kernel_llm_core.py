@@ -359,6 +359,37 @@ def test_llm_external_call_requires_explicit_permission_before_provider_call():
     assert audit["metadata"]["access_gate"] is True
 
 
+def test_llm_external_call_requires_access_manager_before_provider_call():
+    sink = InMemoryKernelEventSink()
+    provider = RecordingProvider("configured")
+    adapter = LLMAdapter(
+        [
+            LLMConfig(
+                name="configured",
+                backend="openai_compatible",
+                hostname="https://example.test/v1",
+                api_key="test-key",
+                model="real-model",
+            )
+        ],
+        providers={"configured": provider},
+        event_sink=sink,
+    )
+    syscall = create_syscall(
+        "agent_a",
+        LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"]}),
+    )
+
+    response = adapter.address_request(syscall)
+
+    assert response.success is False
+    assert response.error_code == "ACCESS_MANAGER_UNAVAILABLE"
+    assert provider.queries == []
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "llm.audit"][-1]
+    assert audit["metadata"]["error_code"] == "ACCESS_MANAGER_UNAVAILABLE"
+    assert audit["metadata"]["access_gate"] is True
+
+
 def test_llm_external_call_with_permission_requires_intervention_by_default():
     sink = InMemoryKernelEventSink()
     provider = RecordingProvider("configured")
