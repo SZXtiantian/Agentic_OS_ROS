@@ -143,6 +143,44 @@ def test_human_status_requires_active_call_id_and_audits():
     assert events[-1]["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
 
 
+def test_human_status_requires_backend_status_contract():
+    class Backend:
+        def address_request(self, syscall):
+            return {"success": True, "answered": True, "answer": "yes"}
+
+    sink = InMemoryKernelEventSink()
+    manager = HumanInteractionManager(Backend(), event_sink=sink)
+
+    status = manager.address_request(
+        SimpleNamespace(
+            agent_name="agent_a",
+            operation_type="human_status",
+            params={"session_id": "sess_human"},
+        )
+    )
+
+    assert status.success is False
+    assert status.error_code == "HUMAN_BACKEND_STATUS_UNAVAILABLE"
+    assert status.metadata["backend"] == "Backend"
+    audit = [event for event in sink.recent(limit=10) if event["event_type"] == "human.audit"][-1]
+    assert audit["metadata"]["action"] == "status"
+    assert audit["metadata"]["error_code"] == "HUMAN_BACKEND_STATUS_UNAVAILABLE"
+
+
+def test_human_status_rejects_backend_status_without_success_field():
+    class Backend:
+        def status(self):
+            return {"state": "ready", "backend": "test_backend"}
+
+    manager = HumanInteractionManager(Backend())
+
+    status = manager.status()
+
+    assert status["success"] is False
+    assert status["state"] == "unavailable"
+    assert status["error_code"] == "HUMAN_RESULT_INVALID"
+
+
 def test_human_ask_requires_access_manager_before_backend_call():
     class Backend:
         calls = 0

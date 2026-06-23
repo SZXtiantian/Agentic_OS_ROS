@@ -78,16 +78,43 @@ class HumanInteractionManager:
                 "reason": "runtime human backend not configured",
                 "recent_events": list(self._events[-20:]),
             }
-        if hasattr(self.human_adapter, "status"):
+        if not hasattr(self.human_adapter, "status"):
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_BACKEND_STATUS_UNAVAILABLE",
+                "reason": "human backend does not expose status()",
+                "backend": self.human_adapter.__class__.__name__,
+                "call_id": call_id,
+                "recent_events": list(self._events[-20:]),
+            }
+        try:
             status = self.human_adapter.status()
-        else:
-            status = {"success": True, "state": "ready", "backend": self.human_adapter.__class__.__name__}
+        except Exception as exc:
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_BACKEND_STATUS_UNAVAILABLE",
+                "reason": str(exc),
+                "backend": self.human_adapter.__class__.__name__,
+                "call_id": call_id,
+                "recent_events": list(self._events[-20:]),
+            }
         if not isinstance(status, dict):
             return {
                 "success": False,
                 "state": "unavailable",
                 "error_code": "HUMAN_RESULT_INVALID",
                 "reason": f"human backend status returned {type(status).__name__}",
+                "call_id": call_id,
+                "recent_events": list(self._events[-20:]),
+            }
+        if "success" not in status or not isinstance(status.get("success"), bool):
+            return {
+                "success": False,
+                "state": "unavailable",
+                "error_code": "HUMAN_RESULT_INVALID",
+                "reason": "human backend status missing boolean success field",
                 "call_id": call_id,
                 "recent_events": list(self._events[-20:]),
             }
