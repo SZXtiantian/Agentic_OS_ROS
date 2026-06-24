@@ -10,4 +10,4 @@ It provides:
 - OpenAI-compatible, LiteLLM, HuggingFace, vLLM/OpenAI-compatible, and local provider adapters
 - active call status/cancel registry for scheduler-managed syscalls
 
-No simulated provider is available on production paths. Unsupported simulated backend names are reported as unavailable, missing provider configuration is reported as `LLM_PROVIDER_UNCONFIGURED`, missing optional dependencies as `LLM_PROVIDER_DEPENDENCY_MISSING`, and remote provider failures as `LLM_PROVIDER_ERROR`.
+No simulated provider is available on production paths. Unsupported simulated backend names are reported as `LLM_PROVIDER_UNSUPPORTED`, missing provider configuration is reported as `LLM_PROVIDER_UNCONFIGURED`, missing optional dependencies as `LLM_PROVIDER_DEPENDENCY_MISSING`, and remote provider failures as `LLM_PROVIDER_REQUEST_FAILED`.

@@ -128,7 +128,7 @@ def test_llm_client_returns_structured_provider_error_for_network_failure(monkey
     with pytest.raises(LLMError) as exc:
         client.chat_json(system_prompt="system", user_prompt="user")
 
-    assert exc.value.code == "LLM_PROVIDER_ERROR"
+    assert exc.value.code == "LLM_PROVIDER_REQUEST_FAILED"
 
 
 def test_llm_client_returns_structured_provider_error_for_http_failure(monkeypatch):
@@ -142,5 +142,5 @@ def test_llm_client_returns_structured_provider_error_for_http_failure(monkeypat
     with pytest.raises(LLMError) as exc:
         client.chat_json(system_prompt="system", user_prompt="user")
 
-    assert exc.value.code == "LLM_PROVIDER_ERROR"
+    assert exc.value.code == "LLM_PROVIDER_REQUEST_FAILED"
     assert "503" in exc.value.reason

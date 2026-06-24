@@ -22,6 +22,7 @@ ACTIVE_ROOTS = [
     Path("configs"),
     Path("docs"),
     Path("scripts"),
+    Path("tests"),
     ROOT.parent / "AGENTS.md",
     ROOT.parent / "README.md",
     ROOT.parent / "agentic_apps",
@@ -33,6 +34,7 @@ LEGACY_DOCS = {
     Path("docs/codex_kernel_port_progress.md"),
     Path("scripts/run_tests.sh"),
     Path("scripts/verify_no_mvp_language.sh"),
+    Path("tests/test_no_mvp_language.py"),
 }
 SKIP_PARTS = {"__pycache__", ".pytest_cache", ".git"}
 TEXT_SUFFIXES = {

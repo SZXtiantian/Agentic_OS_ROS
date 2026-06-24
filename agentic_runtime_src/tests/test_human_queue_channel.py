@@ -36,7 +36,7 @@ def test_human_queue_times_out_without_auto_answer(tmp_path):
 
     assert result["success"] is False
     assert result["answered"] is False
-    assert result["error_code"] == "HUMAN_TIMEOUT"
+    assert result["error_code"] == "HUMAN_OPERATOR_TIMEOUT"
     assert "human_timeout" in channel.paths.requests.read_text(encoding="utf-8")
     assert not channel.paths.responses.exists()
     assert channel.status()["pending_count"] == 0

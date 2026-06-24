@@ -287,15 +287,21 @@ class LLMAdapter:
         providers = []
         for config in self.llm_configs:
             provider_status = self._config_status(config)
+            configured = provider_status["state"] == "configured"
             providers.append(
                 {
                     "name": config.name,
                     "backend": config.backend,
                     "enabled": config.enabled,
+                    "configured": configured,
+                    "available": configured,
+                    "healthy": configured,
                     "state": provider_status["state"],
                     "error_code": provider_status["error_code"],
                     "reason": provider_status["reason"],
+                    "missing": _missing_from_status(provider_status),
                     "capabilities": list(config.capabilities),
+                    "request_failure_code": LLMCoreErrorCode.REQUEST_FAILED,
                 }
             )
         with self._active_lock:
@@ -332,6 +338,13 @@ class LLMAdapter:
         status["implemented_modes"] = status["contract"]["implemented_modes"]
         status["unsupported_modes"] = status["contract"]["unsupported_modes"]
         status["reserved_modes"] = status["contract"]["reserved_modes"]
+        status["configured"] = status["contract"]["validate_config"]
+        status["available"] = bool(status["contract"]["available_modes"])
+        status["healthy"] = status["contract"]["health"] == "healthy"
+        status["missing"] = status["contract"]["missing"]
+        status["error_code"] = status["contract"]["error_code"]
+        status["request_failure_code"] = LLMCoreErrorCode.REQUEST_FAILED
+        status["capabilities"] = status["contract"]["capabilities"]
         return status
 
     def _status_response(self, call_id: str = "") -> KernelResponse:
@@ -374,7 +387,7 @@ class LLMAdapter:
         if config.backend in {"mock", "fake", "stub", "dummy"}:
             return {
                 "state": "unavailable",
-                "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+                "error_code": LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
                 "reason": "mock/fake/stub/dummy LLM backends are disabled",
             }
         if config.backend in {"openai_compatible", "ollama_openai_compatible", "vllm_openai_compatible", "vllm"}:
@@ -421,8 +434,8 @@ class LLMAdapter:
                 }
             return {
                 "state": "unavailable",
-                "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
-                "reason": "local HuggingFace generation pipeline is not configured",
+                "error_code": LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
+                "reason": "local HuggingFace generation pipeline is reserved, not available",
             }
         if config.backend == "local":
             if not str(config.model or "").strip():
@@ -433,12 +446,12 @@ class LLMAdapter:
                 }
             return {
                 "state": "unavailable",
-                "error_code": LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
-                "reason": "local LLM backend is not configured",
+                "error_code": LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
+                "reason": "local LLM backend is reserved, not available",
             }
         return {
             "state": "unavailable",
-            "error_code": LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+            "error_code": LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
             "reason": f"unsupported backend: {config.backend}",
         }
 
@@ -556,6 +569,16 @@ def _normalize_batch_length(responses: list[KernelResponse], expected: int) -> l
         return responses[:expected]
     missing = [KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": "missing batch response"})]
     return responses + missing * (expected - len(responses))
+
+
+def _missing_from_status(provider_status: dict[str, str]) -> list[str]:
+    reason = provider_status.get("reason", "")
+    if "missing required config:" in reason:
+        missing_text = reason.split("missing required config:", 1)[1]
+        return [item.strip() for item in missing_text.split(",") if item.strip()]
+    if "missing dependency:" in reason:
+        return [reason.split("missing dependency:", 1)[1].strip()]
+    return []
 
 
 def _action_type_from_operation(operation_type: str) -> str:

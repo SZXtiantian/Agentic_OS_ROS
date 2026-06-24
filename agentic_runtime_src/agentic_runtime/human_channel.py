@@ -119,7 +119,7 @@ class FileHumanQueueChannel:
                         "success": False,
                         "answered": False,
                         "answer": "",
-                        "error_code": "HUMAN_TIMEOUT",
+                        "error_code": "HUMAN_OPERATOR_TIMEOUT",
                         "reason": "human response timed out",
                         "correlation_id": correlation_id,
                         "request_path": str(self.paths.requests),

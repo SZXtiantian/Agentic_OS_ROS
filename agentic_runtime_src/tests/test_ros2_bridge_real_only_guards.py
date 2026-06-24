@@ -74,4 +74,4 @@ def test_aggregate_bridge_readme_does_not_document_legacy_simulated_runtime(repo
     readme = (repo_root / "ros2_bridge_src" / "agentic_app_runtime_bridge" / "README.md").read_text(encoding="utf-8")
 
     assert "mock-only" not in readme
-    assert "MVP mock Runtime" not in readme
+    assert "legacy simulated Runtime" not in readme

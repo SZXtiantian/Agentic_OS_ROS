@@ -14,6 +14,7 @@ TRUTH_STATUS_FIELDS = (
     "error_code",
     "missing",
     "details",
+    "capability_evidence",
 )
 
 
@@ -41,6 +42,7 @@ class ProviderStatus:
     available_modes: tuple[str, ...] = ()
     unsupported_modes: tuple[str, ...] = ()
     reserved_modes: tuple[str, ...] = ()
+    capability_evidence: dict[str, Any] = field(default_factory=dict)
     last_check: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def to_dict(self) -> dict[str, Any]:
@@ -64,6 +66,7 @@ class ProviderStatus:
             "available_modes": list(self.available_modes),
             "unsupported_modes": list(self.unsupported_modes),
             "reserved_modes": list(self.reserved_modes),
+            "capability_evidence": dict(self.capability_evidence),
             "last_check": self.last_check,
         }
 
@@ -104,6 +107,11 @@ def ros_bridge_contract(mode: str = "cli") -> dict[str, Any]:
             implemented_modes=ROS_BRIDGE_IMPLEMENTED_MODES,
             available_modes=(),
             unsupported_modes=ROS_BRIDGE_UNSUPPORTED_MODES,
+            capability_evidence={
+                "implementation": "agentic_runtime.ros_bridge_client.client.create_ros_bridge_client",
+                "tests": ["tests/test_ros_bridge_modes_truth.py"],
+                "docs": ["docs/provider_contracts.md", "docs/real_integration.md"],
+            },
         ).to_dict()
     missing = () if cli_available else ("ros2_cli",)
     return ProviderStatus(
@@ -113,12 +121,17 @@ def ros_bridge_contract(mode: str = "cli") -> dict[str, Any]:
         status="ready" if cli_available else "unavailable",
         health="healthy" if cli_available else "dependency_missing",
         capabilities=("resolve_place", "robot_state", "navigate_to", "inspect_area", "stop", "report", "human_bridge"),
-        error_code="" if cli_available else "ROS2_CLI_MISSING",
+        error_code="" if cli_available else "ROS_BRIDGE_UNAVAILABLE",
         missing=missing,
         details={"configured_mode": mode, "provider": "ros2_cli", "ros2_cli_available": cli_available},
         implemented_modes=ROS_BRIDGE_IMPLEMENTED_MODES,
         available_modes=("cli",) if cli_available else (),
         unsupported_modes=ROS_BRIDGE_UNSUPPORTED_MODES,
+        capability_evidence={
+            "implementation": "agentic_runtime.ros_bridge_client.cli_client.Ros2CliBridgeClient",
+            "tests": ["tests/test_ros2_cli_bridge_client.py", "tests/test_ros_bridge_modes_truth.py"],
+            "docs": ["docs/provider_contracts.md", "docs/ros2_bridge_integration.md"],
+        },
     ).to_dict()
 
 
@@ -154,6 +167,11 @@ def llm_provider_contracts(status: dict[str, Any]) -> dict[str, Any]:
                 available_modes=(backend,) if state == "configured" and backend in LLM_IMPLEMENTED_BACKENDS else (),
                 unsupported_modes=LLM_UNSUPPORTED_BACKENDS,
                 reserved_modes=LLM_RESERVED_BACKENDS,
+                capability_evidence={
+                    "implementation": "agentic_os.kernel.llm_core.adapter.LLMAdapter",
+                    "tests": ["tests/test_kernel_llm_core.py", "tests/test_provider_available_modes_are_implemented.py"],
+                    "docs": ["docs/provider_contracts.md", "docs/real_integration.md"],
+                },
             ).to_dict()
         )
     aggregate_status = ProviderStatus(
@@ -170,6 +188,11 @@ def llm_provider_contracts(status: dict[str, Any]) -> dict[str, Any]:
         available_modes=tuple(sorted(available_modes)),
         unsupported_modes=LLM_UNSUPPORTED_BACKENDS,
         reserved_modes=LLM_RESERVED_BACKENDS,
+        capability_evidence={
+            "implementation": "agentic_os.kernel.llm_core.adapter.LLMAdapter",
+            "tests": ["tests/test_provider_available_modes_are_implemented.py", "tests/test_llm_real_only.py"],
+            "docs": ["docs/provider_contracts.md", "docs/real_integration.md"],
+        },
     ).to_dict()
     return aggregate_status
 
@@ -197,6 +220,11 @@ def human_operator_contract(status: dict[str, Any] | None = None) -> dict[str, A
         implemented_modes=HUMAN_IMPLEMENTED_MODES,
         available_modes=("file_queue",) if file_queue_ready else (),
         reserved_modes=HUMAN_RESERVED_MODES,
+        capability_evidence={
+            "implementation": "agentic_runtime.human_channel.FileHumanQueueChannel",
+            "tests": ["tests/test_human_real_only.py", "tests/test_human_queue_channel.py"],
+            "docs": ["docs/access_audit.md", "docs/provider_contracts.md"],
+        },
     ).to_dict()
 
 
@@ -230,6 +258,11 @@ def manager_provider_contract(
         available_modes=modes if ready else (),
         unsupported_modes=unsupported_modes,
         reserved_modes=reserved_modes,
+        capability_evidence={
+            "implementation": f"agentic_os.kernel.{kind}",
+            "tests": ["tests/test_provider_available_modes_are_implemented.py"],
+            "docs": ["docs/provider_contracts.md"],
+        },
     ).to_dict()
 
 

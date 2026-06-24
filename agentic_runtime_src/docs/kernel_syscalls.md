@@ -22,3 +22,10 @@ result, and audit/status event.
 Every syscall has a `syscall_id`, queue name, status, timeout, response, and
 recent status record. Cancel requests match exact `syscall_id` or provider
 `call_id`; missing calls return `SYSCALL_NOT_FOUND`.
+
+Provider availability is not inferred from a syscall name. The current truth
+surface is `KernelService.status()["providers"]`, where every namespace reports
+`implemented_modes`, `available_modes`, `unsupported_modes`, `reserved_modes`,
+and `capability_evidence`. If a configured provider/mode is reserved or
+unsupported, the syscall fails with a stable error instead of fabricating a
+successful response.

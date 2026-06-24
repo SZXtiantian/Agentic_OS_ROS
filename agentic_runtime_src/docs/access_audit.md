@@ -19,6 +19,11 @@ Dangerous operations require explicit permission and, when irreversible, a real
 intervention provider. The default intervention provider denies and records
 `ACCESS_INTERVENTION_REQUIRED`.
 
+Human operator flow currently uses the real `file_queue` provider. The runtime
+writes an ask request, waits for an external operator response, supports status
+and cancel, records audit events, and returns `HUMAN_OPERATOR_TIMEOUT` when no
+answer arrives. It never fills an answer automatically.
+
 ## Audit Fields
 
 Audit/events include action, operation type, agent, session or syscall id,

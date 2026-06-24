@@ -4,6 +4,11 @@ Template layout for Agentic OS apps. Copy this directory and grant only the perm
 
 The template entrypoint has two real-only smoke paths.
 
+The template is for the foundation-complete runtime surface. It does not claim
+reserved providers as available; missing runtime backends return stable errors
+such as `SKILL_BACKEND_UNAVAILABLE`, `ROS_BRIDGE_UNAVAILABLE`, or
+`LLM_PROVIDER_UNCONFIGURED`.
+
 ## Bare Kernel Smoke
 
 The bare kernel smoke uses a `KernelService` without a `RuntimeServer`. It calls:

@@ -100,10 +100,19 @@ import `rclpy`; ROS2-specific imports belong only in bridge packages under
 
 ## Real-Only Foundation Runtime
 
-The runtime foundation is real-only: production CLI/API/config/schema do not
+The runtime foundation is foundation-complete and real-only: production
+CLI/API/config/schema do not
 expose simulated runtime mode, and successful paths come from real providers,
 backends, bridges, or services. Missing dependencies fail fast with stable
 error codes and appear in status/audit instead of returning simulated success.
+
+`KernelService.status()["providers"]` is the capability truth contract:
+available modes must be implemented and tested, while unsupported/reserved
+modes are listed separately. Current ROS bridge availability is `cli` only when
+`ros2` CLI is present; service/action/topic/http/websocket bridge modes are not
+advertised as available. LLM providers are available only when real config and
+dependencies pass preflight; HF/local are reserved. Human operator flow uses
+the real file queue and never auto-fills answers.
 
 Primary contract docs:
 

@@ -306,7 +306,7 @@ def test_llm_adapter_returns_error_for_missing_provider():
     response = adapter.complete(LLMQuery(operation_type="chat"))
 
     assert response.success is False
-    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNSUPPORTED
 
 
 def test_optional_litellm_dependency_missing_is_structured():
@@ -350,7 +350,7 @@ def test_litellm_provider_embed_remote_failure_is_structured(monkeypatch):
     response = provider.complete(LLMQuery(operation_type="llm_embed", params={"text": "alpha"}, action_type="embed"))
 
     assert response.success is False
-    assert response.error_code == LLMCoreErrorCode.PROVIDER_ERROR
+    assert response.error_code == LLMCoreErrorCode.REQUEST_FAILED
     assert "provider offline" in response.metadata["reason"]
 
 
@@ -599,7 +599,7 @@ def test_llm_adapter_without_real_provider_fails_unavailable():
     response = adapter.complete(LLMQuery(operation_type="chat"))
 
     assert response.success is False
-    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNAVAILABLE
+    assert response.error_code == LLMCoreErrorCode.PROVIDER_UNSUPPORTED
     assert response.metadata["backend"] == "mock"
 
 
@@ -747,7 +747,7 @@ def test_openai_provider_remote_failure_returns_provider_error(monkeypatch):
     response = provider.complete(LLMQuery(operation_type="chat", messages=[{"role": "user", "content": "hi"}]))
 
     assert response.success is False
-    assert response.error_code == LLMCoreErrorCode.PROVIDER_ERROR
+    assert response.error_code == LLMCoreErrorCode.REQUEST_FAILED
 
 
 def test_model_library_router_backward_compatible():

@@ -21,6 +21,6 @@ class LocalBackendProvider:
             )
         return KernelResponse(
             False,
-            error_code=LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
-            metadata={"backend": self.config.backend, "model": model, "reason": "local LLM backend is not configured"},
+            error_code=LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
+            metadata={"backend": self.config.backend, "model": model, "reason": "local LLM backend is reserved, not available"},
         )

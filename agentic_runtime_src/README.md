@@ -86,7 +86,17 @@ AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 \
 
 Agentic ROS2 bridge packages live under `/home/ubuntu/agentic_ws/ros2_bridge_src/agentic_*`. They are adapters, not the Agentic Runtime itself. The robot ROS2 workspace `/home/ubuntu/ros2_ws/src` should not contain Agentic source packages.
 
-The production CLI no longer provides simulated success mode. If the real ROS2 bridge, human channel, or LLM provider is unavailable, commands return stable error codes such as `ROS_BRIDGE_UNAVAILABLE`, `HUMAN_BACKEND_UNAVAILABLE`, or `LLM_PROVIDER_UNCONFIGURED`.
+The production CLI no longer provides simulated success mode. If the real ROS2 bridge, human channel, or LLM provider is unavailable, commands return stable error codes such as `ROS_BRIDGE_UNAVAILABLE`, `HUMAN_OPERATOR_TIMEOUT`, or `LLM_PROVIDER_UNCONFIGURED`.
+
+## Capability Truth
+
+`KernelService.status()["providers"]` is the source of truth for currently
+available modes. `available_modes` contains only real implemented modes with
+evidence. Current bridge availability is `cli` only when `ros2` CLI is present;
+`service`, `action`, `topic`, `http`, and `websocket` return
+`ROS_BRIDGE_MODE_UNSUPPORTED`. LLM backends become available only after real
+configuration/dependency checks; HF/local are reserved. Human operator
+availability is `file_queue`; console/http/websocket are reserved.
 
 ## Real-Only Foundation Docs
 

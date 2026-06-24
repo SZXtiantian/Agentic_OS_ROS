@@ -1,7 +1,7 @@
 # Real Integration Verification
 
 Default tests verify contracts and stable fail-fast behavior. Real dependency
-verification is opt-in and must never be replaced by simulated success.
+verification is opt-in and must not be replaced by simulated success.
 
 ## ROS2
 
@@ -12,6 +12,18 @@ scripts/verify_real_ros2.sh
 
 Requires `ros2` CLI and AgenticOS bridge services. Missing dependencies report
 `UNVERIFIED_REAL_DEPENDENCY`.
+
+The script prints:
+
+```text
+CHECK_NAME=real_ros2_bridge
+REQUIRED_ENV=AGENTIC_VERIFY_REAL_ROS2=1
+CONFIG_PATH=...
+PROVIDER_STATUS=...
+RESULT=PASS|FAIL|UNVERIFIED_REAL_DEPENDENCY
+ERROR_CODE=...
+NEXT_ACTION=...
+```
 
 ## LLM
 
@@ -26,6 +38,9 @@ PYTHONPATH=. pytest -q tests/test_real_integration_contracts.py::test_real_llm_p
 Secrets must come from environment variables or a credential helper and must
 not be written to code, docs, logs, commits, or snapshots.
 
+`verify_real_llm.sh` prints the same fixed fields and never prints the API key
+value.
+
 ## Human Queue
 
 ```bash
@@ -36,3 +51,7 @@ PYTHONPATH=. pytest -q tests/test_real_integration_contracts.py::test_real_human
 
 An operator must append a matching response. The runtime never auto-fills an
 answer.
+
+`verify_real_human.sh` writes a real queue request and waits for an external
+answer when `AGENTIC_VERIFY_REAL_HUMAN_QUEUE=1`; otherwise it reports
+`UNVERIFIED_REAL_DEPENDENCY`.

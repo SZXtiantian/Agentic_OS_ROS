@@ -40,13 +40,13 @@ class OpenAICompatibleChatClient:
                 body = response.read().decode("utf-8")
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-            raise LLMError("LLM_PROVIDER_ERROR", f"LLM provider returned HTTP {exc.code}: {detail[:240]}") from exc
+            raise LLMError("LLM_PROVIDER_REQUEST_FAILED", f"LLM provider returned HTTP {exc.code}: {detail[:240]}") from exc
         except urllib.error.URLError as exc:
-            raise LLMError("LLM_PROVIDER_ERROR", str(exc.reason)) from exc
+            raise LLMError("LLM_PROVIDER_REQUEST_FAILED", str(exc.reason)) from exc
         except TimeoutError as exc:
             raise LLMError("LLM_TIMEOUT", "LLM request timed out") from exc
         except OSError as exc:
-            raise LLMError("LLM_PROVIDER_ERROR", str(exc)) from exc
+            raise LLMError("LLM_PROVIDER_REQUEST_FAILED", str(exc)) from exc
 
         content = self._extract_message_content(body)
         return self._parse_json_object(content)

@@ -23,6 +23,19 @@ and appear in status/audit. Real integration checks that are not configured
 must report `UNVERIFIED_REAL_DEPENDENCY`; they must not pass through simulated
 success.
 
+## Current Foundation-Complete Availability
+
+- ROS bridge: `cli` is the only available bridge mode, and only when the real
+  `ros2` CLI is present. `service`, `action`, `topic`, `http`, and `websocket`
+  are classified as unsupported and return `ROS_BRIDGE_MODE_UNSUPPORTED`.
+- LLM: OpenAI-compatible, vLLM OpenAI-compatible, and LiteLLM-compatible
+  backends become available only after real config and dependencies pass
+  preflight. HuggingFace and generic local backends are reserved.
+- Human operator: `file_queue` is implemented. `console`, `http`, and
+  `websocket` are reserved and are not advertised as available.
+- Memory, context, storage, tool, and skill namespaces report their available
+  modes through `KernelService.status()["providers"]`.
+
 ## Validation
 
 ```bash

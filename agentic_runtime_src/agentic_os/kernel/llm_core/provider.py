@@ -28,7 +28,7 @@ class UnsupportedLLMProvider:
     def complete(self, query: LLMQuery) -> KernelResponse:
         return KernelResponse(
             False,
-            error_code=LLMCoreErrorCode.PROVIDER_UNAVAILABLE,
+            error_code=LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
             metadata={"backend": self.config.backend, "model": self.config.name},
         )
 
@@ -82,7 +82,7 @@ class OpenAICompatibleProvider:
             with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            return KernelResponse(False, error_code=LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+            return KernelResponse(False, error_code=LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
         except json.JSONDecodeError as exc:
             return KernelResponse(False, error_code=LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": str(exc)})
 
@@ -124,7 +124,7 @@ class OpenAICompatibleProvider:
             with urllib.request.urlopen(request, timeout=self.config.timeout_s) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+            return KernelResponse.error(LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
         except json.JSONDecodeError as exc:
             return KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": str(exc)})
         embeddings = [item.get("embedding") for item in body.get("data", []) if isinstance(item, dict)]
@@ -164,7 +164,7 @@ class LiteLLMProvider:
             )
             normalized = normalize_litellm_response(body)
         except Exception as exc:
-            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+            return KernelResponse.error(LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
         return KernelResponse.ok(normalized.to_dict(), metadata={"provider": self.config.name})
 
     def embed(self, query: LLMQuery) -> KernelResponse:
@@ -182,7 +182,7 @@ class LiteLLMProvider:
         try:
             body = litellm.embedding(model=model, input=inputs, timeout=self.config.timeout_s)
         except Exception as exc:
-            return KernelResponse.error(LLMCoreErrorCode.PROVIDER_ERROR, metadata={"reason": str(exc)})
+            return KernelResponse.error(LLMCoreErrorCode.REQUEST_FAILED, metadata={"reason": str(exc)})
         embeddings = _extract_embeddings(body)
         if not embeddings:
             return KernelResponse.error(LLMCoreErrorCode.RESPONSE_INVALID, metadata={"reason": "missing embeddings"})
@@ -205,8 +205,8 @@ class HuggingFaceProvider:
                 metadata={"backend": self.config.backend, "dependency": "transformers"},
             )
         return KernelResponse.error(
-            LLMCoreErrorCode.PROVIDER_UNCONFIGURED,
-            metadata={"backend": self.config.backend, "reason": "local HuggingFace generation pipeline is not configured"},
+            LLMCoreErrorCode.PROVIDER_UNSUPPORTED,
+            metadata={"backend": self.config.backend, "reason": "local HuggingFace generation pipeline is reserved, not available"},
         )
 
 
