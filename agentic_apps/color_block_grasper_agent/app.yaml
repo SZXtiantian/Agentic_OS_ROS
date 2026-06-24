@@ -1,0 +1,63 @@
+name: color_block_grasper_agent
+version: 0.1.0
+description: Template-derived Agentic App that orchestrates real color block detection, pick, and place capabilities through Agentic OS.
+entrypoint: main:run
+permissions:
+  - robot.state.read
+  - robot.stop
+  - perception.observe
+  - perception.capture
+  - perception.detect.color_block
+  - arm.state.read
+  - arm.move.named
+  - gripper.control
+  - manipulation.pick.color_block
+  - manipulation.place.color_block
+  - human.ask
+  - context.write
+  - context.read
+  - memory.write
+  - memory.read
+  - storage.read
+  - storage.write
+  - report.say
+required_capabilities:
+  - kernel.context
+  - kernel.memory
+  - kernel.storage
+  - kernel.skill
+  - robot.get_state
+  - robot.stop
+  - perception.observe
+  - perception.capture_photo
+  - perception.detect_color_block
+  - arm.get_state
+  - arm.move_named
+  - gripper.set
+  - manipulation.pick_color_block
+  - manipulation.place_color_block
+  - human.ask
+  - report.say
+resources:
+  - camera
+  - arm
+  - gripper
+  - color_block_detector
+  - manipulation_backend
+allowed_targets:
+  - workspace
+safety_policy:
+  allow_autonomous_navigation: false
+  allow_manipulation: true
+  require_human_confirmation_for:
+    - manipulation.pick_color_block
+    - manipulation.place_color_block
+    - gripper.set
+    - arm.move_named
+  forbidden_zones: []
+  max_task_duration_s: 180
+runtime_limits:
+  max_concurrent_tasks: 1
+  max_retries_per_skill: 0
+  max_memory_write_per_task: 20
+  llm_planning_enabled: false

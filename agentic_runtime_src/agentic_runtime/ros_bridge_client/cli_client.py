@@ -231,6 +231,35 @@ class Ros2CliBridgeClient:
             "evidence": evidence,
         }
 
+    async def detect_color_block(self, color: str, target: str, evidence_label: str, timeout_s: int) -> dict[str, Any]:
+        try:
+            output = await self._service_call(
+                "/agentic/perception/detect_color_block",
+                "agentic_msgs/srv/DetectColorBlock",
+                {
+                    "color": color,
+                    "target": target,
+                    "evidence_label": evidence_label,
+                    "request_id": new_id("detect_block"),
+                    "timeout_s": int(timeout_s),
+                },
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response("detect_color_block", data, "success")
+        except RosBridgeCommandError as exc:
+            self._record_error("detect_color_block", exc)
+            return _bridge_error(exc, detection={}, evidence={})
+        detection = _decode_json_field(data.get("detection_json"))
+        evidence = _decode_json_field(data.get("evidence_json"))
+        return {
+            "success": success,
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "detection": detection,
+            "evidence": evidence,
+        }
+
     async def get_arm_state(self) -> dict[str, Any]:
         try:
             output = await self._service_call(
@@ -294,6 +323,74 @@ class Ros2CliBridgeClient:
             success = self._finalize_response("set_gripper", data, "success")
         except RosBridgeCommandError as exc:
             self._record_error("set_gripper", exc)
+            return _bridge_error(exc, result={})
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": success,
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "result": result_json,
+        }
+
+    async def pick_color_block(
+        self,
+        color: str,
+        target: str,
+        detection: dict[str, Any],
+        evidence: dict[str, Any],
+        timeout_s: int,
+    ) -> dict[str, Any]:
+        try:
+            output = await self._action_send_goal(
+                "/agentic/manipulation/pick_color_block",
+                "agentic_msgs/action/PickColorBlock",
+                {
+                    "color": color,
+                    "target": target,
+                    "detection_json": json.dumps(detection, ensure_ascii=False, sort_keys=True),
+                    "evidence_json": json.dumps(evidence, ensure_ascii=False, sort_keys=True),
+                    "request_id": new_id("pick_block"),
+                    "timeout_s": int(timeout_s),
+                },
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response("pick_color_block", data, "success")
+        except RosBridgeCommandError as exc:
+            self._record_error("pick_color_block", exc)
+            return _bridge_error(exc, result={})
+        result_json = _decode_json_field(data.get("result_json"))
+        return {
+            "success": success,
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "result": result_json,
+        }
+
+    async def place_color_block(
+        self,
+        color: str,
+        place_target: str,
+        pick_result: dict[str, Any],
+        timeout_s: int,
+    ) -> dict[str, Any]:
+        try:
+            output = await self._action_send_goal(
+                "/agentic/manipulation/place_color_block",
+                "agentic_msgs/action/PlaceColorBlock",
+                {
+                    "color": color,
+                    "place_target": place_target,
+                    "pick_result_json": json.dumps(pick_result, ensure_ascii=False, sort_keys=True),
+                    "request_id": new_id("place_block"),
+                    "timeout_s": int(timeout_s),
+                },
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response("place_color_block", data, "success")
+        except RosBridgeCommandError as exc:
+            self._record_error("place_color_block", exc)
             return _bridge_error(exc, result={})
         result_json = _decode_json_field(data.get("result_json"))
         return {

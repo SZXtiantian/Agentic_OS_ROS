@@ -1,6 +1,11 @@
 # app_template
 
-Template layout for Agentic OS apps. Copy this directory and grant only the permissions required by the app.
+Agentic App development starts by copying `agentic_apps/app_template`.
+开发 Agentic App 必须从 `agentic_apps/app_template` 复制开始。
+
+This directory is the only standard template for native Agentic Apps in this
+repository. Copy it directly or use `scripts/create_agentic_app.py`; do not
+start by inventing a separate layout.
 
 The template entrypoint has two real-only smoke paths.
 

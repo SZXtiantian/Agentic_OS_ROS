@@ -23,10 +23,14 @@ def test_loads_all_foundation_skills():
         "memory.recall",
         "human.ask",
         "report.say",
+        "perception.detect_color_block",
+        "manipulation.pick_color_block",
+        "manipulation.place_color_block",
     } <= names
     assert registry.get_skill("robot.navigate_to").backend["bridge"] == "navigation_bridge_node"
     assert registry.get_skill("navigate_to").backend["bridge"] == "navigation_bridge_node"
     assert registry.get_skill("arm.move_named").backend["bridge"] == "manipulation_bridge_node"
+    assert registry.get_skill("perception.detect_color_block").backend["availability"] == "real_bridge_required"
 
 
 def test_missing_name_fails():

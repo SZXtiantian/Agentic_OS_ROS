@@ -1,0 +1,11 @@
+string color
+string target
+string evidence_label
+string request_id
+int32 timeout_s
+---
+bool success
+string error_code
+string reason
+string detection_json
+string evidence_json

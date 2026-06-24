@@ -12,8 +12,9 @@ auditable robot capabilities to Agent Apps.
 - `agentic_runtime_src/`: AgenticOS runtime, kernel contracts, SDK, dispatcher,
   natural-language gateway, task log, skill manifests, configs, scripts, tests,
   and documentation.
-- `agentic_apps/`: Agent Apps and app templates. The current representative real
-  robot app is `robot_photographer_agent`.
+- `agentic_apps/`: Agent Apps and the canonical app template. Agentic App
+  development starts by copying `agentic_apps/app_template`. 开发 Agentic App
+  必须从 `agentic_apps/app_template` 复制开始。
 - `ros2_bridge_src/`: AgenticOS-owned ROS2 bridge/HAL packages. These are the
   only packages in this repository that may import `rclpy`.
 - `docs/`: Workspace-level design notes and implementation plans.
@@ -136,6 +137,27 @@ field notes are tracked here for project continuity:
 Do not move this package into `agentic_apps/`, and do not make Agent Apps depend
 on its direct ROS2 topics or servo commands.
 
+## Native Agentic App Development
+
+Start every native app from the template:
+
+```bash
+python scripts/create_agentic_app.py my_agent
+python scripts/check_agentic_app_uses_template.py agentic_apps/my_agent
+python scripts/check_agentic_app_boundaries.py agentic_apps
+```
+
+Developer docs:
+
+- `agentic_runtime_src/docs/agentic_app_developer_guide.md`
+- `agentic_runtime_src/docs/tutorials/hello_world_agent.md`
+- `agentic_runtime_src/docs/tutorials/color_block_grasper_agent.md`
+
+Template-derived examples:
+
+- `agentic_apps/hello_world_agent`
+- `agentic_apps/color_block_grasper_agent`
+
 ## Common Commands
 
 Install/update the runtime into `/opt/agentic`:
@@ -148,10 +170,9 @@ scripts/install_to_opt_agentic.sh
 Run static and unit tests:
 
 ```bash
-cd agentic_runtime_src
-python scripts/check_forbidden_imports.py
 scripts/run_tests.sh
-pytest ../agentic_apps/robot_photographer_agent/tests
+scripts/verify_agentic_app_tutorials.sh
+PYTHONPATH=. pytest -q
 ```
 
 Build AgenticOS ROS2 bridge packages:

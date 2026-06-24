@@ -29,6 +29,9 @@ Representative Agent Apps live under:
 /home/ubuntu/agentic_ws/src/inspection_agent
 ```
 
+Agentic App development starts by copying `agentic_apps/app_template`.
+开发 Agentic App 必须从 `agentic_apps/app_template` 复制开始。
+
 Compatibility symlinks:
 
 ```text
@@ -106,6 +109,9 @@ availability is `file_queue`; console/http/websocket are reserved.
 - `docs/access_audit.md`
 - `docs/real_integration.md`
 - `docs/errors.md`
+- `docs/agentic_app_developer_guide.md`
+- `docs/tutorials/hello_world_agent.md`
+- `docs/tutorials/color_block_grasper_agent.md`
 
 ## LLM Boundary
 

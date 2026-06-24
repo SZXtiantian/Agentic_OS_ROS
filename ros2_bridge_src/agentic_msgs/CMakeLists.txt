@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StopRobot.srv"
   "srv/Observe.srv"
   "srv/CapturePhoto.srv"
+  "srv/DetectColorBlock.srv"
   "srv/InspectArea.srv"
   "srv/GetArmState.srv"
   "srv/SetGripper.srv"
@@ -30,6 +31,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/ExecuteSkill.action"
   "action/NavigateToPlace.action"
   "action/MoveArmNamed.action"
+  "action/PickColorBlock.action"
+  "action/PlaceColorBlock.action"
   DEPENDENCIES geometry_msgs
 )
 

@@ -44,6 +44,20 @@ class SkillDispatcher:
                 args.get("label", "photo"),
                 int(args.get("timeout_s", 5)),
             )
+        if skill_name == "perception.detect_color_block":
+            if hasattr(self.bridge_client, "detect_color_block"):
+                return await self.bridge_client.detect_color_block(
+                    color=args["color"],
+                    target=args.get("target", "workspace"),
+                    evidence_label=args.get("evidence_label", "color_block"),
+                    timeout_s=int(args.get("timeout_s", 30)),
+                )
+            return _missing_color_block_backend(
+                "COLOR_BLOCK_CAPABILITY_UNAVAILABLE",
+                "bridge client does not expose detect_color_block",
+                missing=["perception.detect_color_block"],
+                next_action="Expose /agentic/perception/detect_color_block in the Agentic perception bridge.",
+            )
         if skill_name == "arm.get_state":
             return await self.bridge_client.get_arm_state()
         if skill_name == "arm.move_named":
@@ -58,6 +72,35 @@ class SkillDispatcher:
                 force=str(args.get("force", "low")),
                 percentage=args.get("percentage"),
                 timeout_s=int(args.get("timeout_s", 5)),
+            )
+        if skill_name == "manipulation.pick_color_block":
+            if hasattr(self.bridge_client, "pick_color_block"):
+                return await self.bridge_client.pick_color_block(
+                    color=args["color"],
+                    target=args.get("target", "workspace"),
+                    detection=dict(args.get("detection") or {}),
+                    evidence=dict(args.get("evidence") or {}),
+                    timeout_s=int(args.get("timeout_s", 60)),
+                )
+            return _missing_color_block_backend(
+                "MANIPULATION_BACKEND_UNAVAILABLE",
+                "bridge client does not expose pick_color_block",
+                missing=["manipulation.pick_color_block"],
+                next_action="Expose /agentic/manipulation/pick_color_block in the Agentic manipulation bridge.",
+            )
+        if skill_name == "manipulation.place_color_block":
+            if hasattr(self.bridge_client, "place_color_block"):
+                return await self.bridge_client.place_color_block(
+                    color=args.get("color", ""),
+                    place_target=args["place_target"],
+                    pick_result=dict(args.get("pick_result") or {}),
+                    timeout_s=int(args.get("timeout_s", 60)),
+                )
+            return _missing_color_block_backend(
+                "MANIPULATION_BACKEND_UNAVAILABLE",
+                "bridge client does not expose place_color_block",
+                missing=["manipulation.place_color_block"],
+                next_action="Expose /agentic/manipulation/place_color_block in the Agentic manipulation bridge.",
             )
         if skill_name == "robot.stop":
             return await self.bridge_client.stop_robot(args.get("reason", "app_requested"))
@@ -157,3 +200,13 @@ class SkillDispatcher:
         except (OSError, json.JSONDecodeError) as exc:
             return {"success": False, "error_code": "PHOTO_INDEX_CORRUPT", "reason": str(exc), "index_path": str(index_path)}
         return {"success": True, "photos": entries[-max(limit, 0) :], "index_path": str(index_path)}
+
+
+def _missing_color_block_backend(error_code: str, reason: str, *, missing: list[str], next_action: str) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error_code": error_code,
+        "reason": reason,
+        "missing": missing,
+        "next_action": next_action,
+    }

@@ -1,0 +1,58 @@
+name: perception.detect_color_block
+version: 0.1.0
+description: Detect a real colored block through the Agentic perception bridge.
+input_schema:
+  type: object
+  required: [color]
+  properties:
+    color:
+      type: string
+      enum: [red, green, blue, yellow]
+    target:
+      type: string
+    evidence_label:
+      type: string
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 30
+output_schema:
+  type: object
+  required: [success]
+  properties:
+    success:
+      type: boolean
+    detection:
+      type: object
+    evidence:
+      type: object
+    error_code:
+      type: string
+    reason:
+      type: string
+permission_requirements:
+  - perception.detect.color_block
+resource_requirements:
+  locks:
+    - camera
+    - color_block_detector
+safety_constraints:
+  require_estop_released: false
+  camera_target_allowlist: true
+  allow_cancel: true
+  max_duration_s: 30
+  runtime_timeout_margin_s: 5
+timeout_s: 30
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_service
+  bridge: perception_bridge_node
+  service: /agentic/perception/detect_color_block
+  service_type: agentic_msgs/srv/DetectColorBlock
+  availability: real_bridge_required
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

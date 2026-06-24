@@ -1,0 +1,14 @@
+name: default
+version: 0.1.0
+steps:
+  - record_context
+  - check_robot
+  - check_arm_gripper
+  - human_confirmation
+  - detect_color_block
+  - capture_evidence
+  - pick_color_block
+  - place_color_block
+  - remember_result
+  - write_result
+  - report_result

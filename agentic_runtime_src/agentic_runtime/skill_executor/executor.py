@@ -261,13 +261,16 @@ class SkillExecutor:
             "gripper.set",
             "perception.observe",
             "perception.capture_photo",
+            "perception.detect_color_block",
+            "manipulation.pick_color_block",
+            "manipulation.place_color_block",
             "human.ask",
         }
 
     def _access_resource_type(self, skill_name: str) -> str:
         if skill_name == "human.ask":
             return "human"
-        if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo"}:
+        if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo", "perception.detect_color_block"}:
             return "robot_sensor"
         return "robot_motion"
 
@@ -277,6 +280,8 @@ class SkillExecutor:
             "robot.inspect_area",
             "arm.move_named",
             "gripper.set",
+            "manipulation.pick_color_block",
+            "manipulation.place_color_block",
             "human.ask",
         }
 
