@@ -131,6 +131,34 @@ def test_color_block_llm_plan_reaches_real_backend_unavailable(tmp_path):
     assert result["syscall_ids"]
 
 
+def test_color_block_normalizes_detection_evidence_for_pick_payload():
+    module = _load_module()
+    step = {
+        "data": {
+            "result": {
+                "data": {
+                    "detection": {},
+                    "evidence": {
+                        "kind": "color_block_detection",
+                        "detection_id": "det_test",
+                        "color": "red",
+                        "center_px": [320.0, 240.0],
+                        "confidence": 0.91,
+                        "camera_position_m": [0.1, 0.2, 0.3],
+                    },
+                }
+            }
+        }
+    }
+
+    normalized = module._normalized_detection_data(step)
+    validation = module._validate_detection_data({"color": "red"}, normalized)
+
+    assert normalized["color"] == "red"
+    assert normalized["camera_position_m"] == [0.1, 0.2, 0.3]
+    assert validation["success"] is True
+
+
 async def _run_bare_kernel(tmp_path, *, llm_chat, message: str):
     service = KernelService(config=SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools"))
     if llm_chat is not None:
@@ -192,9 +220,13 @@ def _plan(*, target_color: str = "red"):
 
 
 def _load_run():
+    return _load_module().run
+
+
+def _load_module():
     path = Path(__file__).resolve().parents[1] / "main.py"
     spec = importlib.util.spec_from_file_location("color_block_grasper_agent_main", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.run
+    return module

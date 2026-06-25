@@ -130,6 +130,11 @@ if [ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]; then
   source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
   set -u
 fi
+if [ -f /home/ubuntu/agentic_ws/install/setup.bash ]; then
+  set +u
+  source /home/ubuntu/agentic_ws/install/setup.bash
+  set -u
+fi
 
 if [ "${AGENTIC_QUIET:-0}" != "1" ]; then
   echo "Agentic OS environment loaded from $AGENTIC_HOME"

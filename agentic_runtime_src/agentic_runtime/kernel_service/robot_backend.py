@@ -16,7 +16,7 @@ class RuntimeRobotCapabilityBackend:
     def execute_capability(self, syscall: KernelSyscall) -> dict[str, Any]:
         query = getattr(syscall, "query", None)
         skill_name = self._skill_name(syscall)
-        params = dict(getattr(query, "params", {}) or syscall.params or {})
+        params = self._capability_args(dict(getattr(query, "params", {}) or syscall.params or {}))
         app_id = str(getattr(query, "app_id", "") or syscall.agent_name)
         session_id = str(getattr(query, "session_id", "") or getattr(query, "metadata", {}).get("session_id", "") or params.pop("session_id", "") or "kernel")
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
@@ -42,6 +42,17 @@ class RuntimeRobotCapabilityBackend:
     def _skill_name(self, syscall: KernelSyscall) -> str:
         query = getattr(syscall, "query", None)
         return str(getattr(query, "skill_name", "") or syscall.params.get("skill_name") or syscall.operation_type)
+
+    def _capability_args(self, params: dict[str, Any]) -> dict[str, Any]:
+        wrapped = params.get("args")
+        if isinstance(wrapped, dict):
+            args = dict(wrapped)
+            if "permissions" in params and "permissions" not in args:
+                args["permissions"] = params["permissions"]
+            if "session_id" in params and "session_id" not in args:
+                args["session_id"] = params["session_id"]
+            return args
+        return params
 
     def _run(self, awaitable):
         try:

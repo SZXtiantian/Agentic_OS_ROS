@@ -325,6 +325,28 @@ def test_ros2_cli_bridge_client_capture_photo_failure_is_structured():
     asyncio.run(run())
 
 
+def test_ros2_cli_bridge_client_detect_color_block_parses_detection_json_from_ros_repr():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        return """response:
+agentic_msgs.srv.DetectColorBlock_Response(success=True, error_code='', reason='', detection_json='{"color":"red","camera_position_m":[0.1,0.2,0.3],"center_px":[320,240],"confidence":0.91}', evidence_json='{"kind":"color_block_detection","detection_id":"det_test"}')
+"""
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.detect_color_block("red", "workspace", "red_block", 5)
+        assert result["success"] is True
+        assert result["detection"]["color"] == "red"
+        assert result["detection"]["camera_position_m"] == [0.1, 0.2, 0.3]
+        assert result["evidence"]["detection_id"] == "det_test"
+
+    asyncio.run(run())
+
+    assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/perception/detect_color_block"]
+
+
 def test_ros2_cli_bridge_client_safety_timeout_retries_once():
     calls = []
 

@@ -14,7 +14,7 @@ RISK_CLASSES = {"controlled_manipulation", "manipulation_real_hardware"}
 
 
 async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
-    task_text = str(kwargs.get("task_text") or kwargs.get("message") or "").strip()
+    task_text = str(kwargs.get("task_text") or kwargs.get("message") or kwargs.get("text") or "").strip()
     steps: list[dict[str, Any]] = []
 
     if not task_text:
@@ -53,7 +53,7 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     if not validation["success"]:
         return await _finish_failure(ctx, {"task_text": task_text, "planner_mode": "llm", "plan": plan}, steps, validation)
 
-    task = _task_from_plan(task_text, plan)
+    task = _task_from_plan(task_text, plan, operator_confirmed=bool(kwargs.get("assume_yes")))
     policy = _validate_policy(ctx, task)
     steps.append(
         {
@@ -125,7 +125,7 @@ def _system_prompt() -> str:
             "- schema_version: '1.0'",
             "- planner_mode: 'llm'",
             "- target_color: one of red, green, blue, yellow",
-            "- place_target: a concrete tray or workspace destination",
+            "- place_target: 'hold_position' when the user asks only to pick/hold/grasp; otherwise a concrete tray or workspace destination",
             "- requires_manipulation: true",
             "- needs_confirmation: true",
             "- steps: exactly ['detect_color_block','capture_evidence','pick_color_block','place_color_block']",
@@ -187,7 +187,7 @@ def _plan_failure(reason: str) -> dict[str, Any]:
     }
 
 
-def _task_from_plan(task_text: str, plan: dict[str, Any]) -> dict[str, Any]:
+def _task_from_plan(task_text: str, plan: dict[str, Any], *, operator_confirmed: bool = False) -> dict[str, Any]:
     color = str(plan["target_color"])
     return {
         "task_text": task_text,
@@ -205,6 +205,8 @@ def _task_from_plan(task_text: str, plan: dict[str, Any]) -> dict[str, Any]:
         "risk_class": str(plan["risk_class"]),
         "user_summary": str(plan["user_summary"]),
         "steps": list(plan["steps"]),
+        "operator_confirmed": bool(operator_confirmed),
+        "operator_confirmation_source": "cli_yes_flag" if operator_confirmed else "",
     }
 
 
@@ -294,6 +296,21 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
             "next_action": "Connect the gripper bridge and verify arm.get_state reports gripper_ready.",
             "source_step": arm,
         }
+    prepare = await _call_skill(
+        ctx,
+        steps,
+        "prepare_arm_pose",
+        "arm.move_named",
+        {"name": "arm_home", "timeout_s": min(int(task["timeout_s"]), 8)},
+    )
+    if not prepare["success"]:
+        return _dependency_failure(
+            "MANIPULATION_BACKEND_UNAVAILABLE",
+            "arm_home preparation pose did not complete before color-block detection",
+            prepare,
+            missing=["arm.move_named arm_home"],
+            next_action="Verify the Agentic manipulation bridge can execute the allowlisted arm_home action.",
+        )
     return {"success": True, "task": task}
 
 
@@ -308,6 +325,25 @@ async def _confirm_manipulation(ctx: AgentContext, task: dict[str, Any], steps: 
                 "error_code": "",
                 "reason": "",
                 "data": {"require_confirmation": False},
+                "syscall_id": "",
+                "audit_id": "",
+            }
+        )
+        return {"success": True}
+    if bool(task.get("operator_confirmed")):
+        steps.append(
+            {
+                "name": "human_confirmation",
+                "skill": "operator.confirmation",
+                "success": True,
+                "skipped": False,
+                "error_code": "",
+                "reason": "",
+                "data": {
+                    "answer": CONFIRM_ANSWER,
+                    "require_confirmation": True,
+                    "source": str(task.get("operator_confirmation_source") or "cli_yes_flag"),
+                },
                 "syscall_id": "",
                 "audit_id": "",
             }
@@ -364,6 +400,17 @@ async def _detect_color_block(ctx: AgentContext, task: dict[str, Any], steps: li
         },
     )
     if detection["success"]:
+        normalized = _normalized_detection_data(detection)
+        validation = _validate_detection_data(task, normalized)
+        if not validation["success"]:
+            return _dependency_failure(
+                "COLOR_BLOCK_DETECTION_INVALID",
+                str(validation["reason"]),
+                detection,
+                missing=list(validation["missing"]),
+                next_action="Verify the perception bridge returns color, center_px, confidence, and camera_position_m for the detected block.",
+            )
+        detection["data"]["validated_detection"] = normalized
         return detection
     raw_code = str(detection.get("error_code") or "")
     if raw_code == "COLOR_BLOCK_NOT_FOUND":
@@ -390,7 +437,7 @@ async def _capture_evidence(ctx: AgentContext, task: dict[str, Any], steps: list
         {
             "target": task["target"],
             "label": task["evidence_label"],
-            "timeout_s": 5,
+            "timeout_s": 15,
         },
     )
     if evidence["success"]:
@@ -419,7 +466,7 @@ async def _pick_color_block(
         {
             "color": task["color"],
             "target": task["target"],
-            "detection": _nested_data(detection),
+            "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "timeout_s": min(int(task["timeout_s"]), 60),
         },
@@ -475,7 +522,7 @@ async def _finish_success(
     result = _result_payload(ctx, True, task, steps, "", "")
     result.update(
         {
-            "detection": _nested_data(detection),
+            "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
             "place": _nested_data(place),
@@ -495,7 +542,7 @@ async def _finish_success(
         result = _result_payload(ctx, True, task, steps, "", "")
     result.update(
         {
-            "detection": _nested_data(detection),
+            "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
             "place": _nested_data(place),
@@ -665,6 +712,49 @@ def _response_payload(response: Any) -> dict[str, Any]:
     if isinstance(response, dict):
         return dict(response)
     return {}
+
+
+def _normalized_detection_data(step: dict[str, Any]) -> dict[str, Any]:
+    data = _nested_data(step)
+    candidates = [
+        data.get("detection") if isinstance(data.get("detection"), dict) else {},
+        data.get("evidence") if isinstance(data.get("evidence"), dict) else {},
+        data,
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, dict) and _looks_like_color_block_detection(candidate):
+            return dict(candidate)
+    return {}
+
+
+def _looks_like_color_block_detection(payload: dict[str, Any]) -> bool:
+    return bool(
+        payload
+        and (
+            payload.get("kind") == "color_block_detection"
+            or payload.get("detection_id")
+            or payload.get("camera_position_m")
+        )
+    )
+
+
+def _validate_detection_data(task: dict[str, Any], detection: dict[str, Any]) -> dict[str, Any]:
+    missing: list[str] = []
+    if not detection:
+        return {"success": False, "reason": "color block detection payload is empty", "missing": ["detection"]}
+    if str(detection.get("color") or "").lower() != str(task["color"]).lower():
+        return {"success": False, "reason": "detected color does not match LLM plan target_color", "missing": ["matching color"]}
+    camera_position = detection.get("camera_position_m")
+    if not isinstance(camera_position, list) or len(camera_position) < 3:
+        missing.append("camera_position_m")
+    center_px = detection.get("center_px")
+    if not isinstance(center_px, list) or len(center_px) < 2:
+        missing.append("center_px")
+    if "confidence" not in detection:
+        missing.append("confidence")
+    if missing:
+        return {"success": False, "reason": "color block detection payload lacks fields required for pick", "missing": missing}
+    return {"success": True, "reason": "", "missing": []}
 
 
 def _nested_data(step: dict[str, Any]) -> dict[str, Any]:

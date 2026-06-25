@@ -84,12 +84,13 @@ async def dispatch_text(user_text: str, flags: GatewayFlags) -> dict[str, Any]:
             "error_code": "ROS_BRIDGE_UNAVAILABLE",
             "message": "AgenticOS real bridge services are unavailable",
         }
-    server = RuntimeServer.create()
-    dispatcher = DispatcherAgent(server)
-    if flags.json:
-        with contextlib.redirect_stdout(io.StringIO()):
-            return await dispatcher.arun(user_text, flags)
-    return await dispatcher.arun(user_text, flags)
+    with _operator_intervention_env(flags):
+        server = RuntimeServer.create()
+        dispatcher = DispatcherAgent(server)
+        if flags.json:
+            with contextlib.redirect_stdout(io.StringIO()):
+                return await dispatcher.arun(user_text, flags)
+        return await dispatcher.arun(user_text, flags)
 
 
 async def run_interactive(flags: GatewayFlags) -> int:
@@ -150,6 +151,29 @@ def _flags_from_args(args: argparse.Namespace) -> GatewayFlags:
         forced_app_id=args.forced_app_id,
         tasks_limit=int(args.tasks_limit),
     )
+
+
+@contextlib.contextmanager
+def _operator_intervention_env(flags: GatewayFlags):
+    keys = {
+        "AGENTIC_OPERATOR_INTERVENTION_APPROVED",
+        "AGENTIC_OPERATOR_INTERVENTION_SOURCE",
+        "AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION",
+    }
+    previous = {key: os.environ.get(key) for key in keys}
+    try:
+        if flags.assume_yes:
+            os.environ["AGENTIC_OPERATOR_INTERVENTION_APPROVED"] = "1"
+            os.environ["AGENTIC_OPERATOR_INTERVENTION_SOURCE"] = "cli_yes_flag"
+        if flags.allow_arm_motion:
+            os.environ["AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION"] = "1"
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _likely_needs_real_bridge(user_text: str, flags: GatewayFlags) -> bool:

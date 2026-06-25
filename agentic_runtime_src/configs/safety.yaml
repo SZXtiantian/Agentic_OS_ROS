@@ -18,7 +18,7 @@ safety:
       - arm_workspace
       - desk
     max_observe_duration_s: 60
-    max_capture_duration_s: 5
+    max_capture_duration_s: 20
   manipulation:
     max_arm_duration_s: 8
     allowed_named_actions:

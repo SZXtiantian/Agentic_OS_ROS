@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
 from agentic_os.kernel.system_call import SkillQuery
 from agentic_runtime.kernel_service import KernelService
+from agentic_runtime.kernel_service.robot_backend import RuntimeRobotCapabilityBackend
 from agentic_runtime.sdk import AgentContext
 from agentic_runtime.types import AppManifest, SkillResult
 
@@ -89,6 +90,32 @@ def test_runtime_skill_backend_call_list_describe_cancel():
     assert missing_call_id_cancel["error_code"] == "SYSCALL_NOT_FOUND"
     assert executor.cancelled_calls == [("sess_1", "call_1"), ("sess_1", "missing")]
     assert executor.cancelled_sessions == []
+
+
+def test_runtime_robot_capability_backend_unwraps_sdk_args():
+    class Executor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def execute(self, app, skill_name, args, session_id):
+            self.calls.append((app, skill_name, dict(args), session_id))
+            return SkillResult(True, data={"args": dict(args)})
+
+    executor = Executor()
+    backend = RuntimeRobotCapabilityBackend(SimpleNamespace(executor=executor))
+    query = SkillQuery(
+        operation_type="skill_call",
+        skill_name="perception.detect_color_block",
+        app_id="color_block_grasper_agent",
+        session_id="sess_color",
+        params={"args": {"color": "red", "target": "workspace"}, "permissions": ("perception.detect.color_block",)},
+    )
+    response = backend.execute_capability(SimpleNamespace(agent_name="color_block_grasper_agent", operation_type="skill_call", params=query.params, query=query))
+
+    assert response["success"] is True
+    assert executor.calls[0][1] == "perception.detect_color_block"
+    assert executor.calls[0][2] == {"color": "red", "target": "workspace"}
+    assert executor.calls[0][3] == "sess_color"
 
 
 def test_runtime_skill_backend_cancel_requires_call_id():

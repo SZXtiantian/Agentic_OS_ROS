@@ -28,32 +28,8 @@
     "created_at": {"type": "string", "minLength": 1},
     "user_text": {"type": "string"},
     "planner_mode": {"type": "string", "enum": ["llm", "rule_based"]},
-    "intent": {
-      "type": "string",
-      "enum": [
-        "capture_photo",
-        "multi_angle_photo",
-        "recent_photos",
-        "robot_status",
-        "robot_stop",
-        "tasks",
-        "last_task",
-        "help",
-        "unsupported"
-      ]
-    },
-    "selected_app_id": {
-      "type": "string",
-      "enum": [
-        "robot_photographer_agent",
-        "builtin.status",
-        "builtin.stop",
-        "builtin.tasks",
-        "builtin.last_task",
-        "builtin.help",
-        "unsupported"
-      ]
-    },
+    "intent": {"type": "string", "minLength": 1},
+    "selected_app_id": {"type": "string", "minLength": 1},
     "route_reason": {"type": "string"},
     "risk_class": {"type": "string", "enum": ["read_only", "named_motion", "emergency_control", "unsupported"]},
     "requires_robot_motion": {"type": "boolean"},

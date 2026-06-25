@@ -12,7 +12,7 @@ input_schema:
     timeout_s:
       type: integer
       minimum: 1
-      maximum: 5
+      maximum: 20
 output_schema:
   type: object
   required: [success]
@@ -34,9 +34,9 @@ safety_constraints:
   require_estop_released: false
   camera_target_allowlist: true
   allow_cancel: true
-  max_duration_s: 5
+  max_duration_s: 20
   runtime_timeout_margin_s: 5
-timeout_s: 5
+timeout_s: 20
 retry_policy:
   max_attempts: 0
   retry_on: []

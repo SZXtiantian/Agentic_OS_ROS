@@ -13,7 +13,7 @@ from jsonschema.exceptions import ValidationError
 from agentic_runtime.llm import LLMError
 from agentic_runtime.types import new_id
 
-from .app_index import AppIndex
+from .app_index import AppIndex, AppIndexEntry
 from .errors import DispatchError
 
 
@@ -34,7 +34,7 @@ class DispatcherPlanner:
             try:
                 plan = self._plan_with_llm(user_text, app_index, flags, task_id=task_id, route_plan_id=route_plan_id)
                 plan["fallback"] = {"used": False, "reason": ""}
-                return _apply_forced_app(plan, flags)
+                return _apply_forced_app(plan, flags, app_index)
             except Exception as exc:
                 if require_llm:
                     raise DispatchError(
@@ -43,10 +43,10 @@ class DispatcherPlanner:
                     ) from exc
                 fallback = self._rule_plan(user_text, flags, task_id=task_id, route_plan_id=route_plan_id)
                 fallback["fallback"] = {"used": True, "reason": f"{exc.__class__.__name__}: {str(exc)[:160]}"}
-                return _apply_forced_app(fallback, flags)
+                return _apply_forced_app(fallback, flags, app_index)
         if require_llm:
             raise DispatchError("DISPATCH_LLMCHAT_UNAVAILABLE", "LLM is required, but AgenticOS LLMChat is unavailable")
-        return _apply_forced_app(self._rule_plan(user_text, flags, task_id=task_id, route_plan_id=route_plan_id), flags)
+        return _apply_forced_app(self._rule_plan(user_text, flags, task_id=task_id, route_plan_id=route_plan_id), flags, app_index)
 
     def _plan_with_llm(
         self,
@@ -78,6 +78,7 @@ class DispatcherPlanner:
         if _require_llm(flags):
             app_task_input["require_llm"] = True
         plan["app_task_input"] = app_task_input
+        plan = _normalize_indexed_app_route(plan, app_index)
         return plan
 
     def _rule_plan(self, user_text: str, flags: Any, *, task_id: str, route_plan_id: str) -> dict[str, Any]:
@@ -292,34 +293,17 @@ def _schema() -> dict[str, Any]:
 
 
 def _build_user_prompt(user_text: str, app_index: AppIndex, flags: Any, *, task_id: str, route_plan_id: str) -> str:
+    app_summaries = app_index.to_prompt_summary()
     return json.dumps(
         {
             "user_text": user_text,
             "required_task_id": task_id,
             "required_route_plan_id": route_plan_id,
             "created_at": _now(),
-            "app_index": app_index.to_prompt_summary(),
-            "allowed_selected_app_ids": [
-                "robot_photographer_agent",
-                "builtin.status",
-                "builtin.stop",
-                "builtin.tasks",
-                "builtin.last_task",
-                "builtin.help",
-                "unsupported",
-            ],
-            "allowed_intents": [
-                "capture_photo",
-                "multi_angle_photo",
-                "recent_photos",
-                "robot_status",
-                "robot_stop",
-                "tasks",
-                "last_task",
-                "help",
-                "unsupported",
-            ],
-            "target_allowlist": ["workspace"],
+            "app_index": app_summaries,
+            "allowed_selected_app_ids": _allowed_selected_app_ids(app_index),
+            "allowed_intents": _allowed_intents(app_index),
+            "target_allowlist": _target_allowlist(app_index),
             "flags": {
                 "allow_arm_motion": bool(getattr(flags, "allow_arm_motion", False)),
                 "assume_yes": bool(getattr(flags, "assume_yes", False)),
@@ -371,6 +355,38 @@ def _require_llm(flags: Any) -> bool:
     return bool(getattr(flags, "require_llm", False)) or os.environ.get("AGENTIC_LLM_REQUIRE") == "1"
 
 
+def _allowed_selected_app_ids(app_index: AppIndex) -> list[str]:
+    app_ids = [entry.app_id for entry in app_index.enabled_entries()]
+    return list(
+        dict.fromkeys(
+            [
+                *app_ids,
+                "builtin.status",
+                "builtin.stop",
+                "builtin.tasks",
+                "builtin.last_task",
+                "builtin.help",
+                "unsupported",
+            ]
+        )
+    )
+
+
+def _allowed_intents(app_index: AppIndex) -> list[str]:
+    intents: list[str] = []
+    for entry in app_index.enabled_entries():
+        intents.extend(entry.intents)
+    intents.extend(["robot_status", "robot_stop", "tasks", "last_task", "help", "unsupported"])
+    return list(dict.fromkeys(intents))
+
+
+def _target_allowlist(app_index: AppIndex) -> list[str]:
+    targets = ["workspace"]
+    for entry in app_index.enabled_entries():
+        targets.extend(entry.allowed_targets)
+    return list(dict.fromkeys(targets))
+
+
 def _has_any(compact: str, raw: str, tokens: list[str]) -> bool:
     lowered = raw.lower()
     return any(token.lower().replace(" ", "") in compact or token.lower() in lowered for token in tokens)
@@ -414,11 +430,54 @@ def fresh_route_ids() -> tuple[str, str]:
     return new_id("task"), new_id("plan_route")
 
 
-def _apply_forced_app(plan: dict[str, Any], flags: Any) -> dict[str, Any]:
+def _apply_forced_app(plan: dict[str, Any], flags: Any, app_index: AppIndex | None = None) -> dict[str, Any]:
     forced = getattr(flags, "forced_app_id", None)
-    if not forced or str(plan.get("selected_app_id", "")).startswith("builtin.") or plan.get("selected_app_id") == "unsupported":
+    if not forced:
         return plan
+    if str(plan.get("selected_app_id", "")).startswith("builtin.") and plan.get("selected_app_id") != "unsupported":
+        return plan
+    entry = app_index.get(str(forced)) if app_index is not None else None
     updated = dict(plan)
     updated["selected_app_id"] = str(forced)
     updated["route_reason"] = f"forced by CLI --app: {forced}"
+    app_task_input = dict(updated.get("app_task_input") or {})
+    app_task_input.setdefault("text", str(updated.get("user_text") or ""))
+    app_task_input["allow_arm_motion"] = bool(getattr(flags, "allow_arm_motion", False))
+    app_task_input["assume_yes"] = bool(getattr(flags, "assume_yes", False))
+    updated["app_task_input"] = app_task_input
+    if entry is not None:
+        requires_motion = _forced_requires_motion(entry)
+        updated["intent"] = _forced_intent(entry, str(updated.get("intent") or ""))
+        updated["requires_robot_motion"] = bool(updated.get("requires_robot_motion")) or requires_motion
+        updated["needs_confirmation"] = bool(updated.get("needs_confirmation")) or requires_motion
+        updated["risk_class"] = "named_motion" if updated["requires_robot_motion"] else "read_only"
+        updated["target"] = "workspace"
+        updated["user_summary"] = str(updated.get("user_summary") or f"使用 {entry.app_id} 执行任务")
     return updated
+
+
+def _normalize_indexed_app_route(plan: dict[str, Any], app_index: AppIndex) -> dict[str, Any]:
+    entry = app_index.get(str(plan.get("selected_app_id", "")))
+    if entry is None:
+        return plan
+    updated = dict(plan)
+    requires_motion = (
+        bool(updated.get("requires_robot_motion"))
+        or str(updated.get("risk_class") or "") == "named_motion"
+        or entry.risk_classes == ["named_motion"]
+    )
+    if requires_motion:
+        updated["requires_robot_motion"] = True
+        updated["needs_confirmation"] = True
+        updated["risk_class"] = "named_motion"
+    return updated
+
+
+def _forced_intent(entry: AppIndexEntry, current_intent: str) -> str:
+    if current_intent in entry.intents:
+        return current_intent
+    return entry.intents[0] if entry.intents else current_intent
+
+
+def _forced_requires_motion(entry: AppIndexEntry) -> bool:
+    return "named_motion" in entry.risk_classes

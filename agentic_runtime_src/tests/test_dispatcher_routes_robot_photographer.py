@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 
 from agentic_runtime.dispatcher import DispatcherAgent
@@ -128,6 +129,106 @@ def test_robot_photographer_dispatch_manifest_registered(app_root):
     assert entry.dispatch_enabled is True
     assert "capture_photo" in entry.intents
     assert "workspace" in entry.allowed_targets
+
+
+def test_color_block_dispatch_manifest_registered(app_root):
+    entry = AppIndex.load(app_root).get("color_block_grasper_agent")
+    assert entry is not None
+    assert entry.dispatch_enabled is True
+    assert "color_block_grasp" in entry.intents
+    assert "named_motion" in entry.risk_classes
+    assert "workspace" in entry.allowed_targets
+
+
+def test_dispatcher_llm_prompt_includes_color_block_app(app_root):
+    class RoutingLLMChat:
+        def chat_json(self, *, system_prompt, user_prompt):
+            del system_prompt
+            prompt = json.loads(user_prompt)
+            assert "color_block_grasper_agent" in prompt["allowed_selected_app_ids"]
+            assert "color_block_grasp" in prompt["allowed_intents"]
+            return {
+                "schema_version": "1.0",
+                "task_id": prompt["required_task_id"],
+                "route_plan_id": prompt["required_route_plan_id"],
+                "created_at": prompt["created_at"],
+                "user_text": prompt["user_text"],
+                "planner_mode": "llm",
+                "intent": "color_block_grasp",
+                "selected_app_id": "color_block_grasper_agent",
+                "route_reason": "color block app owns real grasp tasks",
+                "risk_class": "named_motion",
+                "requires_robot_motion": False,
+                "needs_confirmation": False,
+                "target": "workspace",
+                "app_task_input": {"text": prompt["user_text"]},
+                "preflight_checks": [],
+                "fallback": {"used": False, "reason": ""},
+                "user_summary": "夹起红色方块",
+            }
+
+    app_index = AppIndex.load(app_root)
+    flags = GatewayFlags(require_llm=True, allow_arm_motion=True, assume_yes=True)
+    plan = DispatcherPlanner(llm_chat=RoutingLLMChat()).plan(
+        "夹起红色方块",
+        app_index,
+        flags,
+        task_id="task_test",
+        route_plan_id="plan_route_test",
+    )
+    assert plan["selected_app_id"] == "color_block_grasper_agent"
+    assert plan["planner_mode"] == "llm"
+    assert plan["requires_robot_motion"] is True
+    assert plan["needs_confirmation"] is True
+    validated = DispatcherValidator().validate(plan, app_index, flags)
+    assert validated["intent"] == "color_block_grasp"
+
+
+def test_forced_color_block_app_overrides_unsupported_llm_route(app_root):
+    class UnsupportedLLMChat:
+        def chat_json(self, *, system_prompt, user_prompt):
+            del system_prompt
+            prompt = json.loads(user_prompt)
+            return {
+                "schema_version": "1.0",
+                "task_id": prompt["required_task_id"],
+                "route_plan_id": prompt["required_route_plan_id"],
+                "created_at": prompt["created_at"],
+                "user_text": prompt["user_text"],
+                "planner_mode": "llm",
+                "intent": "unsupported",
+                "selected_app_id": "unsupported",
+                "route_reason": "model declined route",
+                "risk_class": "unsupported",
+                "requires_robot_motion": False,
+                "needs_confirmation": False,
+                "target": "workspace",
+                "app_task_input": {"text": prompt["user_text"]},
+                "preflight_checks": [],
+                "fallback": {"used": False, "reason": ""},
+                "user_summary": "unsupported",
+            }
+
+    app_index = AppIndex.load(app_root)
+    flags = GatewayFlags(
+        require_llm=True,
+        allow_arm_motion=True,
+        assume_yes=True,
+        forced_app_id="color_block_grasper_agent",
+    )
+    plan = DispatcherPlanner(llm_chat=UnsupportedLLMChat()).plan(
+        "夹起红色方块",
+        app_index,
+        flags,
+        task_id="task_test",
+        route_plan_id="plan_route_test",
+    )
+    assert plan["selected_app_id"] == "color_block_grasper_agent"
+    assert plan["intent"] == "color_block_grasp"
+    assert plan["risk_class"] == "named_motion"
+    assert plan["requires_robot_motion"] is True
+    assert plan["needs_confirmation"] is True
+    DispatcherValidator().validate(plan, app_index, flags)
 
 
 def test_show_plan_dry_run_does_not_execute_app(tmp_path, monkeypatch):

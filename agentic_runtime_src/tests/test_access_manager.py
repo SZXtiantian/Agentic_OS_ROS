@@ -7,6 +7,7 @@ from agentic_os.kernel.access import (
     AccessRule,
     AccessSubject,
     AlwaysAllowTestInterventionProvider,
+    CliOperatorInterventionProvider,
     FileQueueInterventionProvider,
     InMemoryAccessDecisionLog,
     InMemoryAccessStore,
@@ -217,6 +218,65 @@ def test_robot_motion_with_permission_requires_intervention_when_marked_irrevers
     assert intervention.requires_intervention is True
     assert allowed.allowed is True
     assert allowed.requires_intervention is True
+
+
+def test_cli_operator_intervention_requires_explicit_env_confirmation(monkeypatch):
+    monkeypatch.delenv("AGENTIC_OPERATOR_INTERVENTION_APPROVED", raising=False)
+    monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
+    manager = AccessManager(intervention_provider=CliOperatorInterventionProvider())
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", permissions=("gripper.control",)),
+            action="execute",
+            resource=AccessResource("robot_motion", "manipulation.pick_color_block"),
+            irreversible=True,
+        )
+    )
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACCESS_INTERVENTION_REQUIRED"
+
+
+def test_cli_operator_intervention_requires_manipulation_env_for_pick(monkeypatch):
+    monkeypatch.setenv("AGENTIC_OPERATOR_INTERVENTION_APPROVED", "1")
+    monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
+    monkeypatch.delenv("AGENTIC_REAL_ROBOT_ALLOW_MANIPULATION", raising=False)
+    manager = AccessManager(intervention_provider=CliOperatorInterventionProvider())
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", permissions=("gripper.control",)),
+            action="execute",
+            resource=AccessResource("robot_motion", "manipulation.pick_color_block"),
+            irreversible=True,
+        )
+    )
+
+    assert decision.allowed is False
+    assert decision.error_code == "ACCESS_INTERVENTION_REQUIRED"
+    assert "AGENTIC_REAL_ROBOT_ALLOW_MANIPULATION" in decision.reason
+
+
+def test_cli_operator_intervention_allows_confirmed_robot_manipulation(monkeypatch):
+    monkeypatch.setenv("AGENTIC_OPERATOR_INTERVENTION_APPROVED", "1")
+    monkeypatch.setenv("AGENTIC_OPERATOR_INTERVENTION_SOURCE", "cli_yes_flag")
+    monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION", "1")
+    monkeypatch.setenv("AGENTIC_REAL_ROBOT_ALLOW_MANIPULATION", "1")
+    manager = AccessManager(intervention_provider=CliOperatorInterventionProvider())
+
+    decision = manager.check(
+        AccessRequest(
+            subject=AccessSubject(agent_name="agent_a", permissions=("gripper.control",)),
+            action="execute",
+            resource=AccessResource("robot_motion", "manipulation.pick_color_block"),
+            irreversible=True,
+        )
+    )
+
+    assert decision.allowed is True
+    assert decision.requires_intervention is True
+    assert decision.metadata["operator_confirmation_source"] == "cli_yes_flag"
 
 
 def test_dynamic_acl_can_allow_private_resource():

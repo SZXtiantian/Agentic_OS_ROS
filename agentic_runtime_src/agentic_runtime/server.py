@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentic_os.kernel.access import AccessManager
+from agentic_os.kernel.access import AccessManager, CliOperatorInterventionProvider
 from agentic_os.kernel.hooks import InMemoryKernelEventSink
 
 from agentic_runtime.audit import AuditLogger
@@ -65,7 +65,7 @@ class RuntimeServer:
                 config_path = candidate
         config = RuntimeConfig.load(config_path)
         event_sink = InMemoryKernelEventSink()
-        access_manager = AccessManager(event_sink=event_sink)
+        access_manager = cls._create_access_manager(event_sink)
         registry = SkillRegistry(config.skill_root).load()
         audit_logger = AuditLogger(config.audit_log_path)
         memory_manager = create_memory_manager(
@@ -129,6 +129,15 @@ class RuntimeServer:
         server.executor.access_manager = server.kernel_service.access_manager
         server.executor.event_sink = server.kernel_service.event_sink
         return server
+
+    @staticmethod
+    def _create_access_manager(event_sink: InMemoryKernelEventSink) -> AccessManager:
+        if os.environ.get("AGENTIC_OPERATOR_INTERVENTION_APPROVED", "").strip().lower() in {"1", "true", "yes", "on"}:
+            return AccessManager(
+                event_sink=event_sink,
+                intervention_provider=CliOperatorInterventionProvider(),
+            )
+        return AccessManager(event_sink=event_sink)
 
     def shutdown(self) -> None:
         self.kernel_service.stop()

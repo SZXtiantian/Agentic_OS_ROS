@@ -714,6 +714,7 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         "summary",
         "answer",
         "result_json",
+        "detection_json",
         "evidence_path",
         "evidence_json",
         "image_path",

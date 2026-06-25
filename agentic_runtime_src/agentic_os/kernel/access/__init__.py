@@ -3,6 +3,7 @@
 from .decision_log import AccessDecisionLog, InMemoryAccessDecisionLog, JsonlAccessDecisionLog
 from .intervention import (
     AlwaysAllowTestInterventionProvider,
+    CliOperatorInterventionProvider,
     ConsoleInterventionProvider,
     DenyByDefaultInterventionProvider,
     FileQueueInterventionProvider,
@@ -22,6 +23,7 @@ __all__ = [
     "AccessStore",
     "AccessSubject",
     "AlwaysAllowTestInterventionProvider",
+    "CliOperatorInterventionProvider",
     "ConsoleInterventionProvider",
     "DefaultAccessPolicy",
     "DenyByDefaultInterventionProvider",

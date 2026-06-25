@@ -1,0 +1,44 @@
+{
+  "name": "color_block_grasper_agent",
+  "description": "A native Agentic App for real color block detection, pick, and place through Agentic OS Runtime skills and Runtime-owned LLM planning.",
+  "tools": [
+    "agenticos/perception_detect_color_block",
+    "agenticos/perception_capture_photo",
+    "agenticos/manipulation_pick_color_block",
+    "agenticos/manipulation_place_color_block",
+    "agenticos/human_ask",
+    "agenticos/llm_chat"
+  ],
+  "meta": {
+    "author": "AgenticOS",
+    "version": "0.1.0",
+    "license": "Proprietary"
+  },
+  "dispatch": {
+    "enabled": true,
+    "priority": 120,
+    "intents": [
+      "color_block_grasp",
+      "color_block_pick_and_place"
+    ],
+    "keywords_zh": [
+      "颜色块",
+      "方块",
+      "夹起",
+      "抓取",
+      "红色方块",
+      "放置区"
+    ],
+    "keywords_en": [
+      "color block",
+      "red block",
+      "pick",
+      "grasp",
+      "place"
+    ],
+    "risk_classes": [
+      "named_motion"
+    ],
+    "default_target": "workspace"
+  }
+}
