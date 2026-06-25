@@ -3,3 +3,9 @@
 Use only Agentic OS high-level SDK APIs. Never invent color-block detections,
 evidence, pick results, or placement results; return stable unavailable errors
 when real dependencies are missing.
+
+Natural-language planning must use the Agentic OS system LLM facade. Return one
+raw JSON object with `schema_version`, `planner_mode: llm`, `target_color`,
+`place_target`, `requires_manipulation`, `needs_confirmation: true`, `steps`,
+`risk_class`, and `user_summary`. The app validates this plan before any real
+robot capability call.

@@ -6,26 +6,79 @@ from agentic_runtime.sdk import AgentContext
 
 
 APP_ID = "color_block_grasper_agent"
+PLAN_SCHEMA_VERSION = "1.0"
 ALLOWED_COLORS = {"red", "green", "blue", "yellow"}
 CONFIRM_ANSWER = "CONFIRM"
+PLAN_STEPS = ["detect_color_block", "capture_evidence", "pick_color_block", "place_color_block"]
+RISK_CLASSES = {"controlled_manipulation", "manipulation_real_hardware"}
 
 
 async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
-    task_or_error = _normalize_task(kwargs)
-    if not task_or_error["success"]:
-        return await _finish_failure(ctx, task_or_error["task"], [], task_or_error)
-
-    task = task_or_error["task"]
+    task_text = str(kwargs.get("task_text") or kwargs.get("message") or "").strip()
     steps: list[dict[str, Any]] = []
-    await _record_start(ctx, task, steps)
 
-    readiness = await _check_readiness(ctx, task, steps)
-    if not readiness["success"]:
-        return await _finish_failure(ctx, task, steps, readiness)
+    if not task_text:
+        return await _finish_failure(
+            ctx,
+            {"task_text": "", "planner_mode": "", "plan": {}},
+            steps,
+            {
+                "success": False,
+                "error_code": "COLOR_BLOCK_LLM_PLAN_REQUIRED",
+                "reason": "natural language task_text or message is required for system LLM planning",
+                "missing": ["task_text"],
+                "next_action": "Provide a natural language color-block manipulation request and rerun.",
+            },
+        )
+
+    plan_result = await _plan_with_system_llm(ctx, task_text)
+    steps.append(_llm_step("llm_plan", plan_result))
+    if not plan_result["success"]:
+        return await _finish_failure(
+            ctx,
+            {"task_text": task_text, "planner_mode": "", "plan": {}},
+            steps,
+            {
+                "success": False,
+                "error_code": str(plan_result["error_code"] or "COLOR_BLOCK_LLM_PLAN_REQUIRED"),
+                "reason": str(plan_result["reason"] or "system LLM planning is required"),
+                "missing": ["RuntimeServer.llm_chat"],
+                "next_action": "Configure the Agentic OS Runtime LLM provider and rerun with LLM required.",
+            },
+        )
+
+    plan = plan_result["plan"]
+    validation = _validate_plan(plan)
+    steps.append(_plan_validation_step(validation))
+    if not validation["success"]:
+        return await _finish_failure(ctx, {"task_text": task_text, "planner_mode": "llm", "plan": plan}, steps, validation)
+
+    task = _task_from_plan(task_text, plan)
+    policy = _validate_policy(ctx, task)
+    steps.append(
+        {
+            "name": "validate_policy",
+            "skill": "deterministic.policy",
+            "success": bool(policy["success"]),
+            "error_code": str(policy.get("error_code") or ""),
+            "reason": str(policy.get("reason") or ""),
+            "data": {"risk_class": task["risk_class"], "permissions_checked": policy.get("permissions_checked", [])},
+            "syscall_id": "",
+            "audit_id": "",
+        }
+    )
+    if not policy["success"]:
+        return await _finish_failure(ctx, task, steps, policy)
+
+    await _record_start(ctx, task, steps)
 
     confirmation = await _confirm_manipulation(ctx, task, steps)
     if not confirmation["success"]:
         return await _finish_failure(ctx, task, steps, confirmation)
+
+    readiness = await _check_readiness(ctx, task, steps)
+    if not readiness["success"]:
+        return await _finish_failure(ctx, task, steps, readiness)
 
     detection = await _detect_color_block(ctx, task, steps)
     if not detection["success"]:
@@ -46,30 +99,153 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     return await _finish_success(ctx, task, detection, evidence, pick, place, steps)
 
 
-def _normalize_task(kwargs: dict[str, Any]) -> dict[str, Any]:
-    color = str(kwargs.get("color") or "red").strip().lower()
-    place_target = str(kwargs.get("place_target") or "workspace_drop_zone").strip()
-    timeout_s = int(kwargs.get("timeout_s") or 180)
-    evidence_label = str(kwargs.get("evidence_label") or f"{color}_block_grasp").strip()
-    require_confirmation = bool(kwargs.get("require_confirmation", True))
-    task = {
-        "color": color,
-        "place_target": place_target,
-        "require_confirmation": require_confirmation,
-        "evidence_label": evidence_label,
-        "timeout_s": timeout_s,
-        "target": str(kwargs.get("target") or "workspace"),
-    }
-    if color not in ALLOWED_COLORS:
+async def _plan_with_system_llm(ctx: AgentContext, task_text: str) -> dict[str, Any]:
+    result = await ctx.llm.chat_json(
+        system_prompt=_system_prompt(),
+        user_prompt=f"User task: {task_text}",
+        timeout_s=30,
+    )
+    if not result.success:
         return {
             "success": False,
-            "task": task,
-            "error_code": "COLOR_BLOCK_COLOR_NOT_ALLOWED",
-            "reason": f"color must be one of {', '.join(sorted(ALLOWED_COLORS))}",
-            "missing": [],
-            "next_action": "Choose an allowed color and rerun the app.",
+            "plan": {},
+            "error_code": result.error_code or "COLOR_BLOCK_LLM_PLAN_REQUIRED",
+            "reason": result.reason or "system LLM planning is required",
+            "metadata": dict(result.metadata),
         }
-    return {"success": True, "task": task}
+    return {"success": True, "plan": dict(result.plan), "error_code": "", "reason": "", "metadata": dict(result.metadata)}
+
+
+def _system_prompt() -> str:
+    return "\n".join(
+        [
+            "You plan a color-block manipulation task for an Agentic OS Agent App.",
+            "Return one raw JSON object only.",
+            "Required fields:",
+            "- schema_version: '1.0'",
+            "- planner_mode: 'llm'",
+            "- target_color: one of red, green, blue, yellow",
+            "- place_target: a concrete tray or workspace destination",
+            "- requires_manipulation: true",
+            "- needs_confirmation: true",
+            "- steps: exactly ['detect_color_block','capture_evidence','pick_color_block','place_color_block']",
+            "- risk_class: 'controlled_manipulation' or 'manipulation_real_hardware'",
+            "- user_summary: one short sentence",
+            "Optional fields: target, evidence_label, timeout_s.",
+            "Do not include markdown fences.",
+        ]
+    )
+
+
+def _validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    required = [
+        "schema_version",
+        "planner_mode",
+        "target_color",
+        "place_target",
+        "requires_manipulation",
+        "needs_confirmation",
+        "steps",
+        "risk_class",
+        "user_summary",
+    ]
+    missing = [field for field in required if field not in plan]
+    if missing:
+        return _plan_failure(f"LLM plan missing required fields: {', '.join(missing)}")
+    if plan["schema_version"] != PLAN_SCHEMA_VERSION or plan["planner_mode"] != "llm":
+        return _plan_failure("LLM plan schema_version/planner_mode invalid")
+    if plan["target_color"] not in ALLOWED_COLORS:
+        return _plan_failure("LLM plan target_color is outside the allowed color set")
+    if not isinstance(plan["place_target"], str) or not plan["place_target"].strip():
+        return _plan_failure("LLM plan place_target must be a non-empty string")
+    if plan["requires_manipulation"] is not True:
+        return _plan_failure("LLM plan must declare requires_manipulation=true")
+    if not isinstance(plan["needs_confirmation"], bool):
+        return _plan_failure("LLM plan needs_confirmation must be boolean")
+    if plan["steps"] != PLAN_STEPS:
+        return _plan_failure("LLM plan steps must use the required deterministic execution sequence")
+    if plan["risk_class"] not in RISK_CLASSES:
+        return _plan_failure("LLM plan risk_class is not allowed")
+    if not isinstance(plan["user_summary"], str) or not plan["user_summary"].strip():
+        return _plan_failure("LLM plan user_summary must be a non-empty string")
+    if "target" in plan and (not isinstance(plan["target"], str) or not plan["target"].strip()):
+        return _plan_failure("LLM plan target must be a non-empty string when present")
+    if "evidence_label" in plan and (not isinstance(plan["evidence_label"], str) or not plan["evidence_label"].strip()):
+        return _plan_failure("LLM plan evidence_label must be a non-empty string when present")
+    if "timeout_s" in plan and (not isinstance(plan["timeout_s"], int) or plan["timeout_s"] < 1 or plan["timeout_s"] > 600):
+        return _plan_failure("LLM plan timeout_s must be an integer between 1 and 600 when present")
+    return {"success": True, "error_code": "", "reason": "", "missing": [], "next_action": ""}
+
+
+def _plan_failure(reason: str) -> dict[str, Any]:
+    return {
+        "success": False,
+        "error_code": "COLOR_BLOCK_LLM_PLAN_INVALID",
+        "reason": reason,
+        "missing": [],
+        "next_action": "Fix the Runtime LLM JSON plan contract and rerun.",
+    }
+
+
+def _task_from_plan(task_text: str, plan: dict[str, Any]) -> dict[str, Any]:
+    color = str(plan["target_color"])
+    return {
+        "task_text": task_text,
+        "planner_mode": "llm",
+        "plan": dict(plan),
+        "color": color,
+        "target_color": color,
+        "place_target": str(plan["place_target"]),
+        "requires_manipulation": True,
+        "needs_confirmation": bool(plan["needs_confirmation"]),
+        "require_confirmation": bool(plan["needs_confirmation"]),
+        "evidence_label": str(plan.get("evidence_label") or f"{color}_block_grasp"),
+        "timeout_s": int(plan.get("timeout_s") or 180),
+        "target": str(plan.get("target") or "workspace"),
+        "risk_class": str(plan["risk_class"]),
+        "user_summary": str(plan["user_summary"]),
+        "steps": list(plan["steps"]),
+    }
+
+
+def _validate_policy(ctx: AgentContext, task: dict[str, Any]) -> dict[str, Any]:
+    required_permissions = [
+        "perception.detect.color_block",
+        "perception.capture",
+        "manipulation.pick.color_block",
+        "manipulation.place.color_block",
+        "human.ask",
+    ]
+    permissions = set(ctx.app_manifest.permissions)
+    missing = [permission for permission in required_permissions if permission not in permissions]
+    if missing:
+        return {
+            "success": False,
+            "error_code": "COLOR_BLOCK_CAPABILITY_UNAVAILABLE",
+            "reason": "app manifest does not grant required color-block capability permissions",
+            "missing": missing,
+            "next_action": "Grant the required Agentic OS permissions in app.yaml and rerun.",
+            "permissions_checked": required_permissions,
+        }
+    if not bool(task["requires_manipulation"]):
+        return {
+            "success": False,
+            "error_code": "COLOR_BLOCK_LLM_PLAN_INVALID",
+            "reason": "LLM plan did not declare the manipulation requirement",
+            "missing": [],
+            "next_action": "Regenerate the LLM plan with requires_manipulation=true.",
+            "permissions_checked": required_permissions,
+        }
+    if not bool(task["needs_confirmation"]):
+        return {
+            "success": False,
+            "error_code": "COLOR_BLOCK_LLM_PLAN_INVALID",
+            "reason": "real color-block manipulation requires explicit human confirmation",
+            "missing": ["human confirmation requirement"],
+            "next_action": "Regenerate the LLM plan with needs_confirmation=true.",
+            "permissions_checked": required_permissions,
+        }
+    return {"success": True, "permissions_checked": required_permissions}
 
 
 async def _record_start(ctx: AgentContext, task: dict[str, Any], steps: list[dict[str, Any]]) -> None:
@@ -417,6 +593,9 @@ def _result_payload(
         "schema_version": "1.0",
         "success": success,
         "app_id": ctx.app_manifest.name or APP_ID,
+        "planner_mode": str(task.get("planner_mode") or ""),
+        "task_text": str(task.get("task_text") or ""),
+        "plan": dict(task.get("plan") or {}),
         "task": task,
         "steps": steps,
         "error_code": error_code,
@@ -425,6 +604,32 @@ def _result_payload(
         "next_action": next_action,
         "syscall_ids": [step["syscall_id"] for step in steps if step.get("syscall_id")],
         "audit_ids": [step["audit_id"] for step in steps if step.get("audit_id")],
+    }
+
+
+def _llm_step(name: str, result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": name,
+        "skill": "ctx.llm.chat_json",
+        "success": bool(result["success"]),
+        "error_code": str(result.get("error_code") or ""),
+        "reason": str(result.get("reason") or ""),
+        "syscall_id": "",
+        "audit_id": "",
+        "data": {"plan": dict(result.get("plan") or {}), "metadata": dict(result.get("metadata") or {})},
+    }
+
+
+def _plan_validation_step(validation: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "name": "validate_plan",
+        "skill": "deterministic.schema",
+        "success": bool(validation["success"]),
+        "error_code": str(validation.get("error_code") or ""),
+        "reason": str(validation.get("reason") or ""),
+        "syscall_id": "",
+        "audit_id": "",
+        "data": {"planner_mode": "llm"},
     }
 
 

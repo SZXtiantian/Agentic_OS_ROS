@@ -18,6 +18,12 @@ Stable errors are part of the real-only contract.
 | `LLM_PROVIDER_UNCONFIGURED` | LLM provider is missing base URL, key, model, or equivalent config. |
 | `LLM_PROVIDER_DEPENDENCY_MISSING` | Optional provider package is missing. |
 | `LLM_PROVIDER_REQUEST_FAILED` | Real remote/local LLM provider request failed. |
+| `LLMCHAT_UNAVAILABLE` | AgentContext has no Runtime-owned `RuntimeServer.llm_chat` facade available. |
+| `LLM_RESPONSE_INVALID` | Runtime-owned LLM facade returned a non-JSON-plan response shape. |
+| `HELLO_WORLD_LLM_REQUIRED` | `hello_world_agent` could not plan because the system LLM is required. |
+| `HELLO_WORLD_LLM_PLAN_INVALID` | `hello_world_agent` received an invalid constrained JSON plan. |
+| `COLOR_BLOCK_LLM_PLAN_REQUIRED` | `color_block_grasper_agent` requires system LLM planning from natural language. |
+| `COLOR_BLOCK_LLM_PLAN_INVALID` | `color_block_grasper_agent` received a constrained JSON plan that failed deterministic validation. |
 | `HUMAN_PROVIDER_UNCONFIGURED` | No real human provider is configured. |
 | `HUMAN_BACKEND_UNAVAILABLE` | Runtime human backend is unavailable. |
 | `HUMAN_OPERATOR_TIMEOUT` | Human request timed out without an answer. |

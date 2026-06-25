@@ -97,6 +97,54 @@ def test_kernel_sdk_llm_uses_kernel_query():
     assert captured["timeout_s"] == 1.5
 
 
+def test_sdk_llm_json_uses_runtime_owned_llm_chat():
+    class RuntimeOwnedLLMChat:
+        def __init__(self):
+            self.calls = []
+
+        def chat_json(self, *, system_prompt, user_prompt):
+            self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt})
+            return {"planner_mode": "llm", "answer": "ok"}
+
+    llm_chat = RuntimeOwnedLLMChat()
+
+    class Executor:
+        kernel_service = SimpleNamespace(runtime_server=SimpleNamespace(llm_chat=llm_chat))
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("ctx.llm must not use skill executor")
+
+    async def run():
+        app = AppManifest("sdk_llm_app", "0", "", "main:run", ["llm.external.call"], ["agenticos.runtime.llm_chat"])
+        ctx = AgentContext(Executor(), app, "sess_llm")
+        result = await ctx.llm.chat_json(system_prompt="return JSON", user_prompt="hello", timeout_s=1)
+        assert result.success is True
+        assert result.plan["planner_mode"] == "llm"
+        assert result.metadata["provider_owner"] == "RuntimeServer"
+
+    asyncio.run(run())
+
+    assert llm_chat.calls == [{"system_prompt": "return JSON", "user_prompt": "hello"}]
+
+
+def test_sdk_llm_json_without_runtime_llm_returns_stable_error():
+    class Executor:
+        kernel_service = SimpleNamespace(runtime_server=None)
+
+        async def execute(self, *args, **kwargs):
+            raise AssertionError("ctx.llm must not use skill executor")
+
+    async def run():
+        app = AppManifest("sdk_llm_app", "0", "", "main:run", ["llm.external.call"], ["agenticos.runtime.llm_chat"])
+        ctx = AgentContext(Executor(), app, "sess_llm")
+        result = await ctx.llm.chat_json(system_prompt="return JSON", user_prompt="hello", timeout_s=1)
+        assert result.success is False
+        assert result.error_code == "LLMCHAT_UNAVAILABLE"
+        assert result.metadata["provider_owner"] == "RuntimeServer"
+
+    asyncio.run(run())
+
+
 def test_kernel_sdk_storage_uses_storage_query():
     captured = {}
 

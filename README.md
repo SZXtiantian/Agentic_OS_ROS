@@ -158,6 +158,11 @@ Template-derived examples:
 - `agentic_apps/hello_world_agent`
 - `agentic_apps/color_block_grasper_agent`
 
+Both tutorial examples plan natural-language tasks through the Agentic OS system
+LLM facade (`ctx.llm.chat_json` -> `RuntimeServer.llm_chat`) before deterministic
+validation and capability execution. They must not own provider clients or
+return success when the required LLM path is unavailable.
+
 ## Common Commands
 
 Install/update the runtime into `/opt/agentic`:

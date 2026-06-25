@@ -74,6 +74,35 @@ message packages, or hardware SDKs. They must not publish or subscribe to robot
 topics, call Nav2 or MoveIt actions, shell out to `ros2`, or implement realtime
 closed-loop control. Bridge/HAL code belongs under `ros2_bridge_src`.
 
+## System LLM Planning
+
+Apps that perform natural-language understanding or task planning must call the
+Agentic OS system LLM interface. The preferred SDK path is:
+
+```python
+result = await ctx.llm.chat_json(
+    system_prompt=system_prompt,
+    user_prompt=f"User task: {task_text}",
+)
+```
+
+`ctx.llm.chat_json` delegates to `RuntimeServer.llm_chat` through the runtime
+injected into `AgentContext`. Provider clients, model config, secrets, retries,
+and provider-specific parsing remain owned by Runtime/Kernel. Agent Apps must
+not construct OpenAI-compatible clients, import LiteLLM/vLLM/OpenAI SDKs, read
+API keys, or treat structured keyword parameters as natural-language
+understanding.
+
+The LLM output must be a constrained JSON plan. The app owns deterministic
+schema validation, policy validation, permission/resource checks, safety
+guards, real capability execution, audit evidence, memory/storage writes, and
+reporting. If `ctx.llm` returns `LLMCHAT_UNAVAILABLE`,
+`LLM_PROVIDER_UNCONFIGURED`, or another LLM error, the app must return a stable
+failure. It must not continue as a successful rule planner path.
+
+Tutorial acceptance for `hello_world_agent` and `color_block_grasper_agent`
+runs with `AGENTIC_LLM_REQUIRE=1` or an equivalent `--require-llm` command.
+
 ## Real-Only Behavior
 
 Apps must not create surface success when a real backend is missing. Missing
@@ -90,8 +119,8 @@ runtime backends such as the file report sink.
 `storage/` is app-owned durable output space. Do not commit generated runs,
 audit logs, task logs, real photos, videos, secrets, or `/opt/agentic/var`.
 
-`prompts/` stores system prompts for app-owned planning or parsing. Apps still
-use Runtime-owned LLM services and must not read model secrets.
+`prompts/` stores system prompts for app-owned planning instructions. Apps
+still use Runtime-owned LLM services and must not read model secrets.
 
 `workflows/default.yaml` records the default workflow shape. `tests/` verifies
 manifest shape, boundary rules, real-only failures, and smoke behavior.
@@ -122,6 +151,7 @@ metadata, and JSONL audit logs. Keep those generated files out of git.
 - `agentic_runtime_src/docs/tutorials/hello_world_agent.md`
 - `agentic_runtime_src/docs/tutorials/color_block_grasper_agent.md`
 
-The Hello World tutorial shows context, memory, storage, tool, skill, and report
-calls. The color-block tutorial shows how a native app orchestrates real
-perception and manipulation contracts without copying a traditional robot app.
+The Hello World tutorial shows Runtime LLM JSON planning followed by context,
+memory, storage, tool, skill, and report calls. The color-block tutorial shows
+Runtime LLM JSON planning followed by deterministic validation and real
+perception/manipulation contracts without copying a traditional robot app.

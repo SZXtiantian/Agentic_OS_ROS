@@ -14,6 +14,24 @@ reserved providers as available; missing runtime backends return stable errors
 such as `SKILL_BACKEND_UNAVAILABLE`, `ROS_BRIDGE_UNAVAILABLE`, or
 `LLM_PROVIDER_UNCONFIGURED`.
 
+## Natural Language Planning
+
+The template does not force every app to call an LLM. If an app accepts natural
+language and plans a task from that text, it must use the Agentic OS system LLM
+facade:
+
+```python
+plan = await ctx.llm.chat_json(system_prompt=..., user_prompt=...)
+```
+
+`ctx.llm.chat_json` is a SDK wrapper over Runtime-owned
+`RuntimeServer.llm_chat`. The app must not create provider clients, read model
+keys, or call OpenAI/LiteLLM/vLLM SDKs directly. The LLM returns a constrained
+JSON plan; the app then performs deterministic schema validation, policy
+validation, safety checks, real capability calls, memory/storage writes, and
+reporting. If the LLM facade or provider is unavailable, natural-language
+planning returns a stable error and must not continue as a successful path.
+
 ## Bare Kernel Smoke
 
 The bare kernel smoke uses a `KernelService` without a `RuntimeServer`. It calls:

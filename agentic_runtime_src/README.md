@@ -116,7 +116,9 @@ availability is `file_queue`; console/http/websocket are reserved.
 ## LLM Boundary
 
 AgenticOS Runtime owns `LLMChat`, provider selection, model config, API-key
-loading, timeout handling, and JSON parsing. Dispatcher and Agent Apps may use
-only the Runtime-owned `llm_chat` facade. `--require-llm` or
-`AGENTIC_LLM_REQUIRE=1` turns LLM fallback into a structured error instead of an
-accepted rule-based plan.
+loading, timeout handling, and JSON parsing. Agent Apps use
+`ctx.llm.chat_json(...)`, which delegates to Runtime-owned
+`RuntimeServer.llm_chat`; they must not construct provider clients or read
+model secrets. `hello_world_agent` and `color_block_grasper_agent` accept
+natural-language success only after LLM JSON planning, and
+`AGENTIC_LLM_REQUIRE=1` keeps tutorial acceptance on that path.

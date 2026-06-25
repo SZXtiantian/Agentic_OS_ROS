@@ -118,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"CREATE_AGENTIC_APP_OK app={app_name} path={rel}")
     print(f"Next: edit {rel}/app.yaml")
     print(f"Next: edit {rel}/main.py")
+    print("Next: natural-language planners should call ctx.llm.chat_json; do not create provider clients in the app")
     print(f"Next: python scripts/check_agentic_app_uses_template.py {rel}")
     return 0
 

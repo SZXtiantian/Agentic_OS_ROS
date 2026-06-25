@@ -19,9 +19,12 @@ The app keeps the template core files and `.agentic_template_source`.
 
 ## Manifest
 
-`app.yaml` declares robot state, perception, arm, gripper, manipulation, human,
-memory, storage, and report permissions. Required capabilities include:
+`app.yaml` declares `llm.external.call`, robot state, perception, arm, gripper,
+manipulation, human, memory, storage, and report permissions. Required
+capabilities include:
 
+- `agenticos.runtime.llm_chat`
+- `llm.chat`
 - `perception.detect_color_block`
 - `manipulation.pick_color_block`
 - `manipulation.place_color_block`
@@ -36,21 +39,33 @@ safety guards, and audit logs.
 
 `main.py` follows this order:
 
-1. Normalize `color`, `place_target`, `require_confirmation`, `evidence_label`,
-   and `timeout_s`.
-2. Write task context and start storage evidence.
-3. Check `robot.get_state` and `arm.get_state`; arm state also carries gripper
+1. Read natural language from `message` or `task_text`.
+2. Call `ctx.llm.chat_json(...)`, which delegates to Runtime-owned
+   `RuntimeServer.llm_chat`.
+3. Validate the constrained JSON plan. Required fields are `target_color`,
+   `place_target`, `requires_manipulation`, `needs_confirmation: true`,
+   `steps`,
+   `risk_class`, and `user_summary`.
+4. Validate deterministic policy and required app permissions.
+5. Write task context and start storage evidence.
+6. Ask for human confirmation when the LLM plan requires it.
+7. Check `robot.get_state` and `arm.get_state`; arm state also carries gripper
    readiness.
-4. Ask for human confirmation when required.
-5. Call `perception.detect_color_block`.
-6. Call `perception.capture_photo`.
-7. Call `manipulation.pick_color_block`.
-8. Call `manipulation.place_color_block`.
-9. Write memory and storage result evidence.
-10. Call `report.say`.
+8. Call `perception.detect_color_block`.
+9. Call `perception.capture_photo`.
+10. Call `manipulation.pick_color_block`.
+11. Call `manipulation.place_color_block`.
+12. Write memory and storage result evidence.
+13. Call `report.say`.
 
-Allowed colors are `red`, `green`, `blue`, and `yellow`. Unsupported colors
-return `COLOR_BLOCK_COLOR_NOT_ALLOWED`.
+Allowed plan colors are `red`, `green`, `blue`, and `yellow`. A plan with any
+other color returns `COLOR_BLOCK_LLM_PLAN_INVALID`. The app must not parse the
+color or destination from natural-language text with string matching or regular
+expressions.
+
+If the Runtime LLM facade or provider is unavailable, the app returns a stable
+LLM error such as `LLMCHAT_UNAVAILABLE`, `LLM_PROVIDER_UNCONFIGURED`, or
+`COLOR_BLOCK_LLM_PLAN_REQUIRED`. It must not continue as a successful path.
 
 ## Skill Contracts
 
@@ -78,6 +93,9 @@ Traditional robot code can explain business flow: detect target color, confirm,
 pick, place, and handle failure. It cannot become the Agentic App runtime path.
 The native app may only call Agentic SDK and kernel skill contracts.
 
+The native app also may only consume the system LLM facade. It must not create
+provider clients, read API keys, or call OpenAI/LiteLLM/vLLM SDKs directly.
+
 ## Tests
 
 ```bash
@@ -86,6 +104,9 @@ python scripts/check_agentic_app_boundaries.py agentic_apps
 PYTHONPATH=agentic_runtime_src pytest -q agentic_apps/color_block_grasper_agent/tests
 scripts/verify_agentic_app_tutorials.sh
 ```
+
+The tutorial verification script exports `AGENTIC_LLM_REQUIRE=1`, so acceptance
+cannot pass by skipping LLM planning.
 
 ## Real-E2E
 
@@ -96,6 +117,8 @@ operator present:
 AGENTIC_VERIFY_REAL_COLOR_BLOCK_GRASPER=1 \
 AGENTIC_VERIFY_REAL_ROS2=1 \
 AGENTIC_REAL_ROBOT_ALLOW_MANIPULATION=1 \
+AGENTIC_LLM_ENABLED=1 \
+AGENTIC_LLM_REQUIRE=1 \
 PYTHONPATH=agentic_runtime_src \
 pytest -q agentic_apps/color_block_grasper_agent/tests
 ```
@@ -104,8 +127,8 @@ If those dependencies are not configured, report:
 
 ```text
 UNVERIFIED_REAL_DEPENDENCY
-missing: perception.detect_color_block, manipulation.pick_color_block, manipulation.place_color_block
-next_action: configure the Agentic perception and manipulation bridge contracts, then rerun real-e2e
+missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, manipulation.pick_color_block, manipulation.place_color_block
+next_action: configure the Runtime LLM provider and Agentic perception/manipulation bridge contracts, then rerun real-e2e
 ```
 
 Evidence is recorded in app result storage, memory records, syscall metadata,

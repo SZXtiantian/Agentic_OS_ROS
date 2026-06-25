@@ -6,6 +6,20 @@ from pathlib import Path
 from agentic_runtime.server import RuntimeServer
 
 
+class RecordingLLMChat:
+    def chat_json(self, *, system_prompt: str, user_prompt: str):
+        return {
+            "schema_version": "1.0",
+            "planner_mode": "llm",
+            "greeting": "Hello from Agentic OS.",
+            "report_message": "Hello World plan executed through Runtime-owned LLM.",
+            "memory_key": "hello_world:runtime_plan",
+            "storage_path": "hello_world/runtime_plan.json",
+            "tool_args": {"a": 4, "b": 6},
+            "user_summary": "Greet the user through the real runtime smoke.",
+        }
+
+
 def test_hello_world_agent_real_runtime_report_succeeds(tmp_path, monkeypatch, repo_root: Path, runtime_src: Path):
     report_log = tmp_path / "reports" / "report.jsonl"
     config_path = tmp_path / "runtime.yaml"
@@ -43,7 +57,11 @@ def test_hello_world_agent_real_runtime_report_succeeds(tmp_path, monkeypatch, r
 
     async def scenario():
         server = RuntimeServer.create()
-        return await server.scheduler.run_app("hello_world_agent", message="real runtime hello")
+        server.llm_chat = RecordingLLMChat()
+        try:
+            return await server.scheduler.run_app("hello_world_agent", message="real runtime hello")
+        finally:
+            server.shutdown()
 
     result = asyncio.run(scenario())
 

@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export PYTHONDONTWRITEBYTECODE=1
+export AGENTIC_LLM_REQUIRE=1
 
 python scripts/check_agentic_app_uses_template.py agentic_apps/hello_world_agent
 python scripts/check_agentic_app_uses_template.py agentic_apps/color_block_grasper_agent
@@ -20,4 +21,4 @@ do
   test -f "$doc"
 done
 
-echo "AGENTIC_APP_TUTORIALS_OK"
+echo "AGENTIC_APP_TUTORIALS_OK llm_required=1"

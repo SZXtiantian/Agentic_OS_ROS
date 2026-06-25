@@ -49,5 +49,21 @@ Key stable errors:
 - LLM missing config: `LLM_PROVIDER_UNCONFIGURED`.
 - LLM optional dependency absent: `LLM_PROVIDER_DEPENDENCY_MISSING`.
 - LLM remote/provider request failure: `LLM_PROVIDER_REQUEST_FAILED`.
+- Agent App context has no Runtime-owned LLM facade: `LLMCHAT_UNAVAILABLE`.
+- Natural-language tutorial app cannot produce a constrained JSON plan:
+  `HELLO_WORLD_LLM_REQUIRED` or `COLOR_BLOCK_LLM_PLAN_REQUIRED`.
 - Human queue timeout: `HUMAN_OPERATOR_TIMEOUT`.
 - Real dependency verification not configured: `UNVERIFIED_REAL_DEPENDENCY`.
+
+## Runtime LLM Facade Contract
+
+Agent Apps consume system LLM capability through `ctx.llm.chat_json(...)`, which
+delegates to `RuntimeServer.llm_chat`. Runtime/Kernel owns provider client
+construction, config, secrets, and provider-specific request handling. Apps must
+not import provider SDKs, instantiate provider clients, or read model keys.
+
+Natural-language planning apps receive a constrained JSON plan from the facade
+and then perform deterministic schema validation, policy validation, safety
+checks, capability execution, memory/storage writes, and reporting. If the
+facade or provider is unavailable, the app returns the stable LLM error. It
+must not report success by switching to an app-local text parser.

@@ -14,6 +14,7 @@ def test_manifest_declares_native_color_block_capabilities():
     assert manifest["name"] == "color_block_grasper_agent"
     assert manifest["entrypoint"] == "main:run"
     assert {
+        "llm.external.call",
         "perception.detect.color_block",
         "manipulation.pick.color_block",
         "manipulation.place.color_block",
@@ -21,12 +22,16 @@ def test_manifest_declares_native_color_block_capabilities():
         "report.say",
     } <= set(manifest["permissions"])
     assert {
+        "agenticos.runtime.llm_chat",
+        "llm.chat",
         "perception.detect_color_block",
         "manipulation.pick_color_block",
         "manipulation.place_color_block",
         "kernel.skill",
     } <= set(manifest["required_capabilities"])
     assert manifest["safety_policy"]["allow_manipulation"] is True
+    assert manifest["runtime_limits"]["llm_planning_enabled"] is True
+    assert manifest["runtime_limits"]["llm_planning_provider"] == "agenticos.runtime.llm_chat"
 
 
 def test_color_block_skill_contracts_are_real_bridge_contracts():

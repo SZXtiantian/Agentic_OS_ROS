@@ -30,6 +30,8 @@ def test_hello_world_manifest_entrypoint_and_capabilities():
     assert manifest["name"] == "hello_world_agent"
     assert manifest["entrypoint"] == "main:run"
     assert {
+        "agenticos.runtime.llm_chat",
+        "llm.chat",
         "kernel.context",
         "kernel.memory",
         "kernel.storage",
@@ -37,12 +39,19 @@ def test_hello_world_manifest_entrypoint_and_capabilities():
         "kernel.skill",
         "report.say",
     } <= set(manifest["required_capabilities"])
+    assert "llm.external.call" in set(manifest["permissions"])
+    assert manifest["runtime_limits"]["llm_planning_enabled"] is True
+    assert manifest["runtime_limits"]["llm_planning_provider"] == "agenticos.runtime.llm_chat"
 
 
 def test_hello_world_main_uses_agent_context_without_robot_middleware_imports():
     source = (APP_DIR / "main.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
     assert "AgentContext" in source
+    assert "ctx.llm.chat_json" in source
+    assert "rule_based" not in source
+    assert "OpenAICompatibleChatClient" not in source
+    assert "AGENTIC_LLM_API_KEY" not in source
     assert any(isinstance(node, ast.AsyncFunctionDef) and node.name == "run" for node in ast.walk(tree))
     imported = []
     for node in ast.walk(tree):
