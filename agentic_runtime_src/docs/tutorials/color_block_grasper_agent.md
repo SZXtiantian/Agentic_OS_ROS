@@ -26,6 +26,7 @@ capabilities include:
 - `agenticos.runtime.llm_chat`
 - `llm.chat`
 - `perception.detect_color_block`
+- `perception.verify_held_color_block`
 - `manipulation.pick_color_block`
 - `manipulation.place_color_block`
 - `perception.capture_photo`
@@ -52,11 +53,14 @@ safety guards, and audit logs.
 7. Check `robot.get_state` and `arm.get_state`; arm state also carries gripper
    readiness.
 8. Call `perception.detect_color_block`.
-9. Call `perception.capture_photo`.
+9. Call `perception.capture_photo` for pre-pick evidence.
 10. Call `manipulation.pick_color_block`.
-11. Call `manipulation.place_color_block`.
-12. Write memory and storage result evidence.
-13. Call `report.say`.
+11. Capture post-pick evidence and call `perception.verify_held_color_block`.
+12. Continue only if the verification result contains `verified_held=true`.
+13. Call `manipulation.place_color_block` or keep the gripper in
+    `hold_position`.
+14. Write memory and storage result evidence.
+15. Call `report.say`.
 
 Allowed plan colors are `red`, `green`, `blue`, and `yellow`. A plan with any
 other color returns `COLOR_BLOCK_LLM_PLAN_INVALID`. The app must not parse the
@@ -72,20 +76,34 @@ LLM error such as `LLMCHAT_UNAVAILABLE`, `LLM_PROVIDER_UNCONFIGURED`, or
 The runtime skill manifests are:
 
 - `agentic_runtime_src/skills/perception_detect_color_block.yaml`
+- `agentic_runtime_src/skills/perception_verify_held_color_block.yaml`
 - `agentic_runtime_src/skills/manipulation_pick_color_block.yaml`
 - `agentic_runtime_src/skills/manipulation_place_color_block.yaml`
 
 They map to Agentic bridge contracts:
 
 - `/agentic/perception/detect_color_block`
+- `/agentic/perception/verify_held_color_block`
 - `/agentic/manipulation/pick_color_block`
 - `/agentic/manipulation/place_color_block`
 
 These contracts require real bridge implementations. If the detector, camera,
-arm, gripper, or manipulation backend is missing, the app returns stable errors
-such as `UNVERIFIED_REAL_DEPENDENCY`, `COLOR_BLOCK_CAPABILITY_UNAVAILABLE`, or
-`MANIPULATION_BACKEND_UNAVAILABLE`. It must not invent coordinates, images,
-pick results, or placement results.
+arm, gripper, held-block verifier, or manipulation backend is missing, the app
+returns stable errors such as `UNVERIFIED_REAL_DEPENDENCY`,
+`COLOR_BLOCK_CAPABILITY_UNAVAILABLE`, `COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE`,
+or `MANIPULATION_BACKEND_UNAVAILABLE`. It must not invent coordinates, images,
+pick results, placement results, or held-object verification.
+
+`manipulation.pick_color_block` returning `success=true` or `held=true` is not a
+completion criterion. A real tutorial acceptance must include post-pick image
+and metadata evidence plus `perception.verify_held_color_block` output proving
+the requested color block is in the gripper-held ROI, no longer overlaps the
+pre-pick tabletop detection, and appears larger/closer to the gripper camera
+than the pre-pick detection. If the red block merely disappears from the
+tabletop, is pushed into the ROI while still table-bound, or the verifier cannot
+prove it is held, the app must return `COLOR_BLOCK_PICK_VERIFICATION_FAILED`.
+The app repeats held verification after a short delay; a block that is lifted
+briefly but slips back to the tabletop is not a successful tutorial result.
 
 ## Legacy Boundary
 
@@ -127,8 +145,8 @@ If those dependencies are not configured, report:
 
 ```text
 UNVERIFIED_REAL_DEPENDENCY
-missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, manipulation.pick_color_block, manipulation.place_color_block
-next_action: configure the Runtime LLM provider and Agentic perception/manipulation bridge contracts, then rerun real-e2e
+missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, perception.verify_held_color_block, manipulation.pick_color_block, manipulation.place_color_block
+next_action: configure the Runtime LLM provider and Agentic perception/manipulation/held-verification bridge contracts, then rerun real-e2e
 ```
 
 Evidence is recorded in app result storage, memory records, syscall metadata,

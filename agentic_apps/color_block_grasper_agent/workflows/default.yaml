@@ -8,6 +8,9 @@ steps:
   - detect_color_block
   - capture_evidence
   - pick_color_block
+  - post_pick_gripper_state
+  - capture_post_pick_evidence
+  - post_pick_verify
   - place_color_block
   - remember_result
   - write_result

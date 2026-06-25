@@ -58,6 +58,22 @@ class SkillDispatcher:
                 missing=["perception.detect_color_block"],
                 next_action="Expose /agentic/perception/detect_color_block in the Agentic perception bridge.",
             )
+        if skill_name == "perception.verify_held_color_block":
+            if hasattr(self.bridge_client, "verify_held_color_block"):
+                return await self.bridge_client.verify_held_color_block(
+                    color=args["color"],
+                    target=args.get("target", "workspace"),
+                    detection=dict(args.get("detection") or {}),
+                    pick_result=dict(args.get("pick_result") or {}),
+                    evidence_label=args.get("evidence_label", "held_color_block"),
+                    timeout_s=int(args.get("timeout_s", 30)),
+                )
+            return _missing_color_block_backend(
+                "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+                "bridge client does not expose verify_held_color_block",
+                missing=["perception.verify_held_color_block"],
+                next_action="Expose /agentic/perception/verify_held_color_block in the Agentic perception bridge.",
+            )
         if skill_name == "arm.get_state":
             return await self.bridge_client.get_arm_state()
         if skill_name == "arm.move_named":

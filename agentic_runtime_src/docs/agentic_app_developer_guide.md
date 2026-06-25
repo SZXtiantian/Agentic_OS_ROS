@@ -108,7 +108,15 @@ runs with `AGENTIC_LLM_REQUIRE=1` or an equivalent `--require-llm` command.
 Apps must not create surface success when a real backend is missing. Missing
 providers return stable errors such as `SKILL_BACKEND_UNAVAILABLE`,
 `ROS_BRIDGE_UNAVAILABLE`, `COLOR_BLOCK_CAPABILITY_UNAVAILABLE`,
-`MANIPULATION_BACKEND_UNAVAILABLE`, or `UNVERIFIED_REAL_DEPENDENCY`.
+`MANIPULATION_BACKEND_UNAVAILABLE`, `COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE`,
+or `UNVERIFIED_REAL_DEPENDENCY`.
+
+For real manipulation tutorial apps, backend action success is candidate
+evidence only. The app must add deterministic post-action verification before
+returning success. For `color_block_grasper_agent`, `manipulation.pick_color_block`
+may report `held=true`, but the app still returns success only after
+`perception.verify_held_color_block` proves the requested color appears in the
+gripper-held ROI and the result records `verified_held=true`.
 
 Bare kernel smoke exercises Kernel managers without a `RuntimeServer`. Real
 runtime smoke starts `RuntimeServer`, loads the skill registry, and uses real

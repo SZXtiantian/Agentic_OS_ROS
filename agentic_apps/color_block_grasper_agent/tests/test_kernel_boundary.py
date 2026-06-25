@@ -14,6 +14,7 @@ def test_main_uses_agent_context_and_kernel_skill_contracts():
     assert "ctx.llm.chat_json" in source
     assert "ctx.kernel.skill.call" in source
     assert '"perception.detect_color_block"' in source
+    assert '"perception.verify_held_color_block"' in source
     assert '"manipulation.pick_color_block"' in source
     assert '"manipulation.place_color_block"' in source
     assert "_normalize_task" not in source

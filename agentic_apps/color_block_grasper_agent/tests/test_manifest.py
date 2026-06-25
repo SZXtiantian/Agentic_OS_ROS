@@ -16,6 +16,7 @@ def test_manifest_declares_native_color_block_capabilities():
     assert {
         "llm.external.call",
         "perception.detect.color_block",
+        "perception.verify.color_block_held",
         "manipulation.pick.color_block",
         "manipulation.place.color_block",
         "human.ask",
@@ -25,6 +26,7 @@ def test_manifest_declares_native_color_block_capabilities():
         "agenticos.runtime.llm_chat",
         "llm.chat",
         "perception.detect_color_block",
+        "perception.verify_held_color_block",
         "manipulation.pick_color_block",
         "manipulation.place_color_block",
         "kernel.skill",
@@ -38,6 +40,7 @@ def test_color_block_skill_contracts_are_real_bridge_contracts():
     skill_root = REPO_ROOT / "agentic_runtime_src" / "skills"
     expected = {
         "perception_detect_color_block.yaml": ("perception.detect_color_block", "ros2_service"),
+        "perception_verify_held_color_block.yaml": ("perception.verify_held_color_block", "ros2_service"),
         "manipulation_pick_color_block.yaml": ("manipulation.pick_color_block", "ros2_action"),
         "manipulation_place_color_block.yaml": ("manipulation.place_color_block", "ros2_action"),
     }

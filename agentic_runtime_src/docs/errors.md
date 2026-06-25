@@ -24,6 +24,8 @@ Stable errors are part of the real-only contract.
 | `HELLO_WORLD_LLM_PLAN_INVALID` | `hello_world_agent` received an invalid constrained JSON plan. |
 | `COLOR_BLOCK_LLM_PLAN_REQUIRED` | `color_block_grasper_agent` requires system LLM planning from natural language. |
 | `COLOR_BLOCK_LLM_PLAN_INVALID` | `color_block_grasper_agent` received a constrained JSON plan that failed deterministic validation. |
+| `COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE` | The real post-pick held-block verification backend is unavailable, missing, or not wired through the Agentic bridge. |
+| `COLOR_BLOCK_PICK_VERIFICATION_FAILED` | Pick execution did not produce independent evidence that the requested color block is held by the gripper. |
 | `HUMAN_PROVIDER_UNCONFIGURED` | No real human provider is configured. |
 | `HUMAN_BACKEND_UNAVAILABLE` | Runtime human backend is unavailable. |
 | `HUMAN_OPERATOR_TIMEOUT` | Human request timed out without an answer. |

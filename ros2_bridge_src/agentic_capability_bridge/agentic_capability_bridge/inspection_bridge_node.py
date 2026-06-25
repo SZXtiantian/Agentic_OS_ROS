@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import rclpy
 import yaml
-from agentic_msgs.srv import CapturePhoto, DetectColorBlock, InspectArea, Observe
+from agentic_msgs.srv import CapturePhoto, DetectColorBlock, InspectArea, Observe, VerifyHeldColorBlock
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -81,6 +81,12 @@ class InspectionBridgeNode(Node):
             DetectColorBlock,
             "/agentic/perception/detect_color_block",
             self.detect_color_block,
+            callback_group=self._callback_group,
+        )
+        self.create_service(
+            VerifyHeldColorBlock,
+            "/agentic/perception/verify_held_color_block",
+            self.verify_held_color_block,
             callback_group=self._callback_group,
         )
         self.get_logger().info(f"agentic inspection bridge ready; camera topics={self._camera_topics()}")
@@ -187,6 +193,32 @@ class InspectionBridgeNode(Node):
         response.error_code = str(result.get("error_code", ""))
         response.reason = str(result.get("reason", ""))
         response.detection_json = json.dumps(result.get("detection", {}), ensure_ascii=False, sort_keys=True)
+        response.evidence_json = json.dumps(result.get("evidence", {}), ensure_ascii=False, sort_keys=True)
+        return response
+
+    def verify_held_color_block(self, request: VerifyHeldColorBlock.Request, response: VerifyHeldColorBlock.Response):
+        try:
+            detection = json.loads(str(request.detection_json or "{}"))
+        except json.JSONDecodeError:
+            detection = {}
+        try:
+            pick_result = json.loads(str(request.pick_result_json or "{}"))
+        except json.JSONDecodeError:
+            pick_result = {}
+        result = self._verify_held_color_block(
+            color=str(request.color or ""),
+            target=str(request.target or "workspace"),
+            detection=detection if isinstance(detection, dict) else {},
+            pick_result=pick_result if isinstance(pick_result, dict) else {},
+            evidence_label=str(request.evidence_label or "held_color_block"),
+            request_id=str(request.request_id or ""),
+            timeout_s=int(request.timeout_s or 0),
+        )
+        response.success = bool(result.get("success", False))
+        response.error_code = str(result.get("error_code", ""))
+        response.reason = str(result.get("reason", ""))
+        response.verified_held = bool(result.get("verified_held", False))
+        response.verification_json = json.dumps(result.get("verification", {}), ensure_ascii=False, sort_keys=True)
         response.evidence_json = json.dumps(result.get("evidence", {}), ensure_ascii=False, sort_keys=True)
         return response
 
@@ -411,6 +443,187 @@ class InspectionBridgeNode(Node):
         }
         return {"success": True, "error_code": "", "reason": "", "detection": detection, "evidence": metadata}
 
+    def _verify_held_color_block(
+        self,
+        color: str,
+        target: str,
+        detection: dict[str, Any],
+        pick_result: dict[str, Any],
+        evidence_label: str,
+        request_id: str,
+        timeout_s: int,
+    ) -> dict[str, Any]:
+        timeout = float(timeout_s or self._default_timeout_s())
+        rgb = self._wait_for_image(timeout)
+        if rgb is None:
+            return self._verify_error(
+                "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+                f"No fresh RGB frame received for held-block verification target '{target}'.",
+                color,
+                target,
+                evidence_label,
+                request_id,
+                detection,
+                pick_result,
+            )
+
+        rgb_msg: Image = rgb["msg"]
+        converted = self._image_to_cv_mat(rgb_msg)
+        if not converted["success"]:
+            return self._verify_error(
+                "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+                converted["reason"],
+                color,
+                target,
+                evidence_label,
+                request_id,
+                detection,
+                pick_result,
+            )
+        color_range = self._color_range(color)
+        if color_range is None:
+            return self._verify_error(
+                "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+                f"color is not configured: {color}",
+                color,
+                target,
+                evidence_label,
+                request_id,
+                detection,
+                pick_result,
+            )
+
+        image = converted["image"]
+        cfg = dict(self._profile.get("color_block") or {})
+        observation = self._segment_color(image, color, color_range, roi_config=cfg, roi_prefix="held_verify")
+        roi_bounds = self._roi_bounds_px(image.shape[:2], cfg, "held_verify")
+        created_unix = time.time()
+        verification_id = self._verification_id(color, request_id, observation, created_unix)
+        candidate = self._observation_payload(observation) if observation else {}
+        overlaps_pre_pick = self._candidate_overlaps_pre_pick(candidate, detection, cfg) if candidate else False
+        radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
+        min_radius_ratio = float(cfg.get("held_verify_min_radius_ratio_vs_pre_pick", 1.15))
+        size_confirms_lift = bool(candidate) and radius_ratio >= min_radius_ratio
+        min_confidence = float(cfg.get("held_verify_min_confidence", 0.001))
+        confidence = self._observation_confidence(observation, image.shape[:2]) if observation else 0.0
+        verified = bool(observation) and confidence >= min_confidence and not overlaps_pre_pick and size_confirms_lift
+        failure_reason = ""
+        if not observation:
+            failure_reason = f"{color} block was not detected in the configured gripper-held ROI."
+        elif confidence < min_confidence:
+            failure_reason = f"held verification confidence {confidence:.4f} below {min_confidence:.4f}."
+        elif overlaps_pre_pick:
+            failure_reason = "verification candidate overlaps the pre-pick tabletop detection instead of the gripper-held ROI evidence."
+        elif not size_confirms_lift:
+            failure_reason = (
+                f"held verification radius ratio {radius_ratio:.3f} below {min_radius_ratio:.3f}; "
+                "candidate does not prove the block moved closer to the gripper camera."
+            )
+
+        debug = self._draw_held_verification(image, color, observation, roi_bounds, verified)
+        metadata = {
+            "kind": "color_block_held_verification",
+            "verification_id": verification_id,
+            "request_id": request_id,
+            "target": target,
+            "color": color,
+            "label": evidence_label,
+            "rgb_topic": rgb["topic"],
+            "frame_id": rgb_msg.header.frame_id,
+            "image_width": int(rgb_msg.width),
+            "image_height": int(rgb_msg.height),
+            "encoding": str(rgb_msg.encoding),
+            "created_unix": created_unix,
+            "verification_method": "vision_color_in_gripper_held_roi",
+            "roi_name": "gripper_held_roi",
+            "roi_bounds_px": list(roi_bounds),
+            "roi_ratios": self._roi_ratios(cfg, "held_verify"),
+            "candidate": candidate,
+            "confidence": round(float(confidence), 4),
+            "min_confidence": round(float(min_confidence), 4),
+            "radius_ratio_vs_pre_pick": round(float(radius_ratio), 4),
+            "min_radius_ratio_vs_pre_pick": round(float(min_radius_ratio), 4),
+            "size_confirms_lift": bool(size_confirms_lift),
+            "verified_held": bool(verified),
+            "overlaps_pre_pick_detection": bool(overlaps_pre_pick),
+            "pre_pick_detection": detection,
+            "pick_backend_claim": {
+                "success": bool(pick_result.get("success", True)),
+                "held": bool(self._nested_bool(pick_result, "held")),
+                "bridge_action": str(self._nested_value(pick_result, "bridge_action") or ""),
+            },
+        }
+        paths = self._write_held_verification_evidence(metadata, debug)
+        metadata.update(paths)
+        verification = {
+            "verification_id": verification_id,
+            "verified_held": bool(verified),
+            "target_color": color,
+            "method": metadata["verification_method"],
+            "roi_name": metadata["roi_name"],
+            "roi_bounds_px": metadata["roi_bounds_px"],
+            "candidate": candidate,
+            "confidence": metadata["confidence"],
+            "min_confidence": metadata["min_confidence"],
+            "radius_ratio_vs_pre_pick": metadata["radius_ratio_vs_pre_pick"],
+            "min_radius_ratio_vs_pre_pick": metadata["min_radius_ratio_vs_pre_pick"],
+            "size_confirms_lift": bool(size_confirms_lift),
+            "overlaps_pre_pick_detection": bool(overlaps_pre_pick),
+            "evidence_image_path": metadata["debug_image_path"],
+            "evidence_metadata_path": metadata["metadata_path"],
+        }
+        if verified:
+            return {
+                "success": True,
+                "error_code": "",
+                "reason": "",
+                "verified_held": True,
+                "verification": verification,
+                "evidence": metadata,
+            }
+        return {
+            "success": False,
+            "error_code": "COLOR_BLOCK_PICK_VERIFICATION_FAILED",
+            "reason": failure_reason,
+            "verified_held": False,
+            "verification": verification,
+            "evidence": metadata,
+        }
+
+    def _verify_error(
+        self,
+        code: str,
+        reason: str,
+        color: str,
+        target: str,
+        evidence_label: str,
+        request_id: str,
+        detection: dict[str, Any],
+        pick_result: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "success": False,
+            "error_code": code,
+            "reason": reason,
+            "verified_held": False,
+            "verification": {
+                "verified_held": False,
+                "target_color": color,
+                "method": "vision_color_in_gripper_held_roi",
+                "reason": reason,
+            },
+            "evidence": {
+                "kind": "color_block_held_verification",
+                "color": color,
+                "target": target,
+                "label": evidence_label,
+                "request_id": request_id,
+                "camera_topics": self._camera_topics(),
+                "pre_pick_detection": detection,
+                "pick_result": pick_result,
+            },
+        }
+
     def _detect_error(self, code: str, reason: str, color: str, target: str) -> dict[str, Any]:
         return {
             "success": False,
@@ -530,6 +743,21 @@ class InspectionBridgeNode(Node):
         metadata_path.write_text(json.dumps(metadata_for_file, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         return {"debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
 
+    def _write_held_verification_evidence(self, metadata: dict[str, Any], image) -> dict[str, str]:
+        evidence_dir = self._evidence_dir() / "color_block"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        label = self._safe_filename(metadata.get("label") or "held_color_block")
+        verification_id = self._safe_filename(metadata.get("verification_id") or f"verify_{int(time.time())}")
+        stem = f"{label}_{timestamp}_{verification_id}"
+        image_path = evidence_dir / f"{stem}.png"
+        metadata_path = evidence_dir / f"{stem}.json"
+        if not cv2.imwrite(str(image_path), image):
+            raise OSError(f"cv2.imwrite failed for {image_path}")
+        metadata_for_file = {**metadata, "debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
+        metadata_path.write_text(json.dumps(metadata_for_file, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return {"debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
+
     def _color_range(self, color: str) -> dict[str, list[int]] | None:
         configured = dict(dict(self._profile.get("color_block") or {}).get("lab_ranges") or {})
         if color in configured:
@@ -554,7 +782,15 @@ class InspectionBridgeNode(Node):
         }
         return defaults.get(color)
 
-    def _segment_color(self, image, color: str, color_range: dict[str, list[int]]) -> dict[str, float] | None:
+    def _segment_color(
+        self,
+        image,
+        color: str,
+        color_range: dict[str, list[int]],
+        *,
+        roi_config: dict[str, Any] | None = None,
+        roi_prefix: str = "detect",
+    ) -> dict[str, float] | None:
         height, width = image.shape[:2]
         small = cv2.resize(image, (max(1, width // 2), max(1, height // 2)))
         blurred = cv2.GaussianBlur(small, (3, 3), 3)
@@ -563,15 +799,17 @@ class InspectionBridgeNode(Node):
         mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
         mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
         contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
-        roi = dict(self._profile.get("color_block") or {})
-        x_min = float(roi.get("detect_roi_x_min_ratio", 0.0)) * width
-        x_max = float(roi.get("detect_roi_x_max_ratio", 1.0)) * width
-        y_min = float(roi.get("detect_roi_y_min_ratio", 0.08)) * height
-        y_max = float(roi.get("detect_roi_y_max_ratio", 1.0)) * height
+        roi = dict(roi_config or self._profile.get("color_block") or {})
+        y_default = 0.08 if roi_prefix == "detect" else 0.72
+        x_min = float(roi.get(f"{roi_prefix}_roi_x_min_ratio", roi.get("detect_roi_x_min_ratio", 0.0))) * width
+        x_max = float(roi.get(f"{roi_prefix}_roi_x_max_ratio", roi.get("detect_roi_x_max_ratio", 1.0))) * width
+        y_min = float(roi.get(f"{roi_prefix}_roi_y_min_ratio", roi.get("detect_roi_y_min_ratio", y_default))) * height
+        y_max = float(roi.get(f"{roi_prefix}_roi_y_max_ratio", roi.get("detect_roi_y_max_ratio", 1.0))) * height
+        min_area = float(roi.get(f"{roi_prefix}_min_area_px", roi.get("min_area_px", 50.0)))
         candidates: list[dict[str, float]] = []
         for contour in contours:
             area = float(abs(cv2.contourArea(contour))) * 4.0
-            if area < float(roi.get("min_area_px", 50.0)):
+            if area < min_area:
                 continue
             (center_x, center_y), radius = cv2.minEnclosingCircle(contour)
             full_x = float(center_x) * 2.0
@@ -582,6 +820,80 @@ class InspectionBridgeNode(Node):
         if not candidates:
             return None
         return max(candidates, key=lambda item: item["area"])
+
+    def _roi_bounds_px(self, shape: tuple[int, int], roi: dict[str, Any], prefix: str) -> tuple[int, int, int, int]:
+        height, width = shape
+        y_default = 0.08 if prefix == "detect" else 0.72
+        x_min = float(roi.get(f"{prefix}_roi_x_min_ratio", roi.get("detect_roi_x_min_ratio", 0.0)))
+        x_max = float(roi.get(f"{prefix}_roi_x_max_ratio", roi.get("detect_roi_x_max_ratio", 1.0)))
+        y_min = float(roi.get(f"{prefix}_roi_y_min_ratio", roi.get("detect_roi_y_min_ratio", y_default)))
+        y_max = float(roi.get(f"{prefix}_roi_y_max_ratio", roi.get("detect_roi_y_max_ratio", 1.0)))
+        return (
+            max(0, min(width, int(round(x_min * width)))),
+            max(0, min(height, int(round(y_min * height)))),
+            max(0, min(width, int(round(x_max * width)))),
+            max(0, min(height, int(round(y_max * height)))),
+        )
+
+    def _roi_ratios(self, roi: dict[str, Any], prefix: str) -> dict[str, float]:
+        y_default = 0.08 if prefix == "detect" else 0.72
+        return {
+            "x_min": float(roi.get(f"{prefix}_roi_x_min_ratio", roi.get("detect_roi_x_min_ratio", 0.0))),
+            "x_max": float(roi.get(f"{prefix}_roi_x_max_ratio", roi.get("detect_roi_x_max_ratio", 1.0))),
+            "y_min": float(roi.get(f"{prefix}_roi_y_min_ratio", roi.get("detect_roi_y_min_ratio", y_default))),
+            "y_max": float(roi.get(f"{prefix}_roi_y_max_ratio", roi.get("detect_roi_y_max_ratio", 1.0))),
+        }
+
+    def _observation_payload(self, observation: dict[str, float] | None) -> dict[str, Any]:
+        if not observation:
+            return {}
+        return {
+            "center_px": [round(float(observation["center_x"]), 3), round(float(observation["center_y"]), 3)],
+            "radius_px": round(float(observation["radius"]), 3),
+            "area_px": round(float(observation["area"]), 3),
+        }
+
+    def _observation_confidence(self, observation: dict[str, float] | None, shape: tuple[int, int]) -> float:
+        if not observation:
+            return 0.0
+        height, width = shape
+        return float(min(1.0, float(observation["area"]) / max(1.0, width * height * 0.05)))
+
+    def _candidate_overlaps_pre_pick(self, candidate: dict[str, Any], detection: dict[str, Any], cfg: dict[str, Any]) -> bool:
+        center = candidate.get("center_px")
+        pre_center = detection.get("center_px")
+        if not isinstance(center, list) or not isinstance(pre_center, list) or len(center) < 2 or len(pre_center) < 2:
+            return False
+        dx = float(center[0]) - float(pre_center[0])
+        dy = float(center[1]) - float(pre_center[1])
+        distance = float(np.hypot(dx, dy))
+        threshold = float(cfg.get("held_verify_pre_pick_exclusion_radius_px", 45.0))
+        return distance <= threshold
+
+    def _candidate_radius_ratio_vs_pre_pick(self, candidate: dict[str, Any], detection: dict[str, Any]) -> float:
+        try:
+            candidate_radius = float(candidate.get("radius_px") or 0.0)
+            pre_radius = float(detection.get("radius_px") or 0.0)
+        except (TypeError, ValueError):
+            return 0.0
+        if candidate_radius <= 0.0 or pre_radius <= 0.0:
+            return 0.0
+        return candidate_radius / pre_radius
+
+    def _nested_value(self, payload: dict[str, Any], key: str) -> Any:
+        if key in payload:
+            return payload.get(key)
+        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+        if key in result:
+            return result.get(key)
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+        result = data.get("result") if isinstance(data.get("result"), dict) else data
+        if isinstance(result, dict):
+            return result.get(key)
+        return None
+
+    def _nested_bool(self, payload: dict[str, Any], key: str) -> bool:
+        return bool(self._nested_value(payload, key))
 
     def _estimate_depth(self, depth_image, center_x: float, center_y: float, radius: float) -> dict[str, Any] | None:
         depth_cfg = dict(self._profile.get("color_block") or {})
@@ -636,6 +948,30 @@ class InspectionBridgeNode(Node):
         cv2.putText(debug, color, (max(0, center[0] - 40), max(12, center[1] - 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, draw_color, 2)
         return debug
 
+    def _draw_held_verification(
+        self,
+        image,
+        color: str,
+        observation: dict[str, float] | None,
+        roi_bounds: tuple[int, int, int, int],
+        verified: bool,
+    ):
+        debug = image.copy()
+        draw_color = {"red": (0, 50, 255), "green": (50, 255, 0), "blue": (255, 50, 0), "yellow": (0, 255, 255)}.get(color, (255, 255, 255))
+        roi_color = (40, 220, 40) if verified else (40, 40, 255)
+        x0, y0, x1, y1 = roi_bounds
+        cv2.rectangle(debug, (x0, y0), (x1, y1), roi_color, 2)
+        cv2.putText(debug, "held_roi", (max(0, x0 + 4), max(14, y0 + 18)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, roi_color, 2)
+        if observation:
+            center = (int(observation["center_x"]), int(observation["center_y"]))
+            cv2.circle(debug, center, int(observation["radius"]), draw_color, 2)
+            cv2.circle(debug, center, 4, (255, 255, 255), -1)
+            label = f"{color} held" if verified else f"{color} candidate"
+            cv2.putText(debug, label, (max(0, center[0] - 55), max(14, center[1] - 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, draw_color, 2)
+        status = "VERIFIED_HELD" if verified else "NOT_VERIFIED"
+        cv2.putText(debug, status, (8, max(24, y0 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, roi_color, 2)
+        return debug
+
     def _detection_id(self, color: str, request_id: str, observation: dict[str, float], depth_estimate: dict[str, Any]) -> str:
         payload = json.dumps(
             {
@@ -648,6 +984,23 @@ class InspectionBridgeNode(Node):
             sort_keys=True,
         )
         return f"det_{hashlib.sha256(payload.encode()).hexdigest()[:12]}"
+
+    def _verification_id(self, color: str, request_id: str, observation: dict[str, float] | None, created_unix: float) -> str:
+        payload = json.dumps(
+            {
+                "color": color,
+                "request_id": request_id,
+                "center": [
+                    round(float(observation["center_x"]), 2),
+                    round(float(observation["center_y"]), 2),
+                ]
+                if observation
+                else [],
+                "time": int(created_unix),
+            },
+            sort_keys=True,
+        )
+        return f"held_{hashlib.sha256(payload.encode()).hexdigest()[:12]}"
 
     def _append_photo_index(self, metadata: dict[str, Any]) -> None:
         index_path = self._photo_dir() / "index.jsonl"

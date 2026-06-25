@@ -5,6 +5,7 @@ capabilities:
   - robot.inspect_area
   - perception.observe
   - perception.capture_photo
+  - perception.verify_held_color_block
   - arm.get_state
   - arm.move_named
   - gripper.set

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from agentic_runtime.sdk import AgentContext
@@ -7,9 +8,16 @@ from agentic_runtime.sdk import AgentContext
 
 APP_ID = "color_block_grasper_agent"
 PLAN_SCHEMA_VERSION = "1.0"
+HOLD_STABILITY_DELAY_S = 2.0
 ALLOWED_COLORS = {"red", "green", "blue", "yellow"}
 CONFIRM_ANSWER = "CONFIRM"
-PLAN_STEPS = ["detect_color_block", "capture_evidence", "pick_color_block", "place_color_block"]
+PLAN_STEPS = [
+    "detect_color_block",
+    "capture_evidence",
+    "pick_color_block",
+    "post_pick_verify",
+    "place_color_block",
+]
 RISK_CLASSES = {"controlled_manipulation", "manipulation_real_hardware"}
 
 
@@ -92,11 +100,15 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     if not pick["success"]:
         return await _finish_failure(ctx, task, steps, pick)
 
+    post_pick_verification = await _post_pick_verify(ctx, task, detection, pick, steps)
+    if not post_pick_verification["success"]:
+        return await _finish_failure(ctx, task, steps, post_pick_verification)
+
     place = await _place_color_block(ctx, task, pick, steps)
     if not place["success"]:
         return await _finish_failure(ctx, task, steps, place)
 
-    return await _finish_success(ctx, task, detection, evidence, pick, place, steps)
+    return await _finish_success(ctx, task, detection, evidence, pick, post_pick_verification, place, steps)
 
 
 async def _plan_with_system_llm(ctx: AgentContext, task_text: str) -> dict[str, Any]:
@@ -128,7 +140,7 @@ def _system_prompt() -> str:
             "- place_target: 'hold_position' when the user asks only to pick/hold/grasp; otherwise a concrete tray or workspace destination",
             "- requires_manipulation: true",
             "- needs_confirmation: true",
-            "- steps: exactly ['detect_color_block','capture_evidence','pick_color_block','place_color_block']",
+            "- steps: exactly ['detect_color_block','capture_evidence','pick_color_block','post_pick_verify','place_color_block']",
             "- risk_class: 'controlled_manipulation' or 'manipulation_real_hardware'",
             "- user_summary: one short sentence",
             "Optional fields: target, evidence_label, timeout_s.",
@@ -214,6 +226,7 @@ def _validate_policy(ctx: AgentContext, task: dict[str, Any]) -> dict[str, Any]:
     required_permissions = [
         "perception.detect.color_block",
         "perception.capture",
+        "perception.verify.color_block_held",
         "manipulation.pick.color_block",
         "manipulation.place.color_block",
         "human.ask",
@@ -301,7 +314,7 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
         steps,
         "prepare_arm_pose",
         "arm.move_named",
-        {"name": "arm_home", "timeout_s": min(int(task["timeout_s"]), 8)},
+        {"name": "arm_home", "timeout_s": min(int(task["timeout_s"]), 8), "_kernel_timeout_s": 20},
     )
     if not prepare["success"]:
         return _dependency_failure(
@@ -510,21 +523,159 @@ async def _place_color_block(ctx: AgentContext, task: dict[str, Any], pick: dict
     )
 
 
+async def _post_pick_verify(
+    ctx: AgentContext,
+    task: dict[str, Any],
+    detection: dict[str, Any],
+    pick: dict[str, Any],
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    gripper_state = await _call_skill(ctx, steps, "post_pick_gripper_state", "arm.get_state", {})
+    if not gripper_state["success"]:
+        return _dependency_failure(
+            "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+            "arm/gripper state could not be read for post-pick verification",
+            gripper_state,
+            missing=["arm.get_state"],
+            next_action="Expose arm.get_state with gripper status before accepting a color-block pick result.",
+        )
+
+    post_pick_evidence = await _call_skill(
+        ctx,
+        steps,
+        "capture_post_pick_evidence",
+        "perception.capture_photo",
+        {
+            "target": task["target"],
+            "label": f"{task['evidence_label']}_post_pick",
+            "timeout_s": 15,
+        },
+    )
+    if not post_pick_evidence["success"]:
+        return _dependency_failure(
+            "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+            "post-pick photo evidence capture backend is unavailable",
+            post_pick_evidence,
+            missing=["perception.capture_photo"],
+            next_action="Start the Agentic camera bridge and capture post-pick evidence before accepting a pick.",
+        )
+
+    verification = await _call_skill(
+        ctx,
+        steps,
+        "post_pick_verify",
+        "perception.verify_held_color_block",
+        {
+            "color": task["color"],
+            "target": task["target"],
+            "detection": _normalized_detection_data(detection),
+            "pick_result": _nested_data(pick),
+            "evidence_label": f"{task['evidence_label']}_held_verify",
+            "timeout_s": min(int(task["timeout_s"]), 30),
+        },
+    )
+    if verification["success"]:
+        validation = _validate_held_verification_data(task, verification)
+        if validation["success"]:
+            await asyncio.sleep(HOLD_STABILITY_DELAY_S)
+            stability_evidence = await _call_skill(
+                ctx,
+                steps,
+                "capture_post_pick_stability_evidence",
+                "perception.capture_photo",
+                {
+                    "target": task["target"],
+                    "label": f"{task['evidence_label']}_post_pick_stability",
+                    "timeout_s": 15,
+                },
+            )
+            if not stability_evidence["success"]:
+                return _dependency_failure(
+                    "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+                    "post-pick stability photo evidence capture backend is unavailable",
+                    stability_evidence,
+                    missing=["perception.capture_photo"],
+                    next_action="Capture delayed post-pick evidence before accepting a held color-block result.",
+                )
+            stability_verification = await _call_skill(
+                ctx,
+                steps,
+                "post_pick_stability_verify",
+                "perception.verify_held_color_block",
+                {
+                    "color": task["color"],
+                    "target": task["target"],
+                    "detection": _normalized_detection_data(detection),
+                    "pick_result": _nested_data(pick),
+                    "evidence_label": f"{task['evidence_label']}_held_stability_verify",
+                    "timeout_s": min(int(task["timeout_s"]), 30),
+                },
+            )
+            stability_validation = _validate_held_verification_data(task, stability_verification)
+            if not stability_verification["success"] or not stability_validation["success"]:
+                return _dependency_failure(
+                    "COLOR_BLOCK_PICK_VERIFICATION_FAILED",
+                    "delayed post-pick verification did not prove the block remained held",
+                    stability_verification,
+                    missing=list(stability_validation.get("missing") or ["stable verified_held"]),
+                    next_action="Tighten the gripper or adjust the pick pose until the target block remains held after a delay.",
+                )
+            verification["data"]["post_pick_evidence"] = _nested_data(post_pick_evidence)
+            verification["data"]["post_pick_gripper_state"] = _nested_data(gripper_state)
+            verification["data"]["post_pick_stability_evidence"] = _nested_data(stability_evidence)
+            verification["data"]["post_pick_stability_verification"] = _post_pick_verification_data(stability_verification)
+            verification["data"]["verified_held"] = True
+            return verification
+        return _dependency_failure(
+            "COLOR_BLOCK_PICK_VERIFICATION_FAILED",
+            str(validation["reason"]),
+            verification,
+            missing=list(validation["missing"]),
+            next_action="Adjust the post-pick verification pose/ROI or rerun pick until the target block is visibly held.",
+        )
+
+    raw_code = str(verification.get("error_code") or "")
+    unavailable_codes = {
+        "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
+        "ROS_BRIDGE_UNAVAILABLE",
+        "ROS_SERVICE_UNAVAILABLE",
+        "SKILL_BACKEND_UNAVAILABLE",
+        "BACKEND_UNAVAILABLE",
+        "SKILL_NOT_FOUND",
+    }
+    code = "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE" if raw_code in unavailable_codes else "COLOR_BLOCK_PICK_VERIFICATION_FAILED"
+    return _dependency_failure(
+        code,
+        "post-pick independent verification did not prove the color block is held in the gripper",
+        verification,
+        missing=["perception.verify_held_color_block"],
+        next_action="Capture post-pick evidence and verify the target color appears in the gripper-held ROI before declaring success.",
+    )
+
+
 async def _finish_success(
     ctx: AgentContext,
     task: dict[str, Any],
     detection: dict[str, Any],
     evidence: dict[str, Any],
     pick: dict[str, Any],
+    post_pick_verification: dict[str, Any],
     place: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    post_pick_payload = _post_pick_verification_data(post_pick_verification)
     result = _result_payload(ctx, True, task, steps, "", "")
     result.update(
         {
             "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
+            "post_pick_evidence": dict(post_pick_payload.get("post_pick_evidence") or {}),
+            "post_pick_gripper_state": dict(post_pick_payload.get("post_pick_gripper_state") or {}),
+            "post_pick_stability_evidence": dict(post_pick_payload.get("post_pick_stability_evidence") or {}),
+            "post_pick_stability_verification": dict(post_pick_payload.get("post_pick_stability_verification") or {}),
+            "post_pick_verification": post_pick_payload,
+            "verified_held": True,
             "place": _nested_data(place),
         }
     )
@@ -545,6 +696,12 @@ async def _finish_success(
             "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
+            "post_pick_evidence": dict(post_pick_payload.get("post_pick_evidence") or {}),
+            "post_pick_gripper_state": dict(post_pick_payload.get("post_pick_gripper_state") or {}),
+            "post_pick_stability_evidence": dict(post_pick_payload.get("post_pick_stability_evidence") or {}),
+            "post_pick_stability_verification": dict(post_pick_payload.get("post_pick_stability_verification") or {}),
+            "post_pick_verification": post_pick_payload,
+            "verified_held": True,
             "place": _nested_data(place),
         }
     )
@@ -562,6 +719,7 @@ async def _finish_failure(ctx: AgentContext, task: dict[str, Any], steps: list[d
         missing=list(failure.get("missing") or []),
         next_action=str(failure.get("next_action") or "Configure the real backend and rerun."),
     )
+    result.update(_post_pick_failure_payload(steps))
     await _persist_result(ctx, result, steps)
     report = await _call_skill(
         ctx,
@@ -601,7 +759,9 @@ async def _call_skill(
     skill_name: str,
     args: dict[str, Any],
 ) -> dict[str, Any]:
-    result = await ctx.kernel.skill.call(skill_name, args, timeout_s=int(args.get("timeout_s") or 10))
+    call_args = dict(args)
+    kernel_timeout_s = int(call_args.pop("_kernel_timeout_s", call_args.get("timeout_s") or 10))
+    result = await ctx.kernel.skill.call(skill_name, call_args, timeout_s=kernel_timeout_s)
     step = _step(name, skill_name, result)
     steps.append(step)
     return step
@@ -757,6 +917,50 @@ def _validate_detection_data(task: dict[str, Any], detection: dict[str, Any]) ->
     return {"success": True, "reason": "", "missing": []}
 
 
+def _validate_held_verification_data(task: dict[str, Any], verification_step: dict[str, Any]) -> dict[str, Any]:
+    data = _nested_data(verification_step)
+    verification = data.get("verification") if isinstance(data.get("verification"), dict) else {}
+    evidence = data.get("evidence") if isinstance(data.get("evidence"), dict) else {}
+    verified_held = bool(data.get("verified_held") or verification.get("verified_held") or evidence.get("verified_held"))
+    missing: list[str] = []
+    if not verified_held:
+        missing.append("verified_held")
+    color = str(verification.get("target_color") or evidence.get("color") or "").lower()
+    if color != str(task["color"]).lower():
+        missing.append("matching target_color")
+    if not isinstance(verification.get("candidate"), dict) or not verification.get("candidate"):
+        missing.append("held color candidate")
+    size_confirms_lift = bool(verification.get("size_confirms_lift") or evidence.get("size_confirms_lift"))
+    if not size_confirms_lift:
+        missing.append("size_confirms_lift")
+    overlaps_pre_pick = verification.get("overlaps_pre_pick_detection")
+    if overlaps_pre_pick is None:
+        overlaps_pre_pick = evidence.get("overlaps_pre_pick_detection")
+    if overlaps_pre_pick is not False:
+        missing.append("no pre-pick overlap")
+    try:
+        radius_ratio = float(verification.get("radius_ratio_vs_pre_pick") or evidence.get("radius_ratio_vs_pre_pick") or 0.0)
+        min_radius_ratio = float(
+            verification.get("min_radius_ratio_vs_pre_pick") or evidence.get("min_radius_ratio_vs_pre_pick") or 1.0
+        )
+    except (TypeError, ValueError):
+        radius_ratio = 0.0
+        min_radius_ratio = 1.0
+    if radius_ratio < min_radius_ratio:
+        missing.append("radius ratio confirms lift")
+    if not str(verification.get("evidence_image_path") or evidence.get("debug_image_path") or ""):
+        missing.append("post-pick verification image")
+    if not str(verification.get("evidence_metadata_path") or evidence.get("metadata_path") or ""):
+        missing.append("post-pick verification metadata")
+    if missing:
+        return {
+            "success": False,
+            "reason": "post-pick verification did not independently prove the target block is held",
+            "missing": missing,
+        }
+    return {"success": True, "reason": "", "missing": []}
+
+
 def _nested_data(step: dict[str, Any]) -> dict[str, Any]:
     data = step.get("data")
     if not isinstance(data, dict):
@@ -768,3 +972,36 @@ def _nested_data(step: dict[str, Any]) -> dict[str, Any]:
             return dict(nested_data)
         return dict(nested)
     return dict(data)
+
+
+def _post_pick_verification_data(step: dict[str, Any]) -> dict[str, Any]:
+    payload = _nested_data(step)
+    data = step.get("data")
+    if isinstance(data, dict):
+        for key in (
+            "post_pick_evidence",
+            "post_pick_gripper_state",
+            "post_pick_stability_evidence",
+            "post_pick_stability_verification",
+            "verified_held",
+        ):
+            if key in data:
+                payload[key] = data[key]
+    return payload
+
+
+def _post_pick_failure_payload(steps: list[dict[str, Any]]) -> dict[str, Any]:
+    by_name = {str(step.get("name") or ""): step for step in steps}
+    payload: dict[str, Any] = {}
+    if "capture_post_pick_evidence" in by_name:
+        payload["post_pick_evidence"] = _nested_data(by_name["capture_post_pick_evidence"])
+    if "post_pick_gripper_state" in by_name:
+        payload["post_pick_gripper_state"] = _nested_data(by_name["post_pick_gripper_state"])
+    if "post_pick_verify" in by_name:
+        payload["post_pick_verification"] = _post_pick_verification_data(by_name["post_pick_verify"])
+        payload["verified_held"] = False
+    if "capture_post_pick_stability_evidence" in by_name:
+        payload["post_pick_stability_evidence"] = _nested_data(by_name["capture_post_pick_stability_evidence"])
+    if "post_pick_stability_verify" in by_name:
+        payload["post_pick_stability_verification"] = _post_pick_verification_data(by_name["post_pick_stability_verify"])
+    return payload

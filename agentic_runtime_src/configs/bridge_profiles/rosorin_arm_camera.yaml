@@ -79,18 +79,18 @@ gripper:
   position_unit: pulse
   duration_s: 0.6
   limits:
-    min_pulse: 350
+    min_pulse: 150
     max_pulse: 760
-    open_pulse: 760
-    close_low_force_pulse: 520
+    open_pulse: 200
+    close_low_force_pulse: 600
   allowed_commands:
     open_gripper:
       command: open
-      pulse: 760
+      pulse: 200
       force: low
     close_gripper_low_force:
       command: close
-      pulse: 520
+      pulse: 600
       force: low
 color_block:
   lab_ranges:
@@ -105,6 +105,14 @@ color_block:
       max: [230, 120, 150]
   detect_roi_y_min_ratio: 0.08
   min_area_px: 50
+  held_verify_roi_x_min_ratio: 0.20
+  held_verify_roi_x_max_ratio: 0.92
+  held_verify_roi_y_min_ratio: 0.72
+  held_verify_roi_y_max_ratio: 1.0
+  held_verify_min_area_px: 80
+  held_verify_min_confidence: 0.001
+  held_verify_pre_pick_exclusion_radius_px: 45
+  held_verify_min_radius_ratio_vs_pre_pick: 1.15
   roi_radius_px: 5
   depth_roi_radius_scale: 1.0
   object_radius_compensation_m: 0.02
@@ -113,17 +121,19 @@ color_block:
   hand2cam_tx_m: -0.101
   hand2cam_ty_m: 0.0
   hand2cam_tz_m: 0.037
-  pick_z_offset_m: 0.14
+  pick_x_offset_m: -0.02
+  pick_y_offset_m: 0.02
+  pick_z_offset_m: 0.12
   pregrasp_height_m: 0.06
-  lift_height_m: 0.10
+  lift_height_m: 0.03
   pick_pitch_near: 80.0
   pick_pitch_far: 30.0
   near_z_threshold_m: 0.20
   pitch_range_min: -180.0
   pitch_range_max: 180.0
   pitch_resolution: 1.0
-  gripper_open: 760
-  gripper_close: 520
+  gripper_open: 200
+  gripper_close: 600
 discovered_interfaces:
   camera_launch:
     - /home/ubuntu/ros2_ws/src/peripherals/launch/depth_camera.launch.py

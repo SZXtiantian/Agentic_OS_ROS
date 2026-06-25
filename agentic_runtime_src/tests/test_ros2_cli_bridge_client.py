@@ -347,6 +347,36 @@ agentic_msgs.srv.DetectColorBlock_Response(success=True, error_code='', reason='
     assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/perception/detect_color_block"]
 
 
+def test_ros2_cli_bridge_client_verify_held_color_block_parses_verification_json_from_ros_repr():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        return """response:
+agentic_msgs.srv.VerifyHeldColorBlock_Response(success=True, error_code='', reason='', verified_held=True, verification_json='{"verified_held":true,"target_color":"red","candidate":{"center_px":[240,330]},"evidence_image_path":"/tmp/held.png"}', evidence_json='{"kind":"color_block_held_verification","verified_held":true}')
+"""
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.verify_held_color_block(
+            "red",
+            "workspace",
+            {"color": "red"},
+            {"held": True},
+            "red_block_held_verify",
+            5,
+        )
+        assert result["success"] is True
+        assert result["verified_held"] is True
+        assert result["verification"]["target_color"] == "red"
+        assert result["verification"]["candidate"]["center_px"] == [240, 330]
+        assert result["evidence"]["kind"] == "color_block_held_verification"
+
+    asyncio.run(run())
+
+    assert calls[0][0][:4] == ["ros2", "service", "call", "/agentic/perception/verify_held_color_block"]
+
+
 def test_ros2_cli_bridge_client_safety_timeout_retries_once():
     calls = []
 

@@ -23,6 +23,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/Observe.srv"
   "srv/CapturePhoto.srv"
   "srv/DetectColorBlock.srv"
+  "srv/VerifyHeldColorBlock.srv"
   "srv/InspectArea.srv"
   "srv/GetArmState.srv"
   "srv/SetGripper.srv"

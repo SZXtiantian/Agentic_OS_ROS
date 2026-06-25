@@ -52,6 +52,15 @@ Key stable errors:
 - Agent App context has no Runtime-owned LLM facade: `LLMCHAT_UNAVAILABLE`.
 - Natural-language tutorial app cannot produce a constrained JSON plan:
   `HELLO_WORLD_LLM_REQUIRED` or `COLOR_BLOCK_LLM_PLAN_REQUIRED`.
+- Color-block manipulation cannot claim success from pick backend self-report
+  alone. Missing held-block verification returns
+  `COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE`; failed independent post-pick
+  evidence returns `COLOR_BLOCK_PICK_VERIFICATION_FAILED`.
+  Held verification must use fresh post-pick evidence, prove the target color
+  appears in the configured gripper-held ROI, reject candidates overlapping the
+  pre-pick tabletop detection, and require size/radius evidence that the block
+  moved closer to the gripper camera. Tutorial apps must repeat held
+  verification after a short delay before reporting success.
 - Human queue timeout: `HUMAN_OPERATOR_TIMEOUT`.
 - Real dependency verification not configured: `UNVERIFIED_REAL_DEPENDENCY`.
 

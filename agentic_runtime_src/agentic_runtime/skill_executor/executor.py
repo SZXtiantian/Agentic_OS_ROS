@@ -262,6 +262,7 @@ class SkillExecutor:
             "perception.observe",
             "perception.capture_photo",
             "perception.detect_color_block",
+            "perception.verify_held_color_block",
             "manipulation.pick_color_block",
             "manipulation.place_color_block",
             "human.ask",
@@ -270,7 +271,13 @@ class SkillExecutor:
     def _access_resource_type(self, skill_name: str) -> str:
         if skill_name == "human.ask":
             return "human"
-        if skill_name in {"robot.inspect_area", "perception.observe", "perception.capture_photo", "perception.detect_color_block"}:
+        if skill_name in {
+            "robot.inspect_area",
+            "perception.observe",
+            "perception.capture_photo",
+            "perception.detect_color_block",
+            "perception.verify_held_color_block",
+        }:
             return "robot_sensor"
         return "robot_motion"
 

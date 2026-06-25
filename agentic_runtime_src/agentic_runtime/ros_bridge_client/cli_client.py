@@ -260,6 +260,46 @@ class Ros2CliBridgeClient:
             "evidence": evidence,
         }
 
+    async def verify_held_color_block(
+        self,
+        color: str,
+        target: str,
+        detection: dict[str, Any],
+        pick_result: dict[str, Any],
+        evidence_label: str,
+        timeout_s: int,
+    ) -> dict[str, Any]:
+        try:
+            output = await self._service_call(
+                "/agentic/perception/verify_held_color_block",
+                "agentic_msgs/srv/VerifyHeldColorBlock",
+                {
+                    "color": color,
+                    "target": target,
+                    "detection_json": json.dumps(detection, ensure_ascii=False, sort_keys=True),
+                    "pick_result_json": json.dumps(pick_result, ensure_ascii=False, sort_keys=True),
+                    "evidence_label": evidence_label,
+                    "request_id": new_id("verify_held"),
+                    "timeout_s": int(timeout_s),
+                },
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response("verify_held_color_block", data, "success")
+        except RosBridgeCommandError as exc:
+            self._record_error("verify_held_color_block", exc)
+            return _bridge_error(exc, verified_held=False, verification={}, evidence={})
+        verification = _decode_json_field(data.get("verification_json"))
+        evidence = _decode_json_field(data.get("evidence_json"))
+        return {
+            "success": success,
+            "verified_held": bool(data.get("verified_held", False)),
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "verification": verification,
+            "evidence": evidence,
+        }
+
     async def get_arm_state(self) -> dict[str, Any]:
         try:
             output = await self._service_call(
@@ -703,7 +743,7 @@ def _utc_now() -> str:
 
 def _parse_ros_repr(text: str) -> dict[str, Any]:
     result: dict[str, Any] = {}
-    for key in ["success", "allowed", "answered"]:
+    for key in ["success", "allowed", "answered", "verified_held"]:
         match = re.search(rf"\b{key}\s*[:=]\s*(True|False|true|false)", text)
         if match:
             result[key] = match.group(1).lower() == "true"
@@ -715,6 +755,7 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         "answer",
         "result_json",
         "detection_json",
+        "verification_json",
         "evidence_path",
         "evidence_json",
         "image_path",

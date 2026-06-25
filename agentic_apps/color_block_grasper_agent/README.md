@@ -17,6 +17,7 @@ requesting:
 - `perception.detect_color_block`
 - `perception.capture_photo`
 - `manipulation.pick_color_block`
+- `perception.verify_held_color_block`
 - `manipulation.place_color_block`
 - `human.ask`
 - `report.say`
@@ -26,11 +27,21 @@ LiteLLM, or vLLM SDKs directly. If the LLM facade or provider is unavailable,
 the app returns `LLMCHAT_UNAVAILABLE`, `LLM_PROVIDER_UNCONFIGURED`, or another
 stable LLM error and does not continue as a successful path.
 
-If the real detector, camera bridge, arm bridge, gripper bridge, or manipulation
-backend is not configured, the app returns stable errors such as
-`UNVERIFIED_REAL_DEPENDENCY`, `COLOR_BLOCK_CAPABILITY_UNAVAILABLE`, or
+After `manipulation.pick_color_block`, the app captures post-pick evidence,
+reads arm/gripper state, and calls `perception.verify_held_color_block`.
+`held=true` from the pick backend is only candidate evidence. The final result
+is successful only when the independent verifier records `verified_held=true`
+from fresh evidence showing the target color in the gripper-held ROI, not
+overlapping the pre-pick tabletop detection, and visually larger/closer than
+the pre-pick detection. The app also repeats held verification after a short
+delay so a block that slips back to the tabletop cannot be reported as success.
+
+If the real detector, camera bridge, held verifier, arm bridge, gripper bridge,
+or manipulation backend is not configured, the app returns stable errors such
+as `UNVERIFIED_REAL_DEPENDENCY`, `COLOR_BLOCK_CAPABILITY_UNAVAILABLE`,
+`COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE`, or
 `MANIPULATION_BACKEND_UNAVAILABLE`. It never invents a detection, pose,
-evidence file, pick result, or placement result.
+evidence file, pick result, placement result, or held-object verification.
 
 ## Checks
 
@@ -52,6 +63,6 @@ report:
 
 ```text
 UNVERIFIED_REAL_DEPENDENCY
-missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, manipulation.pick_color_block, manipulation.place_color_block
+missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, perception.verify_held_color_block, manipulation.pick_color_block, manipulation.place_color_block
 next_action: configure the Runtime LLM provider and real Agentic bridge contracts, then rerun real-e2e
 ```
