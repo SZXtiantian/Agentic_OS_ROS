@@ -260,6 +260,35 @@ class Ros2CliBridgeClient:
             "evidence": evidence,
         }
 
+    async def center_color_block(self, color: str, target: str, evidence_label: str, timeout_s: int) -> dict[str, Any]:
+        try:
+            output = await self._service_call(
+                "/agentic/perception/center_color_block",
+                "agentic_msgs/srv/CenterColorBlock",
+                {
+                    "color": color,
+                    "target": target,
+                    "evidence_label": evidence_label,
+                    "request_id": new_id("center_block"),
+                    "timeout_s": int(timeout_s),
+                },
+                timeout_s + 5,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response("center_color_block", data, "success")
+        except RosBridgeCommandError as exc:
+            self._record_error("center_color_block", exc)
+            return _bridge_error(exc, alignment={}, evidence={})
+        alignment = _decode_json_field(data.get("alignment_json"))
+        evidence = _decode_json_field(data.get("evidence_json"))
+        return {
+            "success": success,
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "alignment": alignment,
+            "evidence": evidence,
+        }
+
     async def verify_held_color_block(
         self,
         color: str,
@@ -755,6 +784,7 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         "answer",
         "result_json",
         "detection_json",
+        "alignment_json",
         "verification_json",
         "evidence_path",
         "evidence_json",

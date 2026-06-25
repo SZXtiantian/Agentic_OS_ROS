@@ -58,6 +58,20 @@ class SkillDispatcher:
                 missing=["perception.detect_color_block"],
                 next_action="Expose /agentic/perception/detect_color_block in the Agentic perception bridge.",
             )
+        if skill_name == "perception.center_color_block":
+            if hasattr(self.bridge_client, "center_color_block"):
+                return await self.bridge_client.center_color_block(
+                    color=args["color"],
+                    target=args.get("target", "workspace"),
+                    evidence_label=args.get("evidence_label", "center_color_block"),
+                    timeout_s=int(args.get("timeout_s", 8)),
+                )
+            return _missing_color_block_backend(
+                "COLOR_BLOCK_ALIGNMENT_UNAVAILABLE",
+                "bridge client does not expose center_color_block",
+                missing=["perception.center_color_block"],
+                next_action="Expose /agentic/perception/center_color_block in the Agentic perception bridge.",
+            )
         if skill_name == "perception.verify_held_color_block":
             if hasattr(self.bridge_client, "verify_held_color_block"):
                 return await self.bridge_client.verify_held_color_block(

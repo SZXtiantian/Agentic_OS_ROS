@@ -1,0 +1,69 @@
+name: perception.center_color_block
+version: 0.1.0
+description: Slow visual alignment of a detected color block into the camera center before grasp planning.
+input_schema:
+  type: object
+  required:
+    - color
+  properties:
+    color:
+      type: string
+      enum:
+        - red
+        - green
+        - blue
+        - yellow
+    target:
+      type: string
+      default: workspace
+    evidence_label:
+      type: string
+      default: center_color_block
+    timeout_s:
+      type: integer
+      minimum: 1
+      maximum: 30
+      default: 8
+output_schema:
+  type: object
+  required:
+    - success
+  properties:
+    success:
+      type: boolean
+    error_code:
+      type: string
+    reason:
+      type: string
+    alignment:
+      type: object
+    evidence:
+      type: object
+permission_requirements:
+  - perception.center.color_block
+  - arm.move.named
+resource_requirements:
+  locks:
+    - camera
+    - arm
+    - color_block_detector
+safety_constraints:
+  require_estop_released: true
+  camera_target_allowlist: true
+  allow_cancel: true
+  max_duration_s: 30
+  runtime_timeout_margin_s: 5
+timeout_s: 30
+retry_policy:
+  max_attempts: 0
+  retry_on: []
+backend:
+  type: ros2_service
+  bridge: inspection_bridge_node
+  service: /agentic/perception/center_color_block
+  service_type: agentic_msgs/srv/CenterColorBlock
+  availability: real_bridge_required
+observability:
+  audit: true
+  record_feedback: false
+  record_result: true

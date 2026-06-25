@@ -13,6 +13,8 @@ permissions:
     description: Observe the workspace through a camera-backed AgenticOS bridge.
   perception.capture:
     description: Capture a real camera photo through the AgenticOS bridge and save evidence.
+  perception.center.color_block:
+    description: Slowly align a color block in camera view through the AgenticOS bridge before grasping.
   perception.verify.color_block_held:
     description: Verify a picked color block is actually visible in the gripper-held ROI.
   arm.state.read:

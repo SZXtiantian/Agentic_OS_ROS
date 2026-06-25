@@ -98,6 +98,14 @@ class ScriptedColorBlockBackend:
             }
         if skill_name == "arm.move_named":
             return {"success": True, "result": {"action_name": args["name"], "status": "finished"}, "error_code": "", "reason": ""}
+        if skill_name == "perception.center_color_block":
+            return {
+                "success": True,
+                "alignment": {"centered": True, "target_color": args["color"], "evidence_image_path": "/tmp/center.png"},
+                "evidence": {"kind": "color_block_alignment", "centered": True, "debug_image_path": "/tmp/center.png"},
+                "error_code": "",
+                "reason": "",
+            }
         if skill_name == "perception.detect_color_block":
             return {"success": True, "detection": _detection(), "evidence": {"kind": "color_block_detection"}, "error_code": "", "reason": ""}
         if skill_name == "perception.capture_photo":
@@ -351,6 +359,7 @@ async def _run_bare_kernel(tmp_path, *, llm_chat, message: str, skill_backend=No
                 "arm.state.read",
                 "human.ask",
                 "perception.detect.color_block",
+                "perception.center.color_block",
                 "perception.capture",
                 "perception.verify.color_block_held",
                 "manipulation.pick.color_block",
@@ -411,6 +420,7 @@ def _verify_success():
             "radius_ratio_vs_pre_pick": 1.3,
             "min_radius_ratio_vs_pre_pick": 1.15,
             "size_confirms_lift": True,
+            "position_confirms_gripper_roi": True,
             "overlaps_pre_pick_detection": False,
             "evidence_image_path": "/tmp/held.png",
             "evidence_metadata_path": "/tmp/held.json",
@@ -418,6 +428,7 @@ def _verify_success():
         "evidence": {
             "verified_held": True,
             "size_confirms_lift": True,
+            "position_confirms_gripper_roi": True,
             "overlaps_pre_pick_detection": False,
             "radius_ratio_vs_pre_pick": 1.3,
             "min_radius_ratio_vs_pre_pick": 1.15,

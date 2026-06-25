@@ -441,7 +441,12 @@ class ManipulationBridgeNode(Node):
                 "pick_pulse": plan["pick_pulse"],
                 "lift_pulse": plan["lift_pulse"],
                 "pick_pitch": plan["pick_pitch"],
-                "held": True,
+                "execution_strategy": plan.get("execution_strategy", "ik_color_block_pick"),
+                "motion_sequence": plan.get("fixed_pick_sequence", []),
+                "held": False,
+                "held_verified": False,
+                "held_claim_source": "post_pick_vision_verification_required",
+                "motion_completed": True,
                 "duration_s": duration_s,
                 "bridge_action": "/agentic/manipulation/pick_color_block",
             }
@@ -563,7 +568,7 @@ class ManipulationBridgeNode(Node):
         lift_position = list(arm_position)
         lift_position[2] += float(cfg.get("lift_height_m", 0.10))
         lift_pulse = self._solve_ik(lift_position, pitch, deadline)
-        return {
+        plan = {
             "pick_position_m": [round(float(value), 5) for value in arm_position],
             "pregrasp_position_m": [round(float(value), 5) for value in pregrasp_position],
             "lift_position_m": [round(float(value), 5) for value in lift_position],
@@ -572,10 +577,19 @@ class ManipulationBridgeNode(Node):
             "pregrasp_pulse": pregrasp_pulse,
             "lift_pulse": lift_pulse,
         }
+        fixed_sequence = self._fixed_pick_sequence(cfg)
+        if fixed_sequence:
+            plan["execution_strategy"] = str(cfg.get("pick_execution_strategy") or "aligned_fixed_pulse_sequence")
+            plan["fixed_pick_sequence"] = fixed_sequence
+        return plan
 
     def _execute_pick_motion(self, goal_handle, plan: dict[str, Any], *, timeout_s: int) -> None:
         del timeout_s
         cfg = self._color_block_profile()
+        fixed_sequence = list(plan.get("fixed_pick_sequence") or [])
+        if fixed_sequence:
+            self._execute_fixed_pick_sequence(goal_handle, fixed_sequence)
+            return
         gripper_open = int(cfg.get("gripper_open", dict(self._gripper_profile().get("limits") or {}).get("open_pulse", 760)))
         gripper_close = int(cfg.get("gripper_close", dict(self._gripper_profile().get("limits") or {}).get("close_low_force_pulse", 520)))
         pregrasp = list(plan["pregrasp_pulse"])
@@ -584,18 +598,73 @@ class ManipulationBridgeNode(Node):
         self._publish_pick_feedback(goal_handle, "opening_gripper", 0.3, {})
         self._publish_servos(0.6, [(10, gripper_open)])
         self._sleep_or_cancel(goal_handle, 0.7)
+        self._publish_pick_feedback(goal_handle, "aligning_base", 0.38, {"base_pulse": pregrasp[0]})
+        self._publish_servos(0.8, [(1, pregrasp[0]), (10, gripper_open)])
+        self._sleep_or_cancel(goal_handle, 0.9)
         self._publish_pick_feedback(goal_handle, "moving_pregrasp", 0.45, {"pregrasp_pulse": pregrasp})
-        self._publish_servos(1.3, [(1, pregrasp[0]), (2, pregrasp[1]), (3, pregrasp[2]), (4, pregrasp[3]), (5, pregrasp[4])])
+        self._publish_servos(1.3, [(1, pregrasp[0]), (2, pregrasp[1]), (3, pregrasp[2]), (4, pregrasp[3]), (5, pregrasp[4]), (10, gripper_open)])
         self._sleep_or_cancel(goal_handle, 1.4)
-        self._publish_pick_feedback(goal_handle, "moving_pick", 0.6, {"pick_pulse": pick})
-        self._publish_servos(0.9, [(1, pick[0]), (2, pick[1]), (3, pick[2]), (4, pick[3]), (5, pick[4])])
-        self._sleep_or_cancel(goal_handle, 1.0)
+        pick_move_duration_s = float(cfg.get("pick_move_duration_s", 1.0))
+        pick_settle_s = float(cfg.get("pick_settle_s", pick_move_duration_s + 0.2))
+        self._publish_pick_feedback(
+            goal_handle,
+            "moving_pick",
+            0.6,
+            {"pick_pulse": pick, "duration_s": pick_move_duration_s, "settle_s": pick_settle_s},
+        )
+        self._publish_servos(
+            pick_move_duration_s,
+            [(1, pick[0]), (2, pick[1]), (3, pick[2]), (4, pick[3]), (5, pick[4]), (10, gripper_open)],
+        )
+        self._sleep_or_cancel(goal_handle, pick_settle_s)
         self._publish_pick_feedback(goal_handle, "closing_gripper", 0.75, {})
-        self._publish_servos(0.6, [(10, gripper_close)])
-        self._sleep_or_cancel(goal_handle, 1.0)
+        self._publish_servos(0.8, [(10, gripper_close)])
+        self._sleep_or_cancel(goal_handle, 1.4)
         self._publish_pick_feedback(goal_handle, "lifting", 0.9, {"lift_pulse": lift})
         self._publish_servos(1.0, [(1, lift[0]), (2, lift[1]), (3, lift[2]), (4, lift[3]), (5, lift[4]), (10, gripper_close)])
         self._sleep_or_cancel(goal_handle, 1.0)
+
+    def _fixed_pick_sequence(self, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+        if str(cfg.get("pick_execution_strategy") or "").strip() != "aligned_fixed_pulse_sequence":
+            return []
+        sequence: list[dict[str, Any]] = []
+        for index, item in enumerate(list(cfg.get("fixed_pick_sequence") or [])):
+            if not isinstance(item, dict):
+                raise RuntimeError(f"fixed_pick_sequence step {index + 1} must be an object")
+            positions: list[list[int]] = []
+            for pair in list(item.get("positions") or []):
+                values = list(pair or [])
+                if len(values) < 2:
+                    raise RuntimeError(f"fixed_pick_sequence step {index + 1} has an invalid servo pair")
+                positions.append([int(values[0]), int(values[1])])
+            if not positions:
+                raise RuntimeError(f"fixed_pick_sequence step {index + 1} has no servo positions")
+            sequence.append(
+                {
+                    "status": str(item.get("status") or f"fixed_pick_step_{index + 1}"),
+                    "progress": float(item.get("progress", min(0.95, 0.3 + index / 4.0))),
+                    "duration_s": float(item.get("duration_s", 1.0)),
+                    "settle_s": float(item.get("settle_s", float(item.get("duration_s", 1.0)) + 0.1)),
+                    "positions": positions,
+                }
+            )
+        return sequence
+
+    def _execute_fixed_pick_sequence(self, goal_handle, sequence: list[dict[str, Any]]) -> None:
+        for index, item in enumerate(sequence):
+            if goal_handle.is_cancel_requested:
+                raise RuntimeError("pick cancelled")
+            positions = [(int(pair[0]), int(pair[1])) for pair in list(item.get("positions") or [])]
+            duration_s = float(item.get("duration_s", 1.0))
+            settle_s = float(item.get("settle_s", duration_s + 0.1))
+            self._publish_pick_feedback(
+                goal_handle,
+                str(item.get("status") or f"fixed_pick_step_{index + 1}"),
+                float(item.get("progress", min(0.95, 0.3 + index / max(len(sequence), 1)))),
+                {"duration_s": duration_s, "settle_s": settle_s, "positions": positions},
+            )
+            self._publish_servos(duration_s, positions)
+            self._sleep_or_cancel(goal_handle, settle_s)
 
     def _execute_place_motion(self, goal_handle, pick_result: dict[str, Any], *, timeout_s: int) -> None:
         del timeout_s, pick_result

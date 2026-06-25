@@ -9,6 +9,7 @@ permissions:
   - perception.observe
   - perception.capture
   - perception.detect.color_block
+  - perception.center.color_block
   - perception.verify.color_block_held
   - arm.state.read
   - arm.move.named
@@ -34,6 +35,7 @@ required_capabilities:
   - robot.stop
   - perception.observe
   - perception.capture_photo
+  - perception.center_color_block
   - perception.detect_color_block
   - perception.verify_held_color_block
   - arm.get_state
@@ -48,6 +50,7 @@ resources:
   - arm
   - gripper
   - color_block_detector
+  - color_block_centering
   - held_color_block_verifier
   - manipulation_backend
 allowed_targets:

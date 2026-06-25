@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/StopRobot.srv"
   "srv/Observe.srv"
   "srv/CapturePhoto.srv"
+  "srv/CenterColorBlock.srv"
   "srv/DetectColorBlock.srv"
   "srv/VerifyHeldColorBlock.srv"
   "srv/InspectArea.srv"

@@ -3,6 +3,7 @@
   "description": "A native Agentic App for real color block detection, pick, and place through Agentic OS Runtime skills and Runtime-owned LLM planning.",
   "tools": [
     "agenticos/perception_detect_color_block",
+    "agenticos/perception_center_color_block",
     "agenticos/perception_capture_photo",
     "agenticos/perception_verify_held_color_block",
     "agenticos/manipulation_pick_color_block",

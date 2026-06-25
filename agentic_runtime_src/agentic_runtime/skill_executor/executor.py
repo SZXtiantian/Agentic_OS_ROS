@@ -261,6 +261,7 @@ class SkillExecutor:
             "gripper.set",
             "perception.observe",
             "perception.capture_photo",
+            "perception.center_color_block",
             "perception.detect_color_block",
             "perception.verify_held_color_block",
             "manipulation.pick_color_block",
@@ -275,6 +276,7 @@ class SkillExecutor:
             "robot.inspect_area",
             "perception.observe",
             "perception.capture_photo",
+            "perception.center_color_block",
             "perception.detect_color_block",
             "perception.verify_held_color_block",
         }:

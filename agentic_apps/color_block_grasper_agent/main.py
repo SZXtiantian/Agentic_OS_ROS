@@ -225,6 +225,7 @@ def _task_from_plan(task_text: str, plan: dict[str, Any], *, operator_confirmed:
 def _validate_policy(ctx: AgentContext, task: dict[str, Any]) -> dict[str, Any]:
     required_permissions = [
         "perception.detect.color_block",
+        "perception.center.color_block",
         "perception.capture",
         "perception.verify.color_block_held",
         "manipulation.pick.color_block",
@@ -324,6 +325,28 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
             missing=["arm.move_named arm_home"],
             next_action="Verify the Agentic manipulation bridge can execute the allowlisted arm_home action.",
         )
+    align = await _call_skill(
+        ctx,
+        steps,
+        "center_color_block",
+        "perception.center_color_block",
+        {
+            "color": task["color"],
+            "target": task["target"],
+            "evidence_label": f"{task['evidence_label']}_center",
+            "timeout_s": min(int(task["timeout_s"]), 12),
+            "_kernel_timeout_s": min(max(int(task["timeout_s"]), 30), 45),
+        },
+    )
+    if not align["success"]:
+        code = str(align.get("error_code") or "COLOR_BLOCK_ALIGNMENT_FAILED")
+        return _dependency_failure(
+            code,
+            "color block could not be centered before grasp planning",
+            align,
+            missing=["perception.center_color_block"],
+            next_action="Center the target color block in the camera view through the Agentic perception bridge before pick planning.",
+        )
     return {"success": True, "task": task}
 
 
@@ -410,6 +433,7 @@ async def _detect_color_block(ctx: AgentContext, task: dict[str, Any], steps: li
             "target": task["target"],
             "evidence_label": task["evidence_label"],
             "timeout_s": min(int(task["timeout_s"]), 30),
+            "_kernel_timeout_s": min(max(int(task["timeout_s"]), 45), 75),
         },
     )
     if detection["success"]:
@@ -948,6 +972,11 @@ def _validate_held_verification_data(task: dict[str, Any], verification_step: di
         min_radius_ratio = 1.0
     if radius_ratio < min_radius_ratio:
         missing.append("radius ratio confirms lift")
+    position_confirms_gripper_roi = bool(
+        verification.get("position_confirms_gripper_roi") or evidence.get("position_confirms_gripper_roi")
+    )
+    if not position_confirms_gripper_roi:
+        missing.append("position_confirms_gripper_roi")
     if not str(verification.get("evidence_image_path") or evidence.get("debug_image_path") or ""):
         missing.append("post-pick verification image")
     if not str(verification.get("evidence_metadata_path") or evidence.get("metadata_path") or ""):

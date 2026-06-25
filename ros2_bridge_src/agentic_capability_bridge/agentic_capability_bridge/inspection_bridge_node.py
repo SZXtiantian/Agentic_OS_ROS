@@ -9,11 +9,12 @@ import cv2
 import numpy as np
 import rclpy
 import yaml
-from agentic_msgs.srv import CapturePhoto, DetectColorBlock, InspectArea, Observe, VerifyHeldColorBlock
+from agentic_msgs.srv import CapturePhoto, CenterColorBlock, DetectColorBlock, InspectArea, Observe, VerifyHeldColorBlock
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from sensor_msgs.msg import CameraInfo, Image
+from servo_controller_msgs.msg import ServoPosition, ServosPosition
 
 
 DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
@@ -28,6 +29,7 @@ class InspectionBridgeNode(Node):
         self._latest_image: dict[str, Any] | None = None
         self._latest_depth: dict[str, Any] | None = None
         self._latest_camera_info: dict[str, Any] | None = None
+        self._servo_pub = self.create_publisher(ServosPosition, self._servo_topic(), 10)
         self._subscriptions = []
         for topic in self._camera_topics():
             self._subscriptions.append(
@@ -84,6 +86,12 @@ class InspectionBridgeNode(Node):
             callback_group=self._callback_group,
         )
         self.create_service(
+            CenterColorBlock,
+            "/agentic/perception/center_color_block",
+            self.center_color_block,
+            callback_group=self._callback_group,
+        )
+        self.create_service(
             VerifyHeldColorBlock,
             "/agentic/perception/verify_held_color_block",
             self.verify_held_color_block,
@@ -121,6 +129,11 @@ class InspectionBridgeNode(Node):
         camera = dict(self._profile.get("camera") or {})
         topics = [str(topic) for topic in camera.get("camera_info_topics", []) if topic]
         return list(dict.fromkeys(topics or ["/depth_cam/depth0/camera_info"]))
+
+    def _servo_topic(self) -> str:
+        gripper = dict(self._profile.get("gripper") or {})
+        arm = dict(self._profile.get("arm") or {})
+        return str(gripper.get("servo_command_topic") or arm.get("servo_command_topic") or "/servo_controller")
 
     def _evidence_dir(self) -> Path:
         evidence = dict(self._profile.get("evidence") or {})
@@ -193,6 +206,21 @@ class InspectionBridgeNode(Node):
         response.error_code = str(result.get("error_code", ""))
         response.reason = str(result.get("reason", ""))
         response.detection_json = json.dumps(result.get("detection", {}), ensure_ascii=False, sort_keys=True)
+        response.evidence_json = json.dumps(result.get("evidence", {}), ensure_ascii=False, sort_keys=True)
+        return response
+
+    def center_color_block(self, request: CenterColorBlock.Request, response: CenterColorBlock.Response):
+        result = self._center_color_block(
+            color=str(request.color or ""),
+            target=str(request.target or "workspace"),
+            evidence_label=str(request.evidence_label or "center_color_block"),
+            request_id=str(request.request_id or ""),
+            timeout_s=int(request.timeout_s or 0),
+        )
+        response.success = bool(result.get("success", False))
+        response.error_code = str(result.get("error_code", ""))
+        response.reason = str(result.get("reason", ""))
+        response.alignment_json = json.dumps(result.get("alignment", {}), ensure_ascii=False, sort_keys=True)
         response.evidence_json = json.dumps(result.get("evidence", {}), ensure_ascii=False, sort_keys=True)
         return response
 
@@ -443,6 +471,124 @@ class InspectionBridgeNode(Node):
         }
         return {"success": True, "error_code": "", "reason": "", "detection": detection, "evidence": metadata}
 
+    def _center_color_block(
+        self,
+        color: str,
+        target: str,
+        evidence_label: str,
+        request_id: str,
+        timeout_s: int,
+    ) -> dict[str, Any]:
+        cfg = dict(self._profile.get("color_block") or {})
+        timeout = float(timeout_s or cfg.get("center_timeout_s", 8.0))
+        deadline = time.monotonic() + max(1.0, timeout)
+        color_range = self._color_range(color)
+        if color_range is None:
+            return self._alignment_error("COLOR_BLOCK_ALIGNMENT_FAILED", f"color is not configured: {color}", color, target)
+        if self._servo_pub.get_subscription_count() <= 0:
+            return self._alignment_error(
+                "COLOR_BLOCK_ALIGNMENT_UNAVAILABLE",
+                f"servo backend unavailable: no subscribers on {self._servo_topic()}",
+                color,
+                target,
+            )
+
+        width = height = 0
+        observation: dict[str, float] | None = None
+        converted_image = None
+        base_pulse = int(cfg.get("center_base_start_pulse", cfg.get("init_servo_1", 500)))
+        pitch_pulse = int(cfg.get("center_pitch_start_pulse", cfg.get("init_servo_4", 188)))
+        target_x = float(cfg.get("center_target_x_ratio", 0.5))
+        target_y = float(cfg.get("center_target_y_ratio", 0.5))
+        tolerance = float(cfg.get("center_tolerance_ratio", 0.035))
+        max_step = int(cfg.get("center_max_servo_step", 12))
+        base_gain = float(cfg.get("center_base_gain", 80.0))
+        pitch_gain = float(cfg.get("center_pitch_gain", 80.0))
+        base_limits = [int(v) for v in list(cfg.get("center_base_pulse_limits", [440, 560]))[:2]]
+        pitch_limits = [int(v) for v in list(cfg.get("center_pitch_pulse_limits", [120, 260]))[:2]]
+        iterations: list[dict[str, Any]] = []
+        success = False
+
+        while time.monotonic() < deadline and len(iterations) < int(cfg.get("center_max_iterations", 18)):
+            rgb = self._wait_for_image(min(1.0, max(0.1, deadline - time.monotonic())))
+            if rgb is None:
+                break
+            converted = self._image_to_cv_mat(rgb["msg"])
+            if not converted["success"]:
+                return self._alignment_error("COLOR_BLOCK_ALIGNMENT_UNAVAILABLE", converted["reason"], color, target)
+            converted_image = converted["image"]
+            height, width = converted_image.shape[:2]
+            observation = self._segment_color(converted_image, color, color_range)
+            if observation is None:
+                iterations.append({"status": "not_detected", "base_pulse": base_pulse, "pitch_pulse": pitch_pulse})
+                time.sleep(0.15)
+                continue
+            dx = float(observation["center_x"]) / max(1.0, float(width)) - target_x
+            dy = float(observation["center_y"]) / max(1.0, float(height)) - target_y
+            centered = abs(dx) <= tolerance and abs(dy) <= tolerance
+            iterations.append(
+                {
+                    "center_px": [round(float(observation["center_x"]), 3), round(float(observation["center_y"]), 3)],
+                    "error_ratio": [round(float(dx), 4), round(float(dy), 4)],
+                    "base_pulse": base_pulse,
+                    "pitch_pulse": pitch_pulse,
+                    "centered": bool(centered),
+                }
+            )
+            if centered:
+                success = True
+                break
+            base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
+            pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
+            if base_delta == 0 and abs(dx) > tolerance:
+                base_delta = 1 if dx > 0 else -1
+            if pitch_delta == 0 and abs(dy) > tolerance:
+                pitch_delta = -1 if dy > 0 else 1
+            base_pulse = int(np.clip(base_pulse + base_delta, base_limits[0], base_limits[1]))
+            pitch_pulse = int(np.clip(pitch_pulse + pitch_delta, pitch_limits[0], pitch_limits[1]))
+            self._publish_alignment_servos(float(cfg.get("center_servo_duration_s", 0.08)), [(1, base_pulse), (4, pitch_pulse)])
+            time.sleep(float(cfg.get("center_settle_s", 0.20)))
+
+        created_unix = time.time()
+        candidate = self._observation_payload(observation) if observation else {}
+        debug = self._draw_alignment(converted_image, color, observation, target_x, target_y, success) if converted_image is not None else None
+        metadata = {
+            "kind": "color_block_alignment",
+            "request_id": request_id,
+            "target": target,
+            "color": color,
+            "label": evidence_label,
+            "created_unix": created_unix,
+            "target_ratio": [round(target_x, 4), round(target_y, 4)],
+            "tolerance_ratio": round(tolerance, 4),
+            "candidate": candidate,
+            "base_pulse": int(base_pulse),
+            "pitch_pulse": int(pitch_pulse),
+            "iterations": iterations,
+            "centered": bool(success),
+        }
+        if debug is not None:
+            metadata.update(self._write_alignment_evidence(metadata, debug))
+        alignment = {
+            "centered": bool(success),
+            "target_color": color,
+            "candidate": candidate,
+            "base_pulse": int(base_pulse),
+            "pitch_pulse": int(pitch_pulse),
+            "iterations": len(iterations),
+            "evidence_image_path": metadata.get("debug_image_path", ""),
+            "evidence_metadata_path": metadata.get("metadata_path", ""),
+        }
+        if success:
+            return {"success": True, "error_code": "", "reason": "", "alignment": alignment, "evidence": metadata}
+        return {
+            "success": False,
+            "error_code": "COLOR_BLOCK_ALIGNMENT_FAILED",
+            "reason": "color block did not center in the camera before timeout",
+            "alignment": alignment,
+            "evidence": metadata,
+        }
+
     def _verify_held_color_block(
         self,
         color: str,
@@ -504,9 +650,23 @@ class InspectionBridgeNode(Node):
         radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
         min_radius_ratio = float(cfg.get("held_verify_min_radius_ratio_vs_pre_pick", 1.15))
         size_confirms_lift = bool(candidate) and radius_ratio >= min_radius_ratio
+        min_center_y_ratio = float(cfg.get("held_verify_min_center_y_ratio", 0.82))
+        min_bottom_y_ratio = float(cfg.get("held_verify_min_bottom_y_ratio", 0.90))
+        position_confirms_gripper_roi = self._candidate_confirms_gripper_roi(
+            candidate,
+            image.shape[:2],
+            min_center_y_ratio,
+            min_bottom_y_ratio,
+        )
         min_confidence = float(cfg.get("held_verify_min_confidence", 0.001))
         confidence = self._observation_confidence(observation, image.shape[:2]) if observation else 0.0
-        verified = bool(observation) and confidence >= min_confidence and not overlaps_pre_pick and size_confirms_lift
+        verified = (
+            bool(observation)
+            and confidence >= min_confidence
+            and not overlaps_pre_pick
+            and size_confirms_lift
+            and position_confirms_gripper_roi
+        )
         failure_reason = ""
         if not observation:
             failure_reason = f"{color} block was not detected in the configured gripper-held ROI."
@@ -518,6 +678,11 @@ class InspectionBridgeNode(Node):
             failure_reason = (
                 f"held verification radius ratio {radius_ratio:.3f} below {min_radius_ratio:.3f}; "
                 "candidate does not prove the block moved closer to the gripper camera."
+            )
+        elif not position_confirms_gripper_roi:
+            failure_reason = (
+                "verification candidate is not in the gripper-mouth part of the held ROI; "
+                "the red block may still be on the tabletop."
             )
 
         debug = self._draw_held_verification(image, color, observation, roi_bounds, verified)
@@ -544,6 +709,9 @@ class InspectionBridgeNode(Node):
             "radius_ratio_vs_pre_pick": round(float(radius_ratio), 4),
             "min_radius_ratio_vs_pre_pick": round(float(min_radius_ratio), 4),
             "size_confirms_lift": bool(size_confirms_lift),
+            "position_confirms_gripper_roi": bool(position_confirms_gripper_roi),
+            "min_center_y_ratio": round(float(min_center_y_ratio), 4),
+            "min_bottom_y_ratio": round(float(min_bottom_y_ratio), 4),
             "verified_held": bool(verified),
             "overlaps_pre_pick_detection": bool(overlaps_pre_pick),
             "pre_pick_detection": detection,
@@ -568,6 +736,9 @@ class InspectionBridgeNode(Node):
             "radius_ratio_vs_pre_pick": metadata["radius_ratio_vs_pre_pick"],
             "min_radius_ratio_vs_pre_pick": metadata["min_radius_ratio_vs_pre_pick"],
             "size_confirms_lift": bool(size_confirms_lift),
+            "position_confirms_gripper_roi": bool(position_confirms_gripper_roi),
+            "min_center_y_ratio": metadata["min_center_y_ratio"],
+            "min_bottom_y_ratio": metadata["min_bottom_y_ratio"],
             "overlaps_pre_pick_detection": bool(overlaps_pre_pick),
             "evidence_image_path": metadata["debug_image_path"],
             "evidence_metadata_path": metadata["metadata_path"],
@@ -621,6 +792,21 @@ class InspectionBridgeNode(Node):
                 "camera_topics": self._camera_topics(),
                 "pre_pick_detection": detection,
                 "pick_result": pick_result,
+            },
+        }
+
+    def _alignment_error(self, code: str, reason: str, color: str, target: str) -> dict[str, Any]:
+        return {
+            "success": False,
+            "error_code": code,
+            "reason": reason,
+            "alignment": {"centered": False, "target_color": color},
+            "evidence": {
+                "kind": "color_block_alignment",
+                "color": color,
+                "target": target,
+                "camera_topics": self._camera_topics(),
+                "servo_topic": self._servo_topic(),
             },
         }
 
@@ -758,6 +944,33 @@ class InspectionBridgeNode(Node):
         metadata_path.write_text(json.dumps(metadata_for_file, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
         return {"debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
 
+    def _write_alignment_evidence(self, metadata: dict[str, Any], image) -> dict[str, str]:
+        evidence_dir = self._evidence_dir() / "color_block"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = time.strftime("%Y%m%d_%H%M%S", time.localtime())
+        label = self._safe_filename(metadata.get("label") or "center_color_block")
+        request_id = self._safe_filename(metadata.get("request_id") or f"align_{int(time.time())}")
+        stem = f"{label}_{timestamp}_{request_id}"
+        image_path = evidence_dir / f"{stem}.png"
+        metadata_path = evidence_dir / f"{stem}.json"
+        if not cv2.imwrite(str(image_path), image):
+            raise OSError(f"cv2.imwrite failed for {image_path}")
+        metadata_for_file = {**metadata, "debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
+        metadata_path.write_text(json.dumps(metadata_for_file, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        return {"debug_image_path": str(image_path), "metadata_path": str(metadata_path)}
+
+    def _publish_alignment_servos(self, duration_s: float, positions: list[tuple[int, int]]) -> None:
+        msg = ServosPosition()
+        msg.duration = float(duration_s)
+        msg.position_unit = "pulse"
+        msg.position = []
+        for servo_id, pulse in positions:
+            servo = ServoPosition()
+            servo.id = int(servo_id)
+            servo.position = float(pulse)
+            msg.position.append(servo)
+        self._servo_pub.publish(msg)
+
     def _color_range(self, color: str) -> dict[str, list[int]] | None:
         configured = dict(dict(self._profile.get("color_block") or {}).get("lab_ranges") or {})
         if color in configured:
@@ -880,6 +1093,24 @@ class InspectionBridgeNode(Node):
             return 0.0
         return candidate_radius / pre_radius
 
+    def _candidate_confirms_gripper_roi(
+        self,
+        candidate: dict[str, Any],
+        shape: tuple[int, int],
+        min_center_y_ratio: float,
+        min_bottom_y_ratio: float,
+    ) -> bool:
+        center = candidate.get("center_px")
+        if not isinstance(center, list) or len(center) < 2:
+            return False
+        height = max(1.0, float(shape[0]))
+        try:
+            center_y_ratio = float(center[1]) / height
+            bottom_y_ratio = (float(center[1]) + float(candidate.get("radius_px") or 0.0)) / height
+        except (TypeError, ValueError):
+            return False
+        return center_y_ratio >= min_center_y_ratio and bottom_y_ratio >= min_bottom_y_ratio
+
     def _nested_value(self, payload: dict[str, Any], key: str) -> Any:
         if key in payload:
             return payload.get(key)
@@ -946,6 +1177,21 @@ class InspectionBridgeNode(Node):
         cv2.circle(debug, center, int(observation["radius"]), draw_color, 2)
         cv2.circle(debug, center, 4, (255, 255, 255), -1)
         cv2.putText(debug, color, (max(0, center[0] - 40), max(12, center[1] - 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, draw_color, 2)
+        return debug
+
+    def _draw_alignment(self, image, color: str, observation: dict[str, float] | None, target_x: float, target_y: float, centered: bool):
+        debug = image.copy()
+        height, width = debug.shape[:2]
+        target = (int(round(target_x * width)), int(round(target_y * height)))
+        status_color = (40, 220, 40) if centered else (40, 40, 255)
+        cv2.drawMarker(debug, target, status_color, markerType=cv2.MARKER_CROSS, markerSize=24, thickness=2)
+        if observation:
+            draw_color = {"red": (0, 50, 255), "green": (50, 255, 0), "blue": (255, 50, 0), "yellow": (0, 255, 255)}.get(color, (255, 255, 255))
+            center = (int(observation["center_x"]), int(observation["center_y"]))
+            cv2.circle(debug, center, int(observation["radius"]), draw_color, 2)
+            cv2.circle(debug, center, 4, (255, 255, 255), -1)
+            cv2.line(debug, center, target, status_color, 1)
+        cv2.putText(debug, "CENTERED" if centered else "ALIGNING", (8, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, status_color, 2)
         return debug
 
     def _draw_held_verification(
