@@ -114,17 +114,18 @@ color_block:
   held_verify_min_confidence: 0.001
   held_verify_pre_pick_exclusion_radius_px: 45
   held_verify_min_radius_ratio_vs_pre_pick: 1.15
+  held_verify_min_depth_delta_m: 0.09
   held_verify_min_center_y_ratio: 0.82
   held_verify_min_bottom_y_ratio: 0.90
   center_timeout_s: 8.0
   center_target_x_ratio: 0.58
   center_target_y_ratio: 0.82
-  center_tolerance_ratio: 0.04
+  center_tolerance_ratio: 0.045
   center_base_start_pulse: 500
   center_pitch_start_pulse: 188
   center_base_pulse_limits: [440, 560]
   center_pitch_pulse_limits: [120, 260]
-  center_base_gain: 0.0
+  center_base_gain: -100.0
   center_pitch_gain: 50.0
   center_max_servo_step: 8
   center_max_iterations: 18
@@ -138,9 +139,9 @@ color_block:
   hand2cam_tx_m: -0.101
   hand2cam_ty_m: 0.0
   hand2cam_tz_m: 0.037
-  pick_x_offset_m: 0.0
-  pick_y_offset_m: 0.0
-  pick_z_offset_m: 0.105
+  pick_x_offset_m: 0.012
+  pick_y_offset_m: 0.027
+  pick_z_offset_m: 0.094
   pregrasp_height_m: 0.04
   lift_height_m: 0.08
   pick_pitch_near: 76.0
@@ -150,7 +151,7 @@ color_block:
   pitch_range_max: 180.0
   pitch_resolution: 1.0
   gripper_open: 150
-  gripper_close: 600
+  gripper_close: 650
   pick_move_duration_s: 2.6
   pick_settle_s: 3.2
   pick_execution_strategy: ik_color_block_pick

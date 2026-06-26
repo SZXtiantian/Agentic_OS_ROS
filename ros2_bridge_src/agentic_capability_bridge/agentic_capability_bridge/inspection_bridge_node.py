@@ -643,6 +643,24 @@ class InspectionBridgeNode(Node):
         cfg = dict(self._profile.get("color_block") or {})
         observation = self._segment_color(image, color, color_range, roi_config=cfg, roi_prefix="held_verify")
         roi_bounds = self._roi_bounds_px(image.shape[:2], cfg, "held_verify")
+        depth_error_reason = ""
+        depth_estimate: dict[str, Any] | None = None
+        depth_latest = self._fresh_latest_depth()
+        if depth_latest is None:
+            depth_error_reason = "No fresh depth frame received for held-block verification."
+        else:
+            depth_converted = self._depth_to_array(depth_latest["msg"])
+            if not depth_converted["success"]:
+                depth_error_reason = str(depth_converted["reason"])
+            elif observation:
+                depth_estimate = self._estimate_depth(
+                    depth_converted["depth"],
+                    observation["center_x"],
+                    observation["center_y"],
+                    observation["radius"],
+                )
+                if depth_estimate is None:
+                    depth_error_reason = "Depth ROI contains no valid samples for held-block verification."
         created_unix = time.time()
         verification_id = self._verification_id(color, request_id, observation, created_unix)
         candidate = self._observation_payload(observation) if observation else {}
@@ -650,6 +668,14 @@ class InspectionBridgeNode(Node):
         radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
         min_radius_ratio = float(cfg.get("held_verify_min_radius_ratio_vs_pre_pick", 1.15))
         size_confirms_lift = bool(candidate) and radius_ratio >= min_radius_ratio
+        min_depth_delta = float(cfg.get("held_verify_min_depth_delta_m", 0.09))
+        try:
+            pre_pick_depth_m = float(detection.get("depth_m") or 0.0)
+        except (TypeError, ValueError):
+            pre_pick_depth_m = 0.0
+        candidate_depth_m = float(depth_estimate["depth_m"]) if depth_estimate else 0.0
+        depth_delta_m = pre_pick_depth_m - candidate_depth_m if pre_pick_depth_m > 0.0 and candidate_depth_m > 0.0 else 0.0
+        depth_confirms_lift = bool(candidate) and depth_delta_m >= min_depth_delta
         min_center_y_ratio = float(cfg.get("held_verify_min_center_y_ratio", 0.82))
         min_bottom_y_ratio = float(cfg.get("held_verify_min_bottom_y_ratio", 0.90))
         position_confirms_gripper_roi = self._candidate_confirms_gripper_roi(
@@ -665,6 +691,7 @@ class InspectionBridgeNode(Node):
             and confidence >= min_confidence
             and not overlaps_pre_pick
             and size_confirms_lift
+            and depth_confirms_lift
             and position_confirms_gripper_roi
         )
         failure_reason = ""
@@ -679,6 +706,14 @@ class InspectionBridgeNode(Node):
                 f"held verification radius ratio {radius_ratio:.3f} below {min_radius_ratio:.3f}; "
                 "candidate does not prove the block moved closer to the gripper camera."
             )
+        elif not depth_confirms_lift:
+            if depth_error_reason:
+                failure_reason = depth_error_reason
+            else:
+                failure_reason = (
+                    f"held verification depth delta {depth_delta_m:.3f}m below {min_depth_delta:.3f}m; "
+                    "candidate may still be on the tabletop."
+                )
         elif not position_confirms_gripper_roi:
             failure_reason = (
                 "verification candidate is not in the gripper-mouth part of the held ROI; "
@@ -709,6 +744,15 @@ class InspectionBridgeNode(Node):
             "radius_ratio_vs_pre_pick": round(float(radius_ratio), 4),
             "min_radius_ratio_vs_pre_pick": round(float(min_radius_ratio), 4),
             "size_confirms_lift": bool(size_confirms_lift),
+            "pre_pick_depth_m": round(float(pre_pick_depth_m), 5),
+            "candidate_depth_m": round(float(candidate_depth_m), 5),
+            "depth_delta_m": round(float(depth_delta_m), 5),
+            "min_depth_delta_m": round(float(min_depth_delta), 5),
+            "depth_confirms_lift": bool(depth_confirms_lift),
+            "depth_error_reason": depth_error_reason,
+            "depth_topic": str(depth_latest["topic"]) if depth_latest else "",
+            "depth_roi_bounds": list(depth_estimate.get("roi_bounds") or []) if depth_estimate else [],
+            "depth_valid_count": int(depth_estimate.get("valid_count") or 0) if depth_estimate else 0,
             "position_confirms_gripper_roi": bool(position_confirms_gripper_roi),
             "min_center_y_ratio": round(float(min_center_y_ratio), 4),
             "min_bottom_y_ratio": round(float(min_bottom_y_ratio), 4),
@@ -736,6 +780,11 @@ class InspectionBridgeNode(Node):
             "radius_ratio_vs_pre_pick": metadata["radius_ratio_vs_pre_pick"],
             "min_radius_ratio_vs_pre_pick": metadata["min_radius_ratio_vs_pre_pick"],
             "size_confirms_lift": bool(size_confirms_lift),
+            "pre_pick_depth_m": metadata["pre_pick_depth_m"],
+            "candidate_depth_m": metadata["candidate_depth_m"],
+            "depth_delta_m": metadata["depth_delta_m"],
+            "min_depth_delta_m": metadata["min_depth_delta_m"],
+            "depth_confirms_lift": bool(depth_confirms_lift),
             "position_confirms_gripper_roi": bool(position_confirms_gripper_roi),
             "min_center_y_ratio": metadata["min_center_y_ratio"],
             "min_bottom_y_ratio": metadata["min_bottom_y_ratio"],

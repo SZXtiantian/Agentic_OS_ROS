@@ -554,7 +554,13 @@ async def _post_pick_verify(
     pick: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    gripper_state = await _call_skill(ctx, steps, "post_pick_gripper_state", "arm.get_state", {})
+    gripper_state = await _call_skill(
+        ctx,
+        steps,
+        "post_pick_gripper_state",
+        "arm.get_state",
+        {"timeout_s": 15, "_kernel_timeout_s": 25},
+    )
     if not gripper_state["success"]:
         return _dependency_failure(
             "COLOR_BLOCK_PICK_VERIFICATION_UNAVAILABLE",
@@ -572,7 +578,8 @@ async def _post_pick_verify(
         {
             "target": task["target"],
             "label": f"{task['evidence_label']}_post_pick",
-            "timeout_s": 15,
+            "timeout_s": 30,
+            "_kernel_timeout_s": 45,
         },
     )
     if not post_pick_evidence["success"]:
@@ -610,7 +617,8 @@ async def _post_pick_verify(
                 {
                     "target": task["target"],
                     "label": f"{task['evidence_label']}_post_pick_stability",
-                    "timeout_s": 15,
+                    "timeout_s": 30,
+                    "_kernel_timeout_s": 45,
                 },
             )
             if not stability_evidence["success"]:
