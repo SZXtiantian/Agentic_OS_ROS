@@ -9,6 +9,7 @@
   <a href="ros2_bridge_src/"><img src="https://img.shields.io/badge/ROS2-Humble-3b6ea8" alt="ROS2 Humble"></a>
   <a href="agentic_apps/"><img src="https://img.shields.io/badge/Agent%20Apps-no%20rclpy-bc5b45" alt="Agent Apps do not import rclpy"></a>
   <a href="agentic_runtime_src/docs/access_audit.md"><img src="https://img.shields.io/badge/safety-audit%20logged-7c5c9e" alt="Safety and audit"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-4f6f9f" alt="Apache 2.0 license"></a>
 </p>
 
 <p align="center">
@@ -199,3 +200,9 @@ scripts/verify_real_human.sh
 - 不提交 `/opt/agentic/var`、真实照片、视频、审计日志、任务日志、运行输出或密钥。
 - 不把 API key 写入源码、README、日志或测试快照。
 - 不把 Gazebo / RViz-only / fake Nav2 路径写成真实机器人验收。
+
+---
+
+## 开源协议
+
+本项目使用 Apache License, Version 2.0 开源。详见 [LICENSE](LICENSE)。

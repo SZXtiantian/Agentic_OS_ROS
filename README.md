@@ -9,6 +9,7 @@
   <a href="ros2_bridge_src/"><img src="https://img.shields.io/badge/ROS2-Humble-3b6ea8" alt="ROS2 Humble"></a>
   <a href="agentic_apps/"><img src="https://img.shields.io/badge/Agent%20Apps-no%20rclpy-bc5b45" alt="Agent Apps do not import rclpy"></a>
   <a href="agentic_runtime_src/docs/access_audit.md"><img src="https://img.shields.io/badge/safety-audit%20logged-7c5c9e" alt="Safety and audit"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-4f6f9f" alt="Apache 2.0 license"></a>
 </p>
 
 <p align="center">
@@ -202,3 +203,9 @@ When real dependencies are not configured, these scripts should report `UNVERIFI
 - Do not commit `/opt/agentic/var`, real photos, videos, audit logs, task logs, run outputs, or secrets.
 - Do not write API keys into source, README files, logs, or test snapshots.
 - Do not present Gazebo, RViz-only, or fake Nav2 paths as real robot acceptance.
+
+---
+
+## License
+
+This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
