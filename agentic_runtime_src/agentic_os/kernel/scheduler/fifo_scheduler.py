@@ -15,5 +15,14 @@ class FIFOKernelScheduler(BaseKernelScheduler):
         log_mode: str = "console",
         poll_timeout_s: float = 0.05,
         event_sink: KernelEventSink | None = None,
+        agent_lifecycle=None,
     ) -> None:
-        super().__init__(queue_store, managers, lanes=lanes, log_mode=log_mode, poll_timeout_s=poll_timeout_s, event_sink=event_sink)
+        super().__init__(
+            queue_store,
+            managers,
+            lanes=lanes,
+            log_mode=log_mode,
+            poll_timeout_s=poll_timeout_s,
+            event_sink=event_sink,
+            agent_lifecycle=agent_lifecycle,
+        )

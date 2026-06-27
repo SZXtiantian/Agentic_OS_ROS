@@ -20,6 +20,7 @@ class RuntimeRobotCapabilityBackend:
         app_id = str(getattr(query, "app_id", "") or syscall.agent_name)
         session_id = str(getattr(query, "session_id", "") or getattr(query, "metadata", {}).get("session_id", "") or params.pop("session_id", "") or "kernel")
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
+        agent_id = str(getattr(syscall, "agent_id", "") or getattr(syscall, "aid", "") or getattr(query, "metadata", {}).get("agent_id", "") or "")
         app = AppManifest(
             name=app_id,
             version="kernel",
@@ -28,7 +29,12 @@ class RuntimeRobotCapabilityBackend:
             permissions=list(permissions),
             required_capabilities=[],
         )
-        result = self._run(self.runtime_server.executor.execute(app, skill_name, params, session_id))
+        try:
+            result = self._run(self.runtime_server.executor.execute(app, skill_name, params, session_id, agent_id=agent_id))
+        except TypeError as exc:
+            if agent_id or "agent_id" not in str(exc):
+                raise
+            result = self._run(self.runtime_server.executor.execute(app, skill_name, params, session_id))
         payload = result.to_dict()
         return {
             "success": result.success,

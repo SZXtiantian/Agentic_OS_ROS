@@ -22,6 +22,12 @@ class SkillManager:
         session_id = str(getattr(query, "session_id", "") or params.pop("session_id", "") or "kernel")
         call_id = str(getattr(query, "call_id", "") or params.get("call_id") or "")
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()) or ())
+        agent_id = str(
+            getattr(syscall, "agent_id", "")
+            or getattr(syscall, "aid", "")
+            or getattr(query, "metadata", {}).get("agent_id", "")
+            or ""
+        )
         try:
             if operation in {"skill_call", "call_skill", "execute_skill"} or "." in operation:
                 response = self.call(
@@ -31,6 +37,7 @@ class SkillManager:
                     session_id=session_id,
                     permissions=permissions,
                     call_id=call_id,
+                    agent_id=agent_id,
                 )
             elif operation == "skill_list":
                 response = self.list()
@@ -58,11 +65,20 @@ class SkillManager:
         session_id: str,
         permissions: tuple[str, ...] = (),
         call_id: str = "",
+        agent_id: str = "",
     ) -> dict[str, Any]:
         if self.backend is None:
             return self._unavailable(skill_name, "runtime skill backend not configured")
         return self._normalize_response(
-            self.backend.call(skill_name, args, app_id=app_id, session_id=session_id, permissions=permissions, call_id=call_id),
+            self.backend.call(
+                skill_name,
+                args,
+                app_id=app_id,
+                session_id=session_id,
+                permissions=permissions,
+                call_id=call_id,
+                agent_id=agent_id,
+            ),
             "skill_call",
             skill_name,
         )

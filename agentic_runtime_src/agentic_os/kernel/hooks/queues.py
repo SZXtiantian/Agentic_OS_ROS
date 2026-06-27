@@ -158,6 +158,90 @@ class KernelQueueStore:
                         return item.syscall
             return None
 
+    def hold_by_agent(self, agent_id: str, reason: str = "") -> list[KernelSyscall]:
+        held: list[KernelSyscall] = []
+        with self._condition:
+            for queue_name, queue in self._queues.items():
+                for item in list(queue):
+                    if getattr(item.syscall, "agent_id", None) == agent_id:
+                        queue.remove(item)
+                        item.syscall.mark_suspending()
+                        item.syscall.mark_suspended()
+                        held.append(item.syscall)
+                        self._emit(
+                            "agent.syscall_held",
+                            queue_name=queue_name,
+                            syscall_id=item.syscall.syscall_id,
+                            agent_name=item.syscall.agent_name,
+                            agent_id=agent_id,
+                            reason=reason,
+                        )
+            if held:
+                self._condition.notify_all()
+        return held
+
+    def requeue_many(self, syscalls: list[KernelSyscall], reason: str = "") -> list[str]:
+        requeued: list[str] = []
+        for syscall in syscalls:
+            syscall.mark_resuming()
+            queue_name = str(getattr(syscall, "queue_name", "") or syscall.target)
+            if self.add(queue_name, syscall):
+                requeued.append(syscall.syscall_id)
+                self._emit(
+                    "agent.syscall_resumed",
+                    queue_name=queue_name,
+                    syscall_id=syscall.syscall_id,
+                    agent_name=syscall.agent_name,
+                    agent_id=getattr(syscall, "agent_id", ""),
+                    reason=reason,
+                )
+        return requeued
+
+    def cancel_by_agent(self, agent_id: str, reason: str = "") -> list[KernelSyscall]:
+        cancelled: list[KernelSyscall] = []
+        with self._condition:
+            for queue_name, queue in self._queues.items():
+                for item in list(queue):
+                    if getattr(item.syscall, "agent_id", None) == agent_id:
+                        queue.remove(item)
+                        item.syscall.cancel(reason)
+                        item.syscall.event.set()
+                        cancelled.append(item.syscall)
+                        self._emit(
+                            "syscall.cancelled",
+                            queue_name=queue_name,
+                            syscall_id=item.syscall.syscall_id,
+                            agent_name=item.syscall.agent_name,
+                            agent_id=agent_id,
+                            reason=reason,
+                        )
+            if cancelled:
+                self._condition.notify_all()
+        return cancelled
+
+    def cancel_many(self, syscall_ids: list[str], reason: str = "") -> list[KernelSyscall]:
+        requested = list(dict.fromkeys(syscall_ids))
+        cancelled_by_id: dict[str, KernelSyscall] = {}
+        with self._condition:
+            for queue_name, queue in self._queues.items():
+                for item in list(queue):
+                    if item.syscall.syscall_id in requested:
+                        queue.remove(item)
+                        item.syscall.cancel(reason)
+                        item.syscall.event.set()
+                        cancelled_by_id[item.syscall.syscall_id] = item.syscall
+                        self._emit(
+                            "syscall.cancelled",
+                            queue_name=queue_name,
+                            syscall_id=item.syscall.syscall_id,
+                            agent_name=item.syscall.agent_name,
+                            agent_id=getattr(item.syscall, "agent_id", ""),
+                            reason=reason,
+                        )
+            if cancelled_by_id:
+                self._condition.notify_all()
+        return [cancelled_by_id[syscall_id] for syscall_id in requested if syscall_id in cancelled_by_id]
+
     def mark_backpressure(self, queue_name: str) -> None:
         with self._condition:
             self._queue_unlocked(queue_name)

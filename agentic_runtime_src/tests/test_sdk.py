@@ -19,7 +19,10 @@ def test_sdk_room_flow_reports_ros_bridge_unavailable():
     async def run():
         server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
-        result = await manager.run_app("inspection_agent", place="厨房")
+        session_id = "sess_sdk_room"
+        agent = server.kernel_service.create_agent(app_id="inspection_agent", session_id=session_id, agent_id="agent_sdk_room")
+        server.kernel_service.start_agent(agent.agent_id)
+        result = await manager.run_app("inspection_agent", place="厨房", session_id=session_id, agent_id=agent.agent_id)
         assert result["result"]["success"] is False
         assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
         assert server.test_bridge_calls[0]["command"][3] == "/agentic/world/resolve_place"
@@ -56,7 +59,9 @@ def test_sdk_capture_photo_reports_ros_bridge_unavailable(tmp_path, monkeypatch)
             permissions=["perception.capture"],
             required_capabilities=["perception.capture_photo"],
         )
-        ctx = AgentContext(server.executor, app, "sess_photo")
+        agent = server.kernel_service.create_agent(app_id=app.name, session_id="sess_photo", agent_id="agent_photo")
+        server.kernel_service.start_agent(agent.agent_id)
+        ctx = AgentContext(server.executor, app, "sess_photo", agent_id=agent.agent_id)
         with pytest.raises(AgenticRuntimeError) as exc:
             await ctx.perception.capture_photo(target="workspace", label="sdk", timeout_s=5)
         assert exc.value.code == "ROS_BRIDGE_UNAVAILABLE"
@@ -286,7 +291,9 @@ def test_kernel_sdk_result_includes_syscall_and_audit_id(tmp_path):
 
     async def run():
         app = AppManifest("sdk_result_app", "0", "", "main:run", [], [])
-        ctx = AgentContext(FakeExecutor(), app, "sess_result")
+        agent = service.create_agent(app_id=app.name, session_id="sess_result", agent_id="agent_sdk_result")
+        service.start_agent(agent.agent_id)
+        ctx = AgentContext(FakeExecutor(), app, "sess_result", agent_id=agent.agent_id)
         result = await ctx.kernel.storage.write("reports/result.md", "hello", timeout_s=1)
         assert result.success is True
         assert result.syscall_id.startswith("ksc_")
@@ -332,7 +339,9 @@ def test_kernel_tool_sdk_rejects_robot_capability(tmp_path):
 
     async def run():
         app = AppManifest("sdk_tool_app", "0", "", "main:run", [], [])
-        ctx = AgentContext(FakeExecutor(), app, "sess_tool")
+        agent = service.create_agent(app_id=app.name, session_id="sess_tool", agent_id="agent_sdk_tool")
+        service.start_agent(agent.agent_id)
+        ctx = AgentContext(FakeExecutor(), app, "sess_tool", agent_id=agent.agent_id)
         result = await ctx.kernel.tool.call("robot.navigate_to", {"place": "kitchen"}, timeout_s=1)
         assert result.success is False
         assert result.error_code == "TOOL_FORBIDDEN_ROBOT_CAPABILITY"

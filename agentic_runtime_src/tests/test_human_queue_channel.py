@@ -112,6 +112,8 @@ def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
         required_capabilities=["human.ask"],
     )
     server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
+    agent = server.kernel_service.create_agent(app_id=app.name, session_id="sess_runtime_human", agent_id="agent_runtime_human")
+    server.kernel_service.start_agent(agent.agent_id)
 
     async def run():
         task = asyncio.create_task(
@@ -120,6 +122,7 @@ def test_runtime_human_skill_uses_real_queue_channel(tmp_path, monkeypatch):
                 "human.ask",
                 {"question": "Approve?", "timeout_s": 1, "correlation_id": "runtime_human_answer"},
                 "sess_runtime_human",
+                agent_id=agent.agent_id,
             )
         )
         await _wait_for_request(server.human_channel.paths.requests, "runtime_human_answer")
@@ -149,6 +152,8 @@ def test_runtime_human_skill_uses_call_id_as_queue_correlation(tmp_path, monkeyp
         required_capabilities=["human.ask"],
     )
     server.kernel_service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
+    agent = server.kernel_service.create_agent(app_id=app.name, session_id="sess_runtime_human", agent_id="agent_runtime_human_call")
+    server.kernel_service.start_agent(agent.agent_id)
 
     async def run():
         task = asyncio.create_task(
@@ -158,6 +163,7 @@ def test_runtime_human_skill_uses_call_id_as_queue_correlation(tmp_path, monkeyp
                 {"question": "Approve?", "timeout_s": 1},
                 "sess_runtime_human",
                 call_id="human_call_1",
+                agent_id=agent.agent_id,
             )
         )
         await _wait_for_request(server.human_channel.paths.requests, "human_call_1")

@@ -111,7 +111,7 @@ def test_kernel_service_configured_llm_requires_explicit_permission(tmp_path):
     service = KernelService(config=config)
     service.start()
     try:
-        result = service.execute_request("agent_a", LLMQuery(operation_type="chat"), timeout_s=1.0)
+        result = service.execute_request("agent_a", LLMQuery(operation_type="chat", metadata={"kernel_internal": True}), timeout_s=1.0)
     finally:
         service.stop()
         server.shutdown()
@@ -129,7 +129,7 @@ def test_kernel_service_executes_llm_query_after_intervention_approval(tmp_path)
     try:
         result = service.execute_request(
             "agent_a",
-            LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"]}),
+            LLMQuery(operation_type="chat", metadata={"permissions": ["llm.external.call"], "kernel_internal": True}),
             timeout_s=1.0,
         )
     finally:
@@ -234,7 +234,7 @@ def test_kernel_service_execute_request_lazily_starts_scheduler(tmp_path):
     service = KernelService(config=make_config(tmp_path))
 
     try:
-        result = service.execute_request("agent_a", LLMQuery(operation_type="chat"), timeout_s=1.0)
+        result = service.execute_request("agent_a", LLMQuery(operation_type="chat", metadata={"kernel_internal": True}), timeout_s=1.0)
         status = service.status()
     finally:
         service.stop()
@@ -272,7 +272,11 @@ def test_kernel_service_executes_memory_query(tmp_path):
     try:
         result = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="remember", params={"memory_id": "x", "content": "hello"}),
+            MemoryQuery(
+                operation_type="remember",
+                params={"memory_id": "x", "content": "hello"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
     finally:
@@ -287,7 +291,11 @@ def test_robot_skill_not_routed_to_generic_tool(tmp_path):
     try:
         result = service.execute_request(
             "agent_a",
-            ToolQuery(operation_type="call_tool", params={"name": "robot.navigate_to", "args": {"place": "kitchen"}}),
+            ToolQuery(
+                operation_type="call_tool",
+                params={"name": "robot.navigate_to", "args": {"place": "kitchen"}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
     finally:
@@ -311,7 +319,9 @@ def test_sdk_kernel_llm_chat_uses_kernel_service(tmp_path):
     async def run():
         service.start()
         try:
-            ctx = AgentContext(FakeExecutor(), make_app(), "sess_1")
+            agent = service.create_agent(app_id=make_app().name, session_id="sess_1", agent_id="agent_sdk_llm")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(FakeExecutor(), make_app(), "sess_1", agent_id=agent.agent_id)
             result = await ctx.kernel.llm.chat(messages=[{"role": "user", "content": "hi"}], timeout_s=1.0)
             assert result.success is True
             assert result.metadata["queue_name"] == "llm"

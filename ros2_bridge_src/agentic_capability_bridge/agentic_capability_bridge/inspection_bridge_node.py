@@ -538,12 +538,16 @@ class InspectionBridgeNode(Node):
             if centered:
                 success = True
                 break
-            base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
-            pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
-            if base_delta == 0 and abs(dx) > tolerance:
-                base_delta = 1 if dx > 0 else -1
-            if pitch_delta == 0 and abs(dy) > tolerance:
-                pitch_delta = -1 if dy > 0 else 1
+            base_delta = 0
+            pitch_delta = 0
+            if abs(dx) > tolerance:
+                base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
+                if base_delta == 0:
+                    base_delta = 1 if dx > 0 else -1
+            if abs(dy) > tolerance:
+                pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
+                if pitch_delta == 0:
+                    pitch_delta = -1 if dy > 0 else 1
             base_pulse = int(np.clip(base_pulse + base_delta, base_limits[0], base_limits[1]))
             pitch_pulse = int(np.clip(pitch_pulse + pitch_delta, pitch_limits[0], pitch_limits[1]))
             self._publish_alignment_servos(float(cfg.get("center_servo_duration_s", 0.08)), [(1, base_pulse), (4, pitch_pulse)])

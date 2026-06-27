@@ -42,6 +42,12 @@ def _runtime_with_missing_ros2(tmp_path, monkeypatch):
     return server, calls
 
 
+def _start_agent(service, app_id: str, session_id: str, agent_id: str):
+    agent = service.create_agent(app_id=app_id, session_id=session_id, agent_id=agent_id)
+    service.start_agent(agent.agent_id)
+    return agent
+
+
 def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
     service = KernelService(config=SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools"))
 
@@ -49,7 +55,11 @@ def test_generic_tool_cannot_bypass_robot_capability(tmp_path):
     try:
         result = service.execute_request(
             "robot_safety_app",
-            ToolQuery(operation_type="call_tool", params={"name": "robot.navigate_to", "args": {"place": "kitchen"}}),
+            ToolQuery(
+                operation_type="call_tool",
+                params={"name": "robot.navigate_to", "args": {"place": "kitchen"}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
     finally:
@@ -74,6 +84,7 @@ def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge
 
     spy_access = SpyAccessManager(server.kernel_service.access_manager)
     server.executor.access_manager = spy_access
+    agent = _start_agent(server.kernel_service, "robot_safety_app", "sess_safe_chain", "agent_safe_chain")
 
     async def run():
         result = await server.executor.execute(
@@ -81,6 +92,7 @@ def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge
             "robot.navigate_to",
             {"place": "厨房", "timeout_s": 2},
             "sess_safe_chain",
+            agent_id=agent.agent_id,
         )
         assert result.success is False
         assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
@@ -105,6 +117,7 @@ def test_robot_skill_path_uses_access_safety_audit_and_fails_fast_without_bridge
 
 def test_robot_skill_motion_requires_intervention_before_bridge_call(tmp_path, monkeypatch):
     server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
+    agent = _start_agent(server.kernel_service, "robot_safety_app", "sess_robot_intervention", "agent_robot_intervention")
 
     async def run():
         result = await server.executor.execute(
@@ -112,6 +125,7 @@ def test_robot_skill_motion_requires_intervention_before_bridge_call(tmp_path, m
             "robot.navigate_to",
             {"place": "厨房", "timeout_s": 2},
             "sess_robot_intervention",
+            agent_id=agent.agent_id,
         )
         assert result.success is False
         assert result.error_code == "ACCESS_INTERVENTION_REQUIRED"
@@ -162,18 +176,34 @@ def test_kernel_robot_motion_lane_is_serial(tmp_path):
         config=SimpleNamespace(storage_root=tmp_path / "storage", tool_root=tmp_path / "tools"),
         managers={"robot_motion": manager},
     )
+    agent_a = _start_agent(service, "agent_a", "sess_a", "agent_a")
+    agent_b = _start_agent(service, "agent_b", "sess_b", "agent_b")
 
     service.start()
     try:
         threads = [
             threading.Thread(
                 target=service.execute_request,
-                args=("agent_a", RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.navigate_to")),
+                args=(
+                    "agent_a",
+                    RobotCapabilityQuery(
+                        operation_type="execute_skill",
+                        skill_name="robot.navigate_to",
+                        metadata={"agent_id": agent_a.agent_id},
+                    ),
+                ),
                 kwargs={"timeout_s": 1.0},
             ),
             threading.Thread(
                 target=service.execute_request,
-                args=("agent_b", RobotCapabilityQuery(operation_type="execute_skill", skill_name="arm.move_named")),
+                args=(
+                    "agent_b",
+                    RobotCapabilityQuery(
+                        operation_type="execute_skill",
+                        skill_name="arm.move_named",
+                        metadata={"agent_id": agent_b.agent_id},
+                    ),
+                ),
                 kwargs={"timeout_s": 1.0},
             ),
         ]
@@ -193,6 +223,7 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
 
     service = server.kernel_service
     service.access_manager.intervention_provider = AlwaysAllowTestInterventionProvider()
+    agent = _start_agent(service, "robot_kernel_app", "sess_kernel_robot", "agent_kernel_robot")
     service.start()
     try:
         result = service.execute_request(
@@ -200,11 +231,11 @@ def test_kernel_service_robot_manager_uses_runtime_safe_backend(tmp_path, monkey
             RobotCapabilityQuery(
                 operation_type="execute_skill",
                 skill_name="robot.navigate_to",
-                params={"place": "厨房", "timeout_s": 2},
-                app_id="robot_kernel_app",
-                session_id="sess_kernel_robot",
-                metadata={"permissions": ["robot.move"]},
-            ),
+                    params={"place": "厨房", "timeout_s": 2},
+                    app_id="robot_kernel_app",
+                    session_id="sess_kernel_robot",
+                    metadata={"permissions": ["robot.move"], "agent_id": agent.agent_id},
+                ),
             timeout_s=3.0,
         )
         status = service.status()
@@ -233,6 +264,7 @@ def test_kernel_service_robot_motion_requires_intervention_before_bridge(tmp_pat
     server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     service = server.kernel_service
+    agent = _start_agent(service, "robot_kernel_app", "sess_kernel_robot_intervention", "agent_kernel_robot_intervention")
     service.start()
     try:
         result = service.execute_request(
@@ -240,11 +272,11 @@ def test_kernel_service_robot_motion_requires_intervention_before_bridge(tmp_pat
             RobotCapabilityQuery(
                 operation_type="execute_skill",
                 skill_name="robot.navigate_to",
-                params={"place": "厨房", "timeout_s": 2},
-                app_id="robot_kernel_app",
-                session_id="sess_kernel_robot_intervention",
-                metadata={"permissions": ["robot.move"]},
-            ),
+                    params={"place": "厨房", "timeout_s": 2},
+                    app_id="robot_kernel_app",
+                    session_id="sess_kernel_robot_intervention",
+                    metadata={"permissions": ["robot.move"], "agent_id": agent.agent_id},
+                ),
             timeout_s=3.0,
         )
         status = service.status()
@@ -264,6 +296,7 @@ def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monk
     server, bridge_calls = _runtime_with_missing_ros2(tmp_path, monkeypatch)
 
     service = server.kernel_service
+    agent = _start_agent(service, "robot_kernel_app", "sess_kernel_robot_denied", "agent_kernel_robot_denied")
     service.start()
     try:
         result = service.execute_request(
@@ -274,6 +307,7 @@ def test_kernel_robot_backend_does_not_inject_default_permissions(tmp_path, monk
                 params={"place": "厨房", "timeout_s": 2},
                 app_id="robot_kernel_app",
                 session_id="sess_kernel_robot_denied",
+                metadata={"agent_id": agent.agent_id},
             ),
             timeout_s=3.0,
         )

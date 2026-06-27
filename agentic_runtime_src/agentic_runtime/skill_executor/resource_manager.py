@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from agentic_os.kernel.device_arbitration import DeviceArbiter
 
 from agentic_runtime.errors import ResourceLockedError
+from agentic_runtime.types import new_id
 
 
 @dataclass(frozen=True)
@@ -12,6 +13,8 @@ class ResourceLease:
     resource: str
     session_id: str
     skill_call_id: str
+    agent_id: str = ""
+    lease_id: str = ""
 
 
 class ResourceManager:
@@ -19,7 +22,7 @@ class ResourceManager:
         self.kernel = DeviceArbiter()
         self._leases: dict[str, ResourceLease] = {}
 
-    def acquire(self, resource: str, session_id: str, skill_call_id: str) -> ResourceLease:
+    def acquire(self, resource: str, session_id: str, skill_call_id: str, agent_id: str = "") -> ResourceLease:
         existing = self._leases.get(resource)
         if existing and existing.session_id != session_id:
             raise ResourceLockedError(f"{resource} locked by {existing.session_id}")
@@ -31,7 +34,7 @@ class ResourceManager:
         result = self.kernel.acquire(resource, owner, reason="skill_execution")
         if not result.get("success"):
             raise ResourceLockedError(f"{resource} locked by {result.get('owner', 'unknown')}")
-        lease = ResourceLease(resource, session_id, skill_call_id)
+        lease = ResourceLease(resource, session_id, skill_call_id, agent_id=agent_id, lease_id=new_id("lease"))
         self._leases[resource] = lease
         return lease
 
@@ -47,8 +50,26 @@ class ResourceManager:
                 self.kernel.release(resource, f"{lease.session_id}:{lease.skill_call_id}")
                 self._leases.pop(resource, None)
 
+    def release_by_agent(self, agent_id: str) -> None:
+        for resource, lease in list(self._leases.items()):
+            if lease.agent_id == agent_id:
+                self.kernel.release(resource, f"{lease.session_id}:{lease.skill_call_id}")
+                self._leases.pop(resource, None)
+
     def snapshot(self) -> dict[str, str]:
         return {
             resource: f"{lease.session_id}:{lease.skill_call_id}"
+            for resource, lease in sorted(self._leases.items())
+        }
+
+    def detailed_snapshot(self) -> dict[str, dict[str, str]]:
+        return {
+            resource: {
+                "resource": lease.resource,
+                "session_id": lease.session_id,
+                "skill_call_id": lease.skill_call_id,
+                "agent_id": lease.agent_id,
+                "lease_id": lease.lease_id,
+            }
             for resource, lease in sorted(self._leases.items())
         }

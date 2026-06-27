@@ -70,5 +70,11 @@ class DispatcherExecutor:
             permissions=["robot.stop"],
             required_capabilities=["robot.stop"],
         )
-        result = await self.runtime.executor.execute(app, "robot.stop", {"reason": reason}, session_id=session_id)
+        result = await self.runtime.executor.execute(
+            app,
+            "robot.stop",
+            {"reason": reason},
+            session_id=session_id,
+            kernel_internal=True,
+        )
         return {"success": result.success, "type": "stop", "result": result.to_dict(), "audit_id": result.audit_id}

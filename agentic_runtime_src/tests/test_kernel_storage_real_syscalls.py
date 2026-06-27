@@ -100,22 +100,30 @@ def test_storage_syscall_roundtrip_and_status(tmp_path):
     try:
         mounted = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_mount", params={"collection_name": "reports"}),
+            StorageQuery(operation_type="sto_mount", params={"collection_name": "reports"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         written = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_write", params={"path": "reports/a.md", "content": "blue cube report"}),
+            StorageQuery(
+                operation_type="sto_write",
+                params={"path": "reports/a.md", "content": "blue cube report"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         stat = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_stat", params={"path": "reports/a.md"}),
+            StorageQuery(operation_type="sto_stat", params={"path": "reports/a.md"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         retrieved = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_retrieve", params={"query": "blue", "collection_name": "reports"}),
+            StorageQuery(
+                operation_type="sto_retrieve",
+                params={"query": "blue", "collection_name": "reports"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
     finally:
@@ -135,17 +143,25 @@ def test_storage_delete_and_share_require_intervention_in_kernel_service(tmp_pat
     try:
         service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_write", params={"path": "reports/a.md", "content": "content"}),
+            StorageQuery(
+                operation_type="sto_write",
+                params={"path": "reports/a.md", "content": "content"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         delete = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_delete", params={"path": "reports/a.md"}),
+            StorageQuery(operation_type="sto_delete", params={"path": "reports/a.md"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         share = service.execute_request(
             "agent_a",
-            StorageQuery(operation_type="sto_share", params={"path": "reports/a.md", "metadata": {"scope": "operator"}}),
+            StorageQuery(
+                operation_type="sto_share",
+                params={"path": "reports/a.md", "metadata": {"scope": "operator"}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -175,7 +191,9 @@ def test_storage_sdk_facade_uses_kernel_service(tmp_path):
     async def run():
         service.start()
         try:
-            ctx = AgentContext(Executor(), make_app(), "sess_storage")
+            agent = service.create_agent(app_id=make_app().name, session_id="sess_storage", agent_id="agent_storage_sdk")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(Executor(), make_app(), "sess_storage", agent_id=agent.agent_id)
             await ctx.kernel.storage.mount("reports", timeout_s=1.0)
             written = await ctx.kernel.storage.write("reports/sdk.md", "sdk report", timeout_s=1.0)
             stat = await ctx.kernel.storage.stat("reports/sdk.md", timeout_s=1.0)

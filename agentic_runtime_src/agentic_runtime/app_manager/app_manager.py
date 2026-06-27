@@ -34,9 +34,37 @@ class AppManager:
         spec.loader.exec_module(module)
         run = getattr(module, function_name)
         session_id = kwargs.pop("session_id", new_id("sess"))
-        ctx = AgentContext(executor=self.executor, app_manifest=manifest, session_id=session_id)
-        result, _ = validate_app_result_payload(
-            await run(ctx, **kwargs),
-            source=f"{app_id}:{manifest.entrypoint}",
-        )
-        return {"session_id": session_id, "app_id": app_id, "result": result}
+        agent_id = str(kwargs.pop("agent_id", ""))
+        owns_agent_lifecycle = False
+        kernel_service = getattr(self.executor, "kernel_service", None)
+        if not agent_id and kernel_service is not None and hasattr(kernel_service, "agent_lifecycle"):
+            agent = kernel_service.agent_lifecycle.create_agent_for_session(
+                app_id=app_id,
+                session_id=session_id,
+                agent_name=app_id,
+                metadata={"created_by": "app_manager"},
+            )
+            agent_id = agent.agent_id
+            kernel_service.agent_lifecycle.start_agent(agent_id, reason="app_manager_started")
+            owns_agent_lifecycle = True
+        ctx = AgentContext(executor=self.executor, app_manifest=manifest, session_id=session_id, agent_id=agent_id)
+        try:
+            result, _ = validate_app_result_payload(
+                await run(ctx, **kwargs),
+                source=f"{app_id}:{manifest.entrypoint}",
+            )
+            if owns_agent_lifecycle:
+                if result.get("success"):
+                    kernel_service.agent_lifecycle.exit_agent(agent_id, reason="app_completed", exit_code=0)
+                else:
+                    kernel_service.agent_lifecycle.fail_agent(
+                        agent_id,
+                        reason=str(result.get("reason") or "app_failed"),
+                        error_code=str(result.get("error_code") or "APP_RESULT_INVALID"),
+                        exit_code=1,
+                    )
+            return {"session_id": session_id, "agent_id": agent_id, "app_id": app_id, "result": result}
+        except Exception as exc:
+            if owns_agent_lifecycle:
+                kernel_service.agent_lifecycle.crash_agent(agent_id, reason=str(exc), error_code="APP_EXCEPTION")
+            raise

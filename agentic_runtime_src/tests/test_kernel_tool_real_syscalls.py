@@ -70,7 +70,11 @@ def test_kernel_tool_builtin_call_requires_permission_and_succeeds_with_permissi
     try:
         denied = service.execute_request(
             "agent_a",
-            ToolQuery(operation_type="tool_call", params={"name": "calculator.add", "args": {"a": 1, "b": 2}}),
+            ToolQuery(
+                operation_type="tool_call",
+                params={"name": "calculator.add", "args": {"a": 1, "b": 2}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         allowed = service.execute_request(
@@ -82,6 +86,7 @@ def test_kernel_tool_builtin_call_requires_permission_and_succeeds_with_permissi
                     "args": {"a": 1, "b": 2},
                     "permissions": ["tool.execute.calculator.add"],
                 },
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -204,17 +209,17 @@ def test_tool_load_unload_register_builtin_without_permission_are_denied(tmp_pat
     try:
         loaded = service.execute_request(
             "agent_a",
-            ToolQuery(operation_type="tool_load_manifest", params={"path": str(manifest)}),
+            ToolQuery(operation_type="tool_load_manifest", params={"path": str(manifest)}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         unloaded = service.execute_request(
             "agent_a",
-            ToolQuery(operation_type="tool_unload", params={"name": "calculator.add"}),
+            ToolQuery(operation_type="tool_unload", params={"name": "calculator.add"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         registered = service.execute_request(
             "agent_a",
-            ToolQuery(operation_type="tool_register_builtin", params={"name": "calculator.add"}),
+            ToolQuery(operation_type="tool_register_builtin", params={"name": "calculator.add"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         status = service.status()
@@ -247,6 +252,7 @@ def test_tool_load_unload_register_builtin_with_permission_require_intervention(
             ToolQuery(
                 operation_type="tool_load_manifest",
                 params={"path": str(manifest), "permissions": ["tool.install"]},
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -255,6 +261,7 @@ def test_tool_load_unload_register_builtin_with_permission_require_intervention(
             ToolQuery(
                 operation_type="tool_unload",
                 params={"name": "calculator.add", "permissions": ["tool.uninstall"]},
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -263,6 +270,7 @@ def test_tool_load_unload_register_builtin_with_permission_require_intervention(
             ToolQuery(
                 operation_type="tool_register_builtin",
                 params={"name": "calculator.add", "permissions": ["tool.register_builtin"]},
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -415,11 +423,15 @@ def test_kernel_tool_sdk_permissions_from_manifest(tmp_path):
         service.start()
         try:
             app = AppManifest("tool_sdk_app", "0", "", "main:run", ["tool.execute.calculator.add"], [])
-            ctx = AgentContext(Executor(), app, "sess_tool")
+            agent = service.create_agent(app_id=app.name, session_id="sess_tool", agent_id="agent_tool_sdk")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(Executor(), app, "sess_tool", agent_id=agent.agent_id)
             result = await ctx.kernel.tool.call("calculator.add", {"a": 4, "b": 6}, timeout_s=1.0)
             described = await ctx.kernel.tool.describe("calculator.add", timeout_s=1.0)
             manager_app = AppManifest("tool_manager_app", "0", "", "main:run", ["tool.install"], [])
-            manager_ctx = AgentContext(Executor(), manager_app, "sess_tool_manage")
+            manager_agent = service.create_agent(app_id=manager_app.name, session_id="sess_tool_manage", agent_id="agent_tool_manage")
+            service.start_agent(manager_agent.agent_id)
+            manager_ctx = AgentContext(Executor(), manager_app, "sess_tool_manage", agent_id=manager_agent.agent_id)
             manager_result = await manager_ctx.kernel.tool.load_manifest(str(manifest), timeout_s=1.0)
             assert result.success is True
             assert result.response.data["result"] == {"value": 10}

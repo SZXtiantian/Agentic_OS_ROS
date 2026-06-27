@@ -20,6 +20,12 @@ class RuntimeHumanBackend:
         permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.pop("permissions", ()))
         skill_name = str(getattr(query, "skill_name", "") or params.pop("skill_name", "") or "human.ask")
         call_id = str(getattr(query, "call_id", "") or params.get("call_id") or params.get("correlation_id") or "")
+        agent_id = str(
+            getattr(syscall, "agent_id", "")
+            or getattr(syscall, "aid", "")
+            or getattr(query, "metadata", {}).get("agent_id", "")
+            or ""
+        )
         if syscall.operation_type in {"human.status", "human_status"}:
             return self.status()
         if syscall.operation_type in {"human.cancel", "human_cancel"}:
@@ -35,6 +41,7 @@ class RuntimeHumanBackend:
             session_id=session_id,
             permissions=permissions,
             call_id=call_id,
+            agent_id=agent_id,
         )
 
     def status(self) -> dict[str, Any]:

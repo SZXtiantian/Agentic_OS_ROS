@@ -20,6 +20,7 @@ class BaseKernelScheduler:
         log_mode: str = "console",
         poll_timeout_s: float = 0.05,
         event_sink: KernelEventSink | None = None,
+        agent_lifecycle=None,
     ) -> None:
         self.queue_store = queue_store
         self.managers = managers
@@ -27,6 +28,7 @@ class BaseKernelScheduler:
         self.log_mode = log_mode
         self.poll_timeout_s = poll_timeout_s
         self.event_sink = event_sink
+        self.agent_lifecycle = agent_lifecycle
         self.active = False
         self.processing_threads: dict[str, threading.Thread] = {}
         self._lock = threading.Lock()
@@ -101,6 +103,7 @@ class BaseKernelScheduler:
         for syscall in syscalls:
             if syscall.is_cancelled():
                 self._emit("syscall.cancelled", syscall=syscall, queue_name=lane.queue_name)
+                self._notify_syscall_finished(syscall)
                 syscall.event.set()
                 continue
             if syscall.is_expired():
@@ -111,9 +114,11 @@ class BaseKernelScheduler:
                     error_code="KERNEL_SYSCALL_TIMEOUT",
                 )
                 self._emit("syscall.timeout", syscall=syscall, queue_name=lane.queue_name, error_code="KERNEL_SYSCALL_TIMEOUT")
+                self._notify_syscall_finished(syscall)
                 syscall.event.set()
                 continue
             syscall.mark_started()
+            self._notify_syscall_started(syscall)
             self._emit("syscall.started", syscall=syscall, queue_name=lane.queue_name)
             ready.append(syscall)
         if not ready:
@@ -125,6 +130,7 @@ class BaseKernelScheduler:
             for syscall in ready:
                 self._fail_syscall(syscall, "KERNEL_MANAGER_NOT_FOUND", f"manager not found for {manager_key}")
                 self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
+                self._notify_syscall_finished(syscall)
                 syscall.event.set()
             return
 
@@ -145,6 +151,7 @@ class BaseKernelScheduler:
                 self._fail_syscall(syscall, "KERNEL_MANAGER_TIMEOUT", str(exc))
                 self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
                 self._emit("manager.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code="KERNEL_MANAGER_TIMEOUT")
+                self._notify_syscall_finished(syscall)
                 syscall.event.set()
             return
         except Exception as exc:
@@ -152,6 +159,7 @@ class BaseKernelScheduler:
                 self._fail_syscall(syscall, "KERNEL_MANAGER_FAILED", str(exc))
                 self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
                 self._emit("manager.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code="KERNEL_MANAGER_FAILED")
+                self._notify_syscall_finished(syscall)
                 syscall.event.set()
             return
 
@@ -167,10 +175,12 @@ class BaseKernelScheduler:
                     error_code=self._response_error_code(response) or "KERNEL_MANAGER_REJECTED",
                 )
                 self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
+            self._notify_syscall_finished(syscall)
         if len(responses) < len(ready):
             for syscall in ready[len(responses) :]:
                 self._fail_syscall(syscall, "KERNEL_MANAGER_FAILED", "batch manager returned too few responses")
                 self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
+                self._notify_syscall_finished(syscall)
         self._emit("manager.done", syscall=ready[0], queue_name=lane.queue_name, manager_key=manager_key, duration_ms=int((time.monotonic() - batch_started) * 1000), batch_size=len(ready))
         for syscall in ready:
             syscall.event.set()
@@ -178,6 +188,7 @@ class BaseKernelScheduler:
     def _execute_syscall(self, lane: SchedulerLaneSpec, syscall: KernelSyscall) -> None:
         if syscall.is_cancelled():
             self._emit("syscall.cancelled", syscall=syscall, queue_name=lane.queue_name)
+            self._notify_syscall_finished(syscall)
             syscall.event.set()
             return
         if syscall.is_expired():
@@ -188,6 +199,7 @@ class BaseKernelScheduler:
                 error_code="KERNEL_SYSCALL_TIMEOUT",
             )
             self._emit("syscall.timeout", syscall=syscall, queue_name=lane.queue_name, error_code="KERNEL_SYSCALL_TIMEOUT")
+            self._notify_syscall_finished(syscall)
             syscall.event.set()
             return
         manager_key = lane.manager_key or lane.queue_name
@@ -195,11 +207,13 @@ class BaseKernelScheduler:
         if manager is None:
             self._fail_syscall(syscall, "KERNEL_MANAGER_NOT_FOUND", f"manager not found for {manager_key}")
             self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
+            self._notify_syscall_finished(syscall)
             syscall.event.set()
             return
 
         try:
             syscall.mark_started()
+            self._notify_syscall_started(syscall)
             self._emit("syscall.started", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key)
             manager_started = time.monotonic()
             self._emit("manager.started", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key)
@@ -233,6 +247,7 @@ class BaseKernelScheduler:
             if syscall.end_time is None:
                 syscall.set_end_time(time.time())
             syscall.ended_at = syscall.ended_at or utc_now()
+            self._notify_syscall_finished(syscall)
             syscall.event.set()
 
     def _fail_syscall(self, syscall: KernelSyscall, error_code: str, reason: str) -> None:
@@ -281,3 +296,11 @@ class BaseKernelScheduler:
                 status=syscall.status,
                 **metadata,
             )
+
+    def _notify_syscall_started(self, syscall: KernelSyscall) -> None:
+        if self.agent_lifecycle is not None and getattr(syscall, "agent_id", ""):
+            self.agent_lifecycle.on_syscall_started(syscall)
+
+    def _notify_syscall_finished(self, syscall: KernelSyscall) -> None:
+        if self.agent_lifecycle is not None and getattr(syscall, "agent_id", ""):
+            self.agent_lifecycle.on_syscall_finished(syscall)

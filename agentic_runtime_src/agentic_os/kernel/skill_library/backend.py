@@ -21,6 +21,7 @@ class RuntimeSkillBackend:
         session_id: str,
         permissions: tuple[str, ...] = (),
         call_id: str = "",
+        agent_id: str = "",
     ) -> dict[str, Any]:
         if self.runtime_server is None or not hasattr(self.runtime_server, "executor"):
             return self._unavailable("runtime executor not configured")
@@ -33,9 +34,20 @@ class RuntimeSkillBackend:
             required_capabilities=[],
         )
         try:
-            if call_id:
-                result = self._run(self.runtime_server.executor.execute(app, skill_name, args, session_id, call_id=call_id))
-            else:
+            try:
+                result = self._run(
+                    self.runtime_server.executor.execute(
+                        app,
+                        skill_name,
+                        args,
+                        session_id,
+                        call_id=call_id,
+                        agent_id=agent_id,
+                    )
+                )
+            except TypeError as exc:
+                if agent_id or call_id or ("agent_id" not in str(exc) and "call_id" not in str(exc)):
+                    raise
                 result = self._run(self.runtime_server.executor.execute(app, skill_name, args, session_id))
         except KeyError as exc:
             return {"success": False, "error_code": "SKILL_NOT_FOUND", "reason": str(exc), "skill_name": skill_name}

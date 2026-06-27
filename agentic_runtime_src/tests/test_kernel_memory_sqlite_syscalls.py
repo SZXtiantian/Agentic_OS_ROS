@@ -64,22 +64,26 @@ def test_memory_syscall_roundtrip_uses_kernel_queue(tmp_path):
     try:
         remembered = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_remember", params={"memory_id": "m1", "content": "red block on table"}),
+            MemoryQuery(
+                operation_type="mem_remember",
+                params={"memory_id": "m1", "content": "red block on table"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         got = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_get", params={"memory_id": "m1"}),
+            MemoryQuery(operation_type="mem_get", params={"memory_id": "m1"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         searched = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_search", params={"query": "red", "limit": 5}),
+            MemoryQuery(operation_type="mem_search", params={"query": "red", "limit": 5}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         listed = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_list", params={"limit": 5}),
+            MemoryQuery(operation_type="mem_list", params={"limit": 5}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
     finally:
@@ -100,17 +104,25 @@ def test_memory_update_and_delete_permission_denied_is_stable(tmp_path):
     try:
         service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_remember", params={"memory_id": "m1", "content": "original"}),
+            MemoryQuery(
+                operation_type="mem_remember",
+                params={"memory_id": "m1", "content": "original"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         updated = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_update", params={"memory_id": "m1", "content": "changed"}),
+            MemoryQuery(
+                operation_type="mem_update",
+                params={"memory_id": "m1", "content": "changed"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         deleted = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_delete", params={"memory_id": "m1"}),
+            MemoryQuery(operation_type="mem_delete", params={"memory_id": "m1"}, metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
     finally:
@@ -290,7 +302,11 @@ def test_memory_export_syscall_permission_denied_is_auditable(tmp_path):
     try:
         result = service.execute_request(
             "agent_a",
-            MemoryQuery(operation_type="mem_export", params={"path": str(tmp_path / "memory.jsonl")}),
+            MemoryQuery(
+                operation_type="mem_export",
+                params={"path": str(tmp_path / "memory.jsonl")},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -319,7 +335,9 @@ def test_memory_sdk_facade_uses_kernel_service(tmp_path):
     async def run():
         service.start()
         try:
-            ctx = AgentContext(Executor(), make_app(), "sess_mem")
+            agent = service.create_agent(app_id=make_app().name, session_id="sess_mem", agent_id="agent_mem_sdk")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(Executor(), make_app(), "sess_mem", agent_id=agent.agent_id)
             remembered = await ctx.kernel.memory.remember("blue cube on bench", key="m1", timeout_s=1.0)
             got = await ctx.kernel.memory.get("m1", timeout_s=1.0)
             searched = await ctx.kernel.memory.search("blue", timeout_s=1.0)

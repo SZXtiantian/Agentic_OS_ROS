@@ -25,8 +25,17 @@ class RoundRobinKernelScheduler(FIFOKernelScheduler):
         time_slice_s: float = 1.0,
         generation_context: SimpleGenerationContextManager | None = None,
         event_sink: KernelEventSink | None = None,
+        agent_lifecycle=None,
     ) -> None:
-        super().__init__(queue_store, managers, lanes=lanes, log_mode=log_mode, poll_timeout_s=poll_timeout_s, event_sink=event_sink)
+        super().__init__(
+            queue_store,
+            managers,
+            lanes=lanes,
+            log_mode=log_mode,
+            poll_timeout_s=poll_timeout_s,
+            event_sink=event_sink,
+            agent_lifecycle=agent_lifecycle,
+        )
         self.time_slice_s = time_slice_s
         self.generation_context = generation_context or SimpleGenerationContextManager()
 
@@ -51,6 +60,8 @@ class RoundRobinKernelScheduler(FIFOKernelScheduler):
         manager = self.managers.get(manager_key) or self.managers.get(lane.queue_name)
         if manager is None:
             self._fail_syscall(syscall, "KERNEL_MANAGER_NOT_FOUND", f"manager not found for {manager_key}")
+            self._notify_syscall_finished(syscall)
+            syscall.event.set()
             return
         if not hasattr(manager, "complete_with_time_slice"):
             super()._execute_syscall(lane, syscall)
@@ -61,13 +72,18 @@ class RoundRobinKernelScheduler(FIFOKernelScheduler):
         query = getattr(syscall, "query", None)
         try:
             syscall.mark_started()
+            self._notify_syscall_started(syscall)
             self._emit("syscall.started", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key)
             response, next_snapshot = manager.complete_with_time_slice(query, self.time_slice_s, snapshot)
         except TimeoutError as exc:
             self._fail_syscall(syscall, "KERNEL_MANAGER_TIMEOUT", str(exc))
+            self._notify_syscall_finished(syscall)
+            syscall.event.set()
             return
         except Exception as exc:
             self._fail_syscall(syscall, "KERNEL_MANAGER_FAILED", str(exc))
+            self._notify_syscall_finished(syscall)
+            syscall.event.set()
             return
 
         if next_snapshot is not None and next_snapshot.status == "suspended":
@@ -112,3 +128,4 @@ class RoundRobinKernelScheduler(FIFOKernelScheduler):
         else:
             syscall.fail(response.error_code or "KERNEL_MANAGER_REJECTED", response)
             self._emit("syscall.failed", syscall=syscall, queue_name=lane.queue_name, manager_key=manager_key, error_code=syscall.error_code)
+        self._notify_syscall_finished(syscall)

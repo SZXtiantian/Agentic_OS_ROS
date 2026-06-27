@@ -17,6 +17,10 @@ class BaseKernelSyscall(KernelSyscall):
         )
         self.query = query
         self.queue_name = queue_name
+        metadata = dict(getattr(query, "metadata", {}) or {})
+        agent_id = str(metadata.get("agent_id") or "")
+        self.agent_id = agent_id or None
+        self.aid = agent_id or None
 
 
 def skill_queue_name(skill_name: str) -> str:

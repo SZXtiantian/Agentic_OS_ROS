@@ -137,12 +137,18 @@ def test_context_syscall_queue_scheduler_roundtrip(tmp_path):
                 operation_type="ctx_put",
                 params={"key": "task.stage", "value": "inspect"},
                 session_id="sess_1",
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
         got = service.execute_request(
             "agent_a",
-            ContextQuery(operation_type="ctx_get", params={"key": "task.stage"}, session_id="sess_1"),
+            ContextQuery(
+                operation_type="ctx_get",
+                params={"key": "task.stage"},
+                session_id="sess_1",
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
     finally:
@@ -167,17 +173,28 @@ def test_context_snapshot_recover_and_compact(tmp_path):
                 params={"state": {"plan": ["inspect", "report"]}},
                 session_id="sess_2",
                 checkpoint="before_report",
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
         recover = service.execute_request(
             "agent_a",
-            ContextQuery(operation_type="ctx_recover", session_id="sess_2", checkpoint="before_report"),
+            ContextQuery(
+                operation_type="ctx_recover",
+                session_id="sess_2",
+                checkpoint="before_report",
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         compact = service.execute_request(
             "agent_a",
-            ContextQuery(operation_type="ctx_compact", params={"max_tokens": 8}, session_id="sess_2"),
+            ContextQuery(
+                operation_type="ctx_compact",
+                params={"max_tokens": 8},
+                session_id="sess_2",
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -321,7 +338,9 @@ def test_context_sdk_facade_uses_kernel_service(tmp_path):
     async def run():
         service.start()
         try:
-            ctx = AgentContext(Executor(), make_app(), "sess_sdk")
+            agent = service.create_agent(app_id=make_app().name, session_id="sess_sdk", agent_id="agent_ctx_sdk")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(Executor(), make_app(), "sess_sdk", agent_id=agent.agent_id)
             put = await ctx.kernel.context.put("task.stage", "inspect", timeout_s=1.0)
             got = await ctx.kernel.context.get("task.stage", timeout_s=1.0)
             listed = await ctx.kernel.context.list(prefix="task.", timeout_s=1.0)

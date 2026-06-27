@@ -173,7 +173,9 @@ def test_multi_angle_verification_failure_still_runs_arm_home(tmp_path, monkeypa
             permissions=["perception.capture", "arm.move.named", "memory.write"],
             required_capabilities=["perception.capture_photo", "arm.move_named", "memory.remember"],
         )
-        ctx = AgentContext(server.executor, app, "sess_photo_cleanup")
+        agent = server.kernel_service.create_agent(app_id=app.name, session_id="sess_photo_cleanup", agent_id="agent_photo_cleanup")
+        server.kernel_service.start_agent(agent.agent_id)
+        ctx = AgentContext(server.executor, app, "sess_photo_cleanup", agent_id=agent.agent_id)
         plan = {
             "schema_version": "1.0",
             "plan_id": "plan_cleanup",

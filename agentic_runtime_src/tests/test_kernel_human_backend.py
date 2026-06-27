@@ -43,6 +43,7 @@ def test_human_lane_without_runtime_returns_stable_error(tmp_path):
                 skill_name="human.ask",
                 params={"args": {"question": "Ready?", "timeout_s": 3}},
                 session_id="sess_human",
+                metadata={"kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -604,13 +605,15 @@ def test_runtime_human_backend_does_not_inject_default_permission(tmp_path, monk
     monkeypatch.setenv("AGENTIC_VAR", str(tmp_path / "var"))
     server = create_test_runtime_server()
     backend = RuntimeHumanBackend(server)
+    agent = server.kernel_service.create_agent(app_id="agent_a", session_id="sess_human", agent_id="agent_human_denied")
+    server.kernel_service.start_agent(agent.agent_id)
 
     result = backend.address_request(
         SimpleNamespace(
             agent_name="agent_a",
             operation_type="skill_call",
             params={"args": {"question": "Ready?", "timeout_s": 3}},
-            query=SimpleNamespace(skill_name="human.ask", app_id="agent_a", session_id="sess_human", metadata={}),
+            query=SimpleNamespace(skill_name="human.ask", app_id="agent_a", session_id="sess_human", metadata={"agent_id": agent.agent_id}),
         )
     )
 

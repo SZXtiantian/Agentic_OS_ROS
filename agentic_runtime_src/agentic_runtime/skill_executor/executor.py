@@ -38,6 +38,7 @@ class SkillExecutor:
         session_manager=None,
         access_manager: AccessManager | None = None,
         event_sink=None,
+        agent_lifecycle=None,
     ) -> None:
         self.registry = registry
         self.permission_manager = permission_manager
@@ -49,6 +50,7 @@ class SkillExecutor:
         self.session_manager = session_manager
         self.access_manager = access_manager
         self.event_sink = event_sink
+        self.agent_lifecycle = agent_lifecycle
 
     async def execute(
         self,
@@ -58,8 +60,29 @@ class SkillExecutor:
         session_id: str = "default",
         *,
         call_id: str = "",
+        agent_id: str = "",
+        kernel_internal: bool = False,
     ) -> SkillResult:
         args = dict(args or {})
+        if self.agent_lifecycle is not None:
+            if not agent_id and not kernel_internal:
+                return SkillResult(
+                    success=False,
+                    error_code="AGENT_ID_REQUIRED",
+                    reason="agent_id is required for ordinary skill execution",
+                    recoverable=False,
+                    suggested_recovery=["start_agent_session"],
+                )
+            if agent_id:
+                decision = self.agent_lifecycle.admit_syscall(agent_id=agent_id, operation_type=skill_name)
+                if not decision.success:
+                    return SkillResult(
+                        success=False,
+                        error_code=decision.error_code,
+                        reason=str(decision.response_message or decision.metadata.get("reason", "")),
+                        recoverable=False,
+                        suggested_recovery=["resume_agent", "start_new_session"],
+                    )
         skill = self.registry.get_skill(skill_name)
         call = SkillCall(skill.name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill.name, args, app.name, session_id)
         if skill.name == "human.ask" and call.call_id and not args.get("correlation_id"):
@@ -71,7 +94,7 @@ class SkillExecutor:
         permission_result = "not_checked"
         safety_result = "not_required"
         resource_result = "not_required"
-        acquired: list[str] = []
+        acquired: list[tuple[str, str]] = []
         backend_name = str(skill.backend.get("type", "unconfigured"))
 
         try:
@@ -123,8 +146,19 @@ class SkillExecutor:
                 syscall.safety_result = safety_result
 
             for resource in skill.resource_requirements.get("locks", []):
-                self.resource_manager.acquire(str(resource), session_id, call.call_id)
-                acquired.append(str(resource))
+                lease = self.resource_manager.acquire(str(resource), session_id, call.call_id, agent_id=agent_id)
+                handle_id = ""
+                if self.agent_lifecycle is not None and agent_id:
+                    handle_id = self.agent_lifecycle.register_resource(
+                        agent_id=agent_id,
+                        resource_type="skill_lock",
+                        resource_id=str(resource),
+                        backend="skill_executor.resource_manager",
+                        session_id=session_id,
+                        skill_call_id=call.call_id,
+                        lease_id=lease.lease_id,
+                    )
+                acquired.append((str(resource), handle_id))
             if acquired:
                 resource_result = "locked"
                 syscall.resource_lock_result = resource_result
@@ -235,8 +269,19 @@ class SkillExecutor:
             self._record_syscall(syscall)
             return result
         finally:
-            for resource in acquired:
-                self.resource_manager.release(resource, session_id, call.call_id)
+            for resource, handle_id in acquired:
+                try:
+                    self.resource_manager.release(resource, session_id, call.call_id)
+                except Exception as exc:
+                    if self.agent_lifecycle is not None and handle_id:
+                        self.agent_lifecycle.mark_resource_release_failed(
+                            handle_id,
+                            error_code="AGENT_RESOURCE_RELEASE_FAILED",
+                            message=str(exc),
+                        )
+                    continue
+                if self.agent_lifecycle is not None and handle_id:
+                    self.agent_lifecycle.mark_resource_released(handle_id)
             if hasattr(self.cancellation_manager, "clear_call"):
                 self.cancellation_manager.clear_call(session_id, call.call_id)
 

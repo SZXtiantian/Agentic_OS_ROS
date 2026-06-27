@@ -118,8 +118,8 @@ color_block:
   held_verify_min_center_y_ratio: 0.82
   held_verify_min_bottom_y_ratio: 0.90
   center_timeout_s: 8.0
-  center_target_x_ratio: 0.58
-  center_target_y_ratio: 0.82
+  center_target_x_ratio: 0.52
+  center_target_y_ratio: 0.78
   center_tolerance_ratio: 0.045
   center_base_start_pulse: 500
   center_pitch_start_pulse: 188

@@ -21,7 +21,7 @@ def test_kernel_status_reports_scheduler_queues_managers_and_recent_syscalls(tmp
             LLMQuery(
                 operation_type="chat",
                 messages=[{"role": "user", "content": "status please with secret content"}],
-                metadata={"session_id": "sess_observe"},
+                metadata={"session_id": "sess_observe", "kernel_internal": True},
             ),
             timeout_s=1.0,
         )
@@ -69,7 +69,7 @@ def test_kernel_status_updates_after_failed_syscall(tmp_path):
     try:
         result = service.execute_request(
             "observer_app",
-            MemoryQuery(operation_type="unknown_memory_operation"),
+            MemoryQuery(operation_type="unknown_memory_operation", metadata={"kernel_internal": True}),
             timeout_s=1.0,
         )
         status = service.status()
@@ -90,7 +90,11 @@ def test_access_checked_event_is_recorded_for_tool_access_denial(tmp_path):
     try:
         result = service.execute_request(
             "observer_app",
-            MemoryQuery(operation_type="remember", params={"memory_id": "x", "content": "private note"}),
+            MemoryQuery(
+                operation_type="remember",
+                params={"memory_id": "x", "content": "private note"},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()

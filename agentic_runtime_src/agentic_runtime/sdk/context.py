@@ -15,10 +15,11 @@ from .world import WorldAPI
 
 
 class AgentContext:
-    def __init__(self, executor, app_manifest: AppManifest, session_id: str) -> None:
+    def __init__(self, executor, app_manifest: AppManifest, session_id: str, agent_id: str = "") -> None:
         self.executor = executor
         self.app_manifest = app_manifest
         self.session_id = session_id
+        self.agent_id = agent_id
         self.kernel_service = getattr(executor, "kernel_service", None)
         self.kernel = KernelAPI(self)
         self.llm = LLMAPI(self)
@@ -33,4 +34,15 @@ class AgentContext:
         self.report = ReportAPI(self)
 
     async def call_skill(self, name: str, args: dict):
-        return await self.executor.execute(self.app_manifest, name, args, session_id=self.session_id)
+        try:
+            return await self.executor.execute(
+                self.app_manifest,
+                name,
+                args,
+                session_id=self.session_id,
+                agent_id=self.agent_id,
+            )
+        except TypeError as exc:
+            if self.agent_id or "agent_id" not in str(exc):
+                raise
+            return await self.executor.execute(self.app_manifest, name, args, session_id=self.session_id)

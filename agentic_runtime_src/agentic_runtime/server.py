@@ -126,8 +126,10 @@ class RuntimeServer:
         )
         server.kernel_service = KernelService(server, access_manager=access_manager, event_sink=event_sink)
         server.executor.kernel_service = server.kernel_service
+        server.executor.agent_lifecycle = server.kernel_service.agent_lifecycle
         server.executor.access_manager = server.kernel_service.access_manager
         server.executor.event_sink = server.kernel_service.event_sink
+        server.session_runner.kernel_service = server.kernel_service
         return server
 
     @staticmethod

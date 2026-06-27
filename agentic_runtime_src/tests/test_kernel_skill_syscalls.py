@@ -242,7 +242,12 @@ def test_kernel_service_skill_without_runtime_returns_stable_error(tmp_path):
     try:
         result = service.execute_request(
             "agent_a",
-            SkillQuery(operation_type="skill_call", skill_name="report.say", params={"args": {"message": "hi"}}),
+            SkillQuery(
+                operation_type="skill_call",
+                skill_name="report.say",
+                params={"args": {"message": "hi"}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -265,7 +270,12 @@ def test_kernel_skill_robot_motion_routes_to_robot_lane_and_fails_without_backen
     try:
         result = service.execute_request(
             "agent_a",
-            SkillQuery(operation_type="skill_call", skill_name="robot.navigate_to", params={"args": {"place": "kitchen"}}),
+            SkillQuery(
+                operation_type="skill_call",
+                skill_name="robot.navigate_to",
+                params={"args": {"place": "kitchen"}},
+                metadata={"kernel_internal": True},
+            ),
             timeout_s=1.0,
         )
         status = service.status()
@@ -294,7 +304,9 @@ def test_kernel_skill_sdk_facade_uses_kernel_service(tmp_path):
         service.start()
         try:
             app = AppManifest("skill_sdk_app", "0", "", "main:run", ["report.say"], [])
-            ctx = AgentContext(Executor(), app, "sess_skill")
+            agent = service.create_agent(app_id=app.name, session_id="sess_skill", agent_id="agent_skill_sdk")
+            service.start_agent(agent.agent_id)
+            ctx = AgentContext(Executor(), app, "sess_skill", agent_id=agent.agent_id)
             result = await ctx.kernel.skill.call("report.say", {"message": "done"}, timeout_s=1.0)
             listed = await ctx.kernel.skill.list(timeout_s=1.0)
             assert result.success is False

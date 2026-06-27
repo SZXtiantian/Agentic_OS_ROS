@@ -70,7 +70,9 @@ def test_kernel_e2e_llm_memory_storage_flow(tmp_path):
 
     async def run():
         app = AppManifest("e2e_kernel_app", "0", "", "main:run", ["llm.external.call"], [])
-        ctx = AgentContext(FakeExecutor(), app, "sess_e2e")
+        agent = service.create_agent(app_id=app.name, session_id="sess_e2e", agent_id="agent_e2e")
+        service.start_agent(agent.agent_id)
+        ctx = AgentContext(FakeExecutor(), app, "sess_e2e", agent_id=agent.agent_id)
         service.start()
         try:
             llm_result = await ctx.kernel.llm.chat(

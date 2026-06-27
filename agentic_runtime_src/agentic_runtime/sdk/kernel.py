@@ -87,10 +87,20 @@ class _KernelBaseAPI:
     def __init__(self, ctx) -> None:
         self.ctx = ctx
 
+    def _kernel_metadata(self, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = dict(metadata or {})
+        payload.setdefault("app_id", self.ctx.app_manifest.name)
+        payload.setdefault("session_id", self.ctx.session_id)
+        if getattr(self.ctx, "agent_id", ""):
+            payload.setdefault("agent_id", self.ctx.agent_id)
+        payload.setdefault("permissions", tuple(getattr(self.ctx.app_manifest, "permissions", ())))
+        return payload
+
     def _execute(self, query, timeout_s=None):
         service = self.ctx.kernel_service
         if service is None:
             raise RuntimeError("kernel service is not available on this AgentContext")
+        query.metadata = self._kernel_metadata(getattr(query, "metadata", {}) or {})
         return KernelSDKResult.from_execution_result(
             service.execute_request(self.ctx.app_manifest.name, query, timeout_s=timeout_s)
         )

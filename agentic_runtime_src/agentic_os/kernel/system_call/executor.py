@@ -12,6 +12,7 @@ from .models import KernelSyscall, KernelSyscallStatus
 from .schema import KernelQuery, KernelResponse
 
 SyscallHandler = Callable[[KernelSyscall], Any]
+AGENT_ID_REQUIRED = "AGENT_ID_REQUIRED"
 
 
 @dataclass
@@ -54,6 +55,7 @@ class SyscallExecutor:
         queue_store: KernelQueueStore | None = None,
         default_timeout_s: float = 60.0,
         event_sink: KernelEventSink | None = None,
+        agent_lifecycle=None,
     ) -> None:
         self._handlers: dict[str, SyscallHandler] = {}
         self._lock = Lock()
@@ -62,6 +64,7 @@ class SyscallExecutor:
         self.queue_store = queue_store or KernelQueueStore()
         self.default_timeout_s = default_timeout_s
         self.event_sink = event_sink
+        self.agent_lifecycle = agent_lifecycle
 
     def register(self, target: str, handler: SyscallHandler) -> None:
         with self._lock:
@@ -86,8 +89,35 @@ class SyscallExecutor:
         query: KernelQuery,
         timeout_s: float | None = None,
     ) -> SyscallExecutionResult:
-        syscall = create_typed_syscall(agent_name, query)
         started = time.monotonic()
+        metadata = dict(getattr(query, "metadata", {}) or {})
+        agent_id = str(metadata.get("agent_id") or "")
+        if self.agent_lifecycle is not None:
+            if not agent_id and not metadata.get("kernel_internal"):
+                return self._reject_without_agent(agent_name, query, started)
+            if agent_id:
+                decision = self.agent_lifecycle.admit_syscall(
+                    agent_id=agent_id,
+                    operation_type=query.operation_type,
+                )
+                if not decision.success:
+                    return self._reject_agent_syscall(agent_name, query, decision, started, agent_id=agent_id)
+
+        syscall = create_typed_syscall(agent_name, query)
+        if self.agent_lifecycle is not None and agent_id:
+            bind = self.agent_lifecycle.bind_syscall(agent_id, syscall)
+            if not bind.success:
+                syscall.reject(bind.error_code, str(bind.response_message or bind.metadata.get("reason", "")))
+                return SyscallExecutionResult(
+                    syscall=syscall,
+                    response=bind,
+                    success=False,
+                    error_code=bind.error_code,
+                    started_monotonic=started,
+                    ended_monotonic=time.monotonic(),
+                    metadata={"agent_id": agent_id, "syscall_id": syscall.syscall_id},
+                )
+
         syscall.mark_active()
         syscall.set_pid(self._next_pid())
         syscall.set_created_time(time.time())
@@ -102,8 +132,18 @@ class SyscallExecutor:
         ended = time.monotonic()
         if not completed:
             response = KernelResponse.error("KERNEL_SYSCALL_TIMEOUT")
-            syscall.timeout(response=response)
-            self._emit("syscall.timeout", syscall, queue_name=queue_name, error_code=response.error_code)
+            if syscall.status in {
+                KernelSyscallStatus.CREATED,
+                KernelSyscallStatus.ACTIVE,
+                KernelSyscallStatus.QUEUED,
+                KernelSyscallStatus.SUSPENDING,
+                KernelSyscallStatus.SUSPENDED,
+                KernelSyscallStatus.RESUMING,
+            }:
+                syscall.timeout(response=response)
+                self._emit("syscall.timeout", syscall, queue_name=queue_name, error_code=response.error_code)
+            else:
+                self._emit("syscall.wait_timeout", syscall, queue_name=queue_name, error_code=response.error_code)
             return SyscallExecutionResult(
                 syscall=syscall,
                 response=response,
@@ -111,7 +151,7 @@ class SyscallExecutor:
                 error_code=response.error_code,
                 started_monotonic=started,
                 ended_monotonic=ended,
-                metadata={"queue_name": queue_name, "pid": syscall.get_pid()},
+                metadata={"queue_name": queue_name, "pid": syscall.get_pid(), "wait_timeout": True},
             )
 
         response = syscall.get_response()
@@ -256,3 +296,42 @@ class SyscallExecutor:
                 success=response.success,
                 error_code=response.error_code,
             )
+
+    def _reject_without_agent(self, agent_name: str, query: KernelQuery, started: float) -> SyscallExecutionResult:
+        syscall = create_typed_syscall(agent_name, query)
+        response = KernelResponse.error(
+            AGENT_ID_REQUIRED,
+            metadata={"reason": "agent_id is required for ordinary kernel syscall"},
+        )
+        syscall.reject(AGENT_ID_REQUIRED, "agent_id is required for ordinary kernel syscall")
+        return SyscallExecutionResult(
+            syscall=syscall,
+            response=response,
+            success=False,
+            error_code=AGENT_ID_REQUIRED,
+            started_monotonic=started,
+            ended_monotonic=time.monotonic(),
+            metadata={"syscall_id": syscall.syscall_id},
+        )
+
+    def _reject_agent_syscall(
+        self,
+        agent_name: str,
+        query: KernelQuery,
+        decision: KernelResponse,
+        started: float,
+        *,
+        agent_id: str,
+    ) -> SyscallExecutionResult:
+        syscall = create_typed_syscall(agent_name, query)
+        syscall.reject(decision.error_code, str(decision.response_message or decision.metadata.get("reason", "")))
+        metadata = {"agent_id": agent_id, "syscall_id": syscall.syscall_id, **dict(decision.metadata or {})}
+        return SyscallExecutionResult(
+            syscall=syscall,
+            response=decision,
+            success=False,
+            error_code=decision.error_code,
+            started_monotonic=started,
+            ended_monotonic=time.monotonic(),
+            metadata=metadata,
+        )

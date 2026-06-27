@@ -45,6 +45,12 @@ class CancellationManager:
     def clear_call(self, session_id: str, call_id: str) -> None:
         self._call_events.pop((session_id, call_id), None)
 
+    def clear_session(self, session_id: str) -> None:
+        self._session_events.pop(session_id, None)
+        for key in list(self._call_events):
+            if key[0] == session_id:
+                self._call_events.pop(key, None)
+
     def active_calls(self) -> list[dict[str, str]]:
         return [
             {"session_id": session_id, "call_id": call_id}

@@ -5,6 +5,15 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from agentic_os.kernel.agent import (
+    AgentCleanupManager,
+    AgentLifecycleManager,
+    AgentLifecycleResult,
+    AgentResourceRegistry,
+    AgentTable,
+    RuntimeCancellationAdapter,
+    RuntimeResourceReleaseAdapter,
+)
 from agentic_os.kernel.access import AccessManager
 from agentic_os.kernel.capability import RobotCapabilityManager
 from agentic_os.kernel.context import ContextManager
@@ -45,6 +54,25 @@ class KernelService:
         self.event_sink = event_sink or InMemoryKernelEventSink()
         self.access_manager = access_manager or AccessManager(event_sink=self.event_sink)
         self.queue_store = KernelQueueStore(event_sink=self.event_sink)
+        self.agent_table = AgentTable(event_sink=self.event_sink)
+        self.agent_resources = AgentResourceRegistry(event_sink=self.event_sink)
+        self.agent_cleanup = AgentCleanupManager(
+            resource_registry=self.agent_resources,
+            agent_table=self.agent_table,
+            queue_store=self.queue_store,
+            event_sink=self.event_sink,
+            audit_logger=self.audit_logger,
+        )
+        if runtime_server is not None:
+            self.agent_cleanup.register_cancellation_adapter(RuntimeCancellationAdapter(runtime_server))
+            self.agent_cleanup.register_resource_release_adapter(RuntimeResourceReleaseAdapter(runtime_server))
+        self.agent_lifecycle = AgentLifecycleManager(
+            agent_table=self.agent_table,
+            resource_registry=self.agent_resources,
+            cleanup_manager=self.agent_cleanup,
+            event_sink=self.event_sink,
+            audit_logger=self.audit_logger,
+        )
         self.llm = self._build_llm_adapter()
         self.context = self._build_context_manager()
         self.memory = self._build_memory_manager()
@@ -73,7 +101,11 @@ class KernelService:
             **dict(managers or {}),
         }
         self.scheduler = self._build_scheduler()
-        self.executor = SyscallExecutor(queue_store=self.queue_store, event_sink=self.event_sink)
+        self.executor = SyscallExecutor(
+            queue_store=self.queue_store,
+            event_sink=self.event_sink,
+            agent_lifecycle=self.agent_lifecycle,
+        )
         self._recent_syscalls: list[dict[str, Any]] = []
         self._recent_lock = Lock()
 
@@ -106,6 +138,56 @@ class KernelService:
         )
         return response
 
+    def create_agent(
+        self,
+        *,
+        app_id: str,
+        session_id: str,
+        agent_name: str = "",
+        parent_agent_id: str = "",
+        created_by: str = "kernel_service",
+        priority: int = 0,
+        metadata: dict[str, Any] | None = None,
+        agent_id: str = "",
+    ):
+        return self.agent_lifecycle.create_agent(
+            app_id=app_id,
+            session_id=session_id,
+            agent_name=agent_name,
+            parent_agent_id=parent_agent_id,
+            created_by=created_by,
+            priority=priority,
+            metadata=metadata,
+            agent_id=agent_id,
+        )
+
+    def start_agent(self, agent_id: str, reason: str = "start") -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.start_agent(agent_id, reason=reason))
+
+    def get_agent(self, agent_id: str) -> dict[str, Any]:
+        return self.agent_lifecycle.get_agent(agent_id).to_dict()
+
+    def list_agents(self, include_reaped: bool = False) -> list[dict[str, Any]]:
+        return [agent.to_dict() for agent in self.agent_lifecycle.list_agents(include_reaped=include_reaped)]
+
+    def suspend_agent(self, agent_id: str, reason: str = "operator_requested") -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.suspend_agent(agent_id, reason=reason))
+
+    def resume_agent(self, agent_id: str, reason: str = "operator_requested") -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.resume_agent(agent_id, reason=reason))
+
+    def kill_agent(self, agent_id: str, reason: str = "operator_requested", force: bool = False) -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.kill_agent(agent_id, reason=reason, force=force))
+
+    def exit_agent(self, agent_id: str, reason: str = "app_completed") -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.exit_agent(agent_id, reason=reason))
+
+    def crash_agent(self, agent_id: str, reason: str, error_code: str = "AGENT_CRASHED") -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.crash_agent(agent_id, reason=reason, error_code=error_code))
+
+    def reap_agent(self, agent_id: str, reason: str = "reap", remove_from_live: bool = True) -> KernelResponse:
+        return self._lifecycle_response(self.agent_lifecycle.reap_agent(agent_id, reason=reason, remove_from_live=remove_from_live))
+
     def status(self) -> dict[str, Any]:
         bridge_status = self._bridge_client_status() if self.runtime_server is not None else None
         status = self.kernel_status()
@@ -133,6 +215,8 @@ class KernelService:
             "access": {"policy": self.access_manager.policy.__class__.__name__},
             "audit": {"enabled": self.audit_logger is not None},
             "events": {"count": self.event_sink.count(), "recent": self.event_sink.recent(limit=25)},
+            "agents": self.agent_lifecycle.status(include_reaped=True),
+            "agent_resources": self.agent_resources.snapshot(),
             "providers": self._provider_status(
                 llm_status=llm_status,
                 human_status=human_status,
@@ -229,8 +313,18 @@ class KernelService:
     def _build_scheduler(self):
         policy = str(self.kernel_config.get("scheduler_policy") or getattr(self.config, "scheduler_policy", "fifo")).lower()
         if policy in {"rr", "round_robin", "round-robin"}:
-            return RoundRobinKernelScheduler(self.queue_store, self.managers, event_sink=self.event_sink)
-        return FIFOKernelScheduler(self.queue_store, self.managers, event_sink=self.event_sink)
+            return RoundRobinKernelScheduler(
+                self.queue_store,
+                self.managers,
+                event_sink=self.event_sink,
+                agent_lifecycle=self.agent_lifecycle,
+            )
+        return FIFOKernelScheduler(
+            self.queue_store,
+            self.managers,
+            event_sink=self.event_sink,
+            agent_lifecycle=self.agent_lifecycle,
+        )
 
     def _config_summary(self) -> dict[str, Any]:
         llm_config = dict(self.kernel_config.get("llm") or {})
@@ -396,6 +490,13 @@ class KernelService:
             "reason": reason,
             "data": data or {},
         }
+
+    def _lifecycle_response(self, result: AgentLifecycleResult) -> KernelResponse:
+        payload = result.to_dict()
+        metadata = {"agent_id": result.agent_id, "status": result.status, "cleanup_status": result.cleanup_status}
+        if result.success:
+            return KernelResponse.ok(payload, metadata=metadata, data=payload)
+        return KernelResponse.error(result.error_code, response_message=result.reason, metadata={**metadata, **result.metadata}, data=payload)
 
     def _llm_status(self) -> dict[str, Any]:
         return self.llm.status()
