@@ -7,6 +7,10 @@
   <a href="agentic_runtime_src/docs/access_audit.md"><img src="https://img.shields.io/badge/safety-audit%20logged-7c5c9e" alt="Safety and audit"></a>
 </p>
 
+<p align="center">
+  <img src="assets/agentic-os-ros-concept.png" alt="Agentic OS ROS concept image" width="880">
+</p>
+
 **Agentic OS ROS** is an Agentic Runtime / Agentic OS source tree that runs above ROS2. It is not a normal ROS2 application, an LLM wrapper, or a fork of ROS2, Nav2, or MoveIt. Its purpose is to expose high-level, permissioned, safe, and auditable robot capabilities to Agent Apps while leaving realtime control to ROS2 controllers, Nav2, MoveIt, and vendor drivers.
 
 Agent Apps do not touch `/cmd_vel`, `/scan`, `/odom`, `/tf`, Nav2 actions, or MoveIt actions directly. Every dangerous action must pass through Runtime permission checks, resource locks, safety guards, and audit logs before an AgenticOS-owned ROS2 Bridge / HAL adapts the request to ROS2.

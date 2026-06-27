@@ -35,6 +35,7 @@ agentic_runtime_src/var/
 
 # Robot/user media captures
 *.png
+!assets/agentic-os-ros-concept.png
 *.jpg
 *.jpeg
 *.webp
@@ -55,4 +56,3 @@ agentic_runtime_src/var/
 .DS_Store
 .vscode/
 .idea/
-
