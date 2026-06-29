@@ -12,9 +12,12 @@ HOLD_STABILITY_DELAY_S = 2.0
 ALLOWED_COLORS = {"red", "green", "blue", "yellow"}
 CONFIRM_ANSWER = "CONFIRM"
 PLAN_STEPS = [
+    "prepare_arm_pose",
+    "center_color_block",
     "detect_color_block",
     "capture_evidence",
     "pick_color_block",
+    "reset_arm_home_holding_gripper",
     "post_pick_verify",
     "place_color_block",
 ]
@@ -88,6 +91,14 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     if not readiness["success"]:
         return await _finish_failure(ctx, task, steps, readiness)
 
+    preparation = await _prepare_arm_pose(ctx, task, steps)
+    if not preparation["success"]:
+        return await _finish_failure(ctx, task, steps, preparation)
+
+    alignment = await _center_color_block(ctx, task, steps)
+    if not alignment["success"]:
+        return await _finish_failure(ctx, task, steps, alignment)
+
     detection = await _detect_color_block(ctx, task, steps)
     if not detection["success"]:
         return await _finish_failure(ctx, task, steps, detection)
@@ -100,6 +111,10 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     if not pick["success"]:
         return await _finish_failure(ctx, task, steps, pick)
 
+    reset = await _reset_arm_home_holding_gripper(ctx, task, steps)
+    if not reset["success"]:
+        return await _finish_failure(ctx, task, steps, reset)
+
     post_pick_verification = await _post_pick_verify(ctx, task, detection, pick, steps)
     if not post_pick_verification["success"]:
         return await _finish_failure(ctx, task, steps, post_pick_verification)
@@ -108,7 +123,7 @@ async def run(ctx: AgentContext, **kwargs: Any) -> dict[str, Any]:
     if not place["success"]:
         return await _finish_failure(ctx, task, steps, place)
 
-    return await _finish_success(ctx, task, detection, evidence, pick, post_pick_verification, place, steps)
+    return await _finish_success(ctx, task, alignment, detection, evidence, pick, post_pick_verification, reset, place, steps)
 
 
 async def _plan_with_system_llm(ctx: AgentContext, task_text: str) -> dict[str, Any]:
@@ -140,7 +155,7 @@ def _system_prompt() -> str:
             "- place_target: 'hold_position' when the user asks only to pick/hold/grasp; otherwise a concrete tray or workspace destination",
             "- requires_manipulation: true",
             "- needs_confirmation: true",
-            "- steps: exactly ['detect_color_block','capture_evidence','pick_color_block','post_pick_verify','place_color_block']",
+            "- steps: exactly ['prepare_arm_pose','center_color_block','detect_color_block','capture_evidence','pick_color_block','reset_arm_home_holding_gripper','post_pick_verify','place_color_block']",
             "- risk_class: 'controlled_manipulation' or 'manipulation_real_hardware'",
             "- user_summary: one short sentence",
             "Optional fields: target, evidence_label, timeout_s.",
@@ -310,6 +325,10 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
             "next_action": "Connect the gripper bridge and verify arm.get_state reports gripper_ready.",
             "source_step": arm,
         }
+    return {"success": True, "task": task}
+
+
+async def _prepare_arm_pose(ctx: AgentContext, task: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
     prepare = await _call_skill(
         ctx,
         steps,
@@ -325,6 +344,10 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
             missing=["arm.move_named arm_home"],
             next_action="Verify the Agentic manipulation bridge can execute the allowlisted arm_home action.",
         )
+    return {"success": True, "task": task}
+
+
+async def _center_color_block(ctx: AgentContext, task: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
     align = await _call_skill(
         ctx,
         steps,
@@ -347,7 +370,7 @@ async def _check_readiness(ctx: AgentContext, task: dict[str, Any], steps: list[
             missing=["perception.center_color_block"],
             next_action="Center the target color block in the camera view through the Agentic perception bridge before pick planning.",
         )
-    return {"success": True, "task": task}
+    return align
 
 
 async def _confirm_manipulation(ctx: AgentContext, task: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
@@ -547,6 +570,25 @@ async def _place_color_block(ctx: AgentContext, task: dict[str, Any], pick: dict
     )
 
 
+async def _reset_arm_home_holding_gripper(ctx: AgentContext, task: dict[str, Any], steps: list[dict[str, Any]]) -> dict[str, Any]:
+    reset = await _call_skill(
+        ctx,
+        steps,
+        "reset_arm_home_holding_gripper",
+        "arm.move_named",
+        {"name": "arm_home", "timeout_s": min(int(task["timeout_s"]), 8), "_kernel_timeout_s": 20},
+    )
+    if reset["success"]:
+        return reset
+    return _dependency_failure(
+        "MANIPULATION_BACKEND_UNAVAILABLE",
+        "immediate arm_home reset after pick did not complete",
+        reset,
+        missing=["arm.move_named arm_home"],
+        next_action="Verify the manipulation bridge can execute arm_home while preserving the closed gripper.",
+    )
+
+
 async def _post_pick_verify(
     ctx: AgentContext,
     task: dict[str, Any],
@@ -578,7 +620,7 @@ async def _post_pick_verify(
         {
             "target": task["target"],
             "label": f"{task['evidence_label']}_post_pick",
-            "timeout_s": 30,
+            "timeout_s": 20,
             "_kernel_timeout_s": 45,
         },
     )
@@ -591,6 +633,7 @@ async def _post_pick_verify(
             next_action="Start the Agentic camera bridge and capture post-pick evidence before accepting a pick.",
         )
 
+    post_reset_pick_result = _post_reset_pick_result(pick, gripper_state)
     verification = await _call_skill(
         ctx,
         steps,
@@ -600,7 +643,7 @@ async def _post_pick_verify(
             "color": task["color"],
             "target": task["target"],
             "detection": _normalized_detection_data(detection),
-            "pick_result": _nested_data(pick),
+            "pick_result": post_reset_pick_result,
             "evidence_label": f"{task['evidence_label']}_held_verify",
             "timeout_s": min(int(task["timeout_s"]), 30),
         },
@@ -617,7 +660,7 @@ async def _post_pick_verify(
                 {
                     "target": task["target"],
                     "label": f"{task['evidence_label']}_post_pick_stability",
-                    "timeout_s": 30,
+                    "timeout_s": 20,
                     "_kernel_timeout_s": 45,
                 },
             )
@@ -638,7 +681,7 @@ async def _post_pick_verify(
                     "color": task["color"],
                     "target": task["target"],
                     "detection": _normalized_detection_data(detection),
-                    "pick_result": _nested_data(pick),
+                    "pick_result": post_reset_pick_result,
                     "evidence_label": f"{task['evidence_label']}_held_stability_verify",
                     "timeout_s": min(int(task["timeout_s"]), 30),
                 },
@@ -688,10 +731,12 @@ async def _post_pick_verify(
 async def _finish_success(
     ctx: AgentContext,
     task: dict[str, Any],
+    alignment: dict[str, Any],
     detection: dict[str, Any],
     evidence: dict[str, Any],
     pick: dict[str, Any],
     post_pick_verification: dict[str, Any],
+    reset: dict[str, Any],
     place: dict[str, Any],
     steps: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -699,6 +744,7 @@ async def _finish_success(
     result = _result_payload(ctx, True, task, steps, "", "")
     result.update(
         {
+            "alignment": _nested_data(alignment),
             "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
@@ -707,6 +753,7 @@ async def _finish_success(
             "post_pick_stability_evidence": dict(post_pick_payload.get("post_pick_stability_evidence") or {}),
             "post_pick_stability_verification": dict(post_pick_payload.get("post_pick_stability_verification") or {}),
             "post_pick_verification": post_pick_payload,
+            "reset": _nested_data(reset),
             "verified_held": True,
             "place": _nested_data(place),
         }
@@ -725,6 +772,7 @@ async def _finish_success(
         result = _result_payload(ctx, True, task, steps, "", "")
     result.update(
         {
+            "alignment": _nested_data(alignment),
             "detection": _normalized_detection_data(detection),
             "evidence": _nested_data(evidence),
             "pick": _nested_data(pick),
@@ -733,6 +781,7 @@ async def _finish_success(
             "post_pick_stability_evidence": dict(post_pick_payload.get("post_pick_stability_evidence") or {}),
             "post_pick_stability_verification": dict(post_pick_payload.get("post_pick_stability_verification") or {}),
             "post_pick_verification": post_pick_payload,
+            "reset": _nested_data(reset),
             "verified_held": True,
             "place": _nested_data(place),
         }
@@ -985,6 +1034,13 @@ def _validate_held_verification_data(task: dict[str, Any], verification_step: di
     )
     if not position_confirms_gripper_roi:
         missing.append("position_confirms_gripper_roi")
+    verification_context = str(verification.get("verification_context") or evidence.get("verification_context") or "")
+    if verification_context == "post_reset_arm_home":
+        gripper_closed_verified = bool(
+            verification.get("gripper_closed_verified") or evidence.get("gripper_closed_verified")
+        )
+        if not gripper_closed_verified:
+            missing.append("gripper_closed_verified")
     if not str(verification.get("evidence_image_path") or evidence.get("debug_image_path") or ""):
         missing.append("post-pick verification image")
     if not str(verification.get("evidence_metadata_path") or evidence.get("metadata_path") or ""):
@@ -1011,6 +1067,28 @@ def _nested_data(step: dict[str, Any]) -> dict[str, Any]:
     return dict(data)
 
 
+def _post_reset_pick_result(pick: dict[str, Any], gripper_state: dict[str, Any]) -> dict[str, Any]:
+    payload = _nested_data(pick)
+    state_payload = _nested_data(gripper_state)
+    state = state_payload.get("state") if isinstance(state_payload.get("state"), dict) else {}
+    nested_state = state.get("state") if isinstance(state.get("state"), dict) else {}
+    last_command = str(nested_state.get("last_gripper_command") or state.get("last_gripper_command") or "")
+    gripper_closed = "close" in last_command.lower()
+    context = {
+        "verification_context": "post_reset_arm_home",
+        "post_reset_arm_home": True,
+        "gripper_closed_verified": gripper_closed,
+        "last_gripper_command": last_command,
+    }
+    payload.update(context)
+    result = payload.get("result")
+    if isinstance(result, dict):
+        result = dict(result)
+        result.update(context)
+        payload["result"] = result
+    return payload
+
+
 def _post_pick_verification_data(step: dict[str, Any]) -> dict[str, Any]:
     payload = _nested_data(step)
     data = step.get("data")
@@ -1030,6 +1108,8 @@ def _post_pick_verification_data(step: dict[str, Any]) -> dict[str, Any]:
 def _post_pick_failure_payload(steps: list[dict[str, Any]]) -> dict[str, Any]:
     by_name = {str(step.get("name") or ""): step for step in steps}
     payload: dict[str, Any] = {}
+    if "reset_arm_home_holding_gripper" in by_name:
+        payload["reset"] = _nested_data(by_name["reset_arm_home_holding_gripper"])
     if "capture_post_pick_evidence" in by_name:
         payload["post_pick_evidence"] = _nested_data(by_name["capture_post_pick_evidence"])
     if "post_pick_gripper_state" in by_name:

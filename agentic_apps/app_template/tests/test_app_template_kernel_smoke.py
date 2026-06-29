@@ -36,7 +36,16 @@ def test_app_template_uses_real_kernel_syscalls(tmp_path):
                 ["report.say", "tool.execute.calculator.add", "memory.write", "memory.read", "storage.write", "storage.read"],
                 [],
             )
-            ctx = AgentContext(Executor(), app, "sess_template")
+            session_id = "sess_template"
+            agent = service.create_agent(
+                app_id=app.name,
+                session_id=session_id,
+                agent_name=app.name,
+                agent_id="agent_app_template_smoke",
+            )
+            start = service.start_agent(agent.agent_id)
+            assert start.success
+            ctx = AgentContext(Executor(), app, session_id, agent_id=agent.agent_id)
             result = await _load_run()(ctx, message="template smoke")
         finally:
             service.stop()

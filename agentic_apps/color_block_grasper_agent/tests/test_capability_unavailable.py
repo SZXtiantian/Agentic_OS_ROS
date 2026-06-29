@@ -31,7 +31,7 @@ class RecordingSkillBackend:
     def __init__(self):
         self.calls: list[dict[str, object]] = []
 
-    def call(self, skill_name, args, *, app_id, session_id, permissions=(), call_id=""):
+    def call(self, skill_name, args, *, app_id, session_id, permissions=(), call_id="", **kwargs):
         self.calls.append(
             {
                 "skill_name": skill_name,
@@ -65,11 +65,18 @@ class RecordingSkillBackend:
 
 
 class ScriptedColorBlockBackend:
-    def __init__(self, *, verification_result: dict[str, object] | None = None):
+    def __init__(
+        self,
+        *,
+        alignment_result: dict[str, object] | None = None,
+        verification_result: dict[str, object] | None = None,
+    ):
         self.calls: list[dict[str, object]] = []
+        self.alignment_result = alignment_result or _alignment_success()
         self.verification_result = verification_result or _verify_success()
+        self.last_gripper_command = "open_gripper"
 
-    def call(self, skill_name, args, *, app_id, session_id, permissions=(), call_id=""):
+    def call(self, skill_name, args, *, app_id, session_id, permissions=(), call_id="", **kwargs):
         self.calls.append(
             {
                 "skill_name": skill_name,
@@ -92,6 +99,7 @@ class ScriptedColorBlockBackend:
                     "gripper_ready": True,
                     "stop_available": True,
                     "holding_object": False,
+                    "last_gripper_command": self.last_gripper_command,
                 },
                 "error_code": "",
                 "reason": "",
@@ -99,13 +107,7 @@ class ScriptedColorBlockBackend:
         if skill_name == "arm.move_named":
             return {"success": True, "result": {"action_name": args["name"], "status": "finished"}, "error_code": "", "reason": ""}
         if skill_name == "perception.center_color_block":
-            return {
-                "success": True,
-                "alignment": {"centered": True, "target_color": args["color"], "evidence_image_path": "/tmp/center.png"},
-                "evidence": {"kind": "color_block_alignment", "centered": True, "debug_image_path": "/tmp/center.png"},
-                "error_code": "",
-                "reason": "",
-            }
+            return dict(self.alignment_result)
         if skill_name == "perception.detect_color_block":
             return {"success": True, "detection": _detection(), "evidence": {"kind": "color_block_detection"}, "error_code": "", "reason": ""}
         if skill_name == "perception.capture_photo":
@@ -119,6 +121,7 @@ class ScriptedColorBlockBackend:
                 "reason": "",
             }
         if skill_name == "manipulation.pick_color_block":
+            self.last_gripper_command = "close_gripper_low_force"
             return {
                 "success": True,
                 "result": {
@@ -275,8 +278,26 @@ def test_pick_backend_held_true_but_post_pick_verification_false_fails(tmp_path)
     assert result["error_code"] == "COLOR_BLOCK_PICK_VERIFICATION_FAILED"
     by_name = {step["name"]: step for step in result["steps"]}
     assert by_name["pick_color_block"]["success"] is True
+    assert by_name["reset_arm_home_holding_gripper"]["success"] is True
     assert by_name["post_pick_verify"]["success"] is False
+    assert result["reset"]["action_name"] == "arm_home"
     assert "place_color_block" not in by_name
+
+
+def test_center_color_block_failure_stops_before_detection(tmp_path):
+    backend = ScriptedColorBlockBackend(alignment_result=_alignment_failed())
+    result, _llm_chat = asyncio.run(
+        _run_bare_kernel(tmp_path, llm_chat=RecordingLLMChat(_plan()), message="夹起绿色方块", skill_backend=backend)
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "COLOR_BLOCK_ALIGNMENT_FAILED"
+    assert "perception.center_color_block" in result["missing"]
+    by_name = {step["name"]: step for step in result["steps"]}
+    assert by_name["prepare_arm_pose"]["success"] is True
+    assert by_name["center_color_block"]["success"] is False
+    assert "detect_color_block" not in by_name
+    assert "pick_color_block" not in by_name
 
 
 def test_red_block_disappeared_without_held_roi_candidate_cannot_succeed(tmp_path):
@@ -325,6 +346,18 @@ def test_verified_held_true_is_required_for_success(tmp_path):
     assert by_name["post_pick_gripper_state"]["success"] is True
     assert by_name["capture_post_pick_evidence"]["success"] is True
     assert by_name["post_pick_verify"]["success"] is True
+    assert by_name["prepare_arm_pose"]["success"] is True
+    assert by_name["center_color_block"]["success"] is True
+    assert by_name["reset_arm_home_holding_gripper"]["success"] is True
+    assert by_name["reset_arm_home_holding_gripper"]["data"]["result"]["action_name"] == "arm_home"
+    step_names = [step["name"] for step in result["steps"]]
+    assert step_names.index("pick_color_block") < step_names.index("reset_arm_home_holding_gripper")
+    assert step_names.index("reset_arm_home_holding_gripper") < step_names.index("post_pick_gripper_state")
+    verify_calls = [call for call in backend.calls if call["skill_name"] == "perception.verify_held_color_block"]
+    assert verify_calls
+    pick_result = verify_calls[0]["args"]["pick_result"]
+    assert pick_result["verification_context"] == "post_reset_arm_home"
+    assert pick_result["gripper_closed_verified"] is True
     assert by_name["place_color_block"]["success"] is True
 
 
@@ -371,7 +404,16 @@ async def _run_bare_kernel(tmp_path, *, llm_chat, message: str, skill_backend=No
             ],
             ["agenticos.runtime.llm_chat", "llm.chat"],
         )
-        ctx = AgentContext(Executor(), app, "sess_color")
+        session_id = "sess_color"
+        agent = service.create_agent(
+            app_id=app.name,
+            session_id=session_id,
+            agent_name=app.name,
+            agent_id="agent_color_block_smoke",
+        )
+        start = service.start_agent(agent.agent_id)
+        assert start.success
+        ctx = AgentContext(Executor(), app, session_id, agent_id=agent.agent_id)
         return await _load_run()(ctx, message=message), llm_chat
     finally:
         service.stop()
@@ -385,7 +427,16 @@ def _plan(*, target_color: str = "red"):
         "place_target": "left_tray",
         "requires_manipulation": True,
         "needs_confirmation": True,
-        "steps": ["detect_color_block", "capture_evidence", "pick_color_block", "post_pick_verify", "place_color_block"],
+        "steps": [
+            "prepare_arm_pose",
+            "center_color_block",
+            "detect_color_block",
+            "capture_evidence",
+            "pick_color_block",
+            "reset_arm_home_holding_gripper",
+            "post_pick_verify",
+            "place_color_block",
+        ],
         "risk_class": "manipulation_real_hardware",
         "user_summary": "Move the requested color block to the left tray.",
         "target": "workspace",
@@ -404,6 +455,26 @@ def _detection():
         "camera_position_m": [0.1, 0.2, 0.3],
         "evidence_image_path": "/tmp/pre.png",
         "evidence_metadata_path": "/tmp/pre.json",
+    }
+
+
+def _alignment_success():
+    return {
+        "success": True,
+        "alignment": {"centered": True, "target_color": "red", "evidence_image_path": "/tmp/center.png"},
+        "evidence": {"kind": "color_block_alignment", "centered": True, "debug_image_path": "/tmp/center.png"},
+        "error_code": "",
+        "reason": "",
+    }
+
+
+def _alignment_failed():
+    return {
+        "success": False,
+        "alignment": {"centered": False, "target_color": "red"},
+        "evidence": {"kind": "color_block_alignment", "centered": False},
+        "error_code": "COLOR_BLOCK_ALIGNMENT_FAILED",
+        "reason": "color block did not center in the camera before timeout",
     }
 
 

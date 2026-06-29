@@ -623,6 +623,10 @@ class ManipulationBridgeNode(Node):
         self._publish_pick_feedback(goal_handle, "lifting", 0.9, {"lift_pulse": lift})
         self._publish_servos(1.0, [(1, lift[0]), (2, lift[1]), (3, lift[2]), (4, lift[3]), (5, lift[4]), (10, gripper_close)])
         self._sleep_or_cancel(goal_handle, 1.0)
+        reset_positions = [(1, 500), (2, 720), (3, 100), (4, 150), (5, 500), (10, gripper_close)]
+        self._publish_pick_feedback(goal_handle, "resetting_after_pick", 0.98, {"reset_pulse": reset_positions})
+        self._publish_servos(1.2, reset_positions)
+        self._sleep_or_cancel(goal_handle, 1.4)
 
     def _fixed_pick_sequence(self, cfg: dict[str, Any]) -> list[dict[str, Any]]:
         if str(cfg.get("pick_execution_strategy") or "").strip() != "aligned_fixed_pulse_sequence":

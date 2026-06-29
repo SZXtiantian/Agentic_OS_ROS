@@ -15,7 +15,9 @@ def install_root(tmp_path: Path) -> Path:
 def test_deployment_layout_exists(tmp_path, repo_root, runtime_src, app_root):
     root = install_root(tmp_path)
     assert runtime_src.exists()
-    assert (app_root / "inspection_agent").exists()
+    assert (app_root / "app_template").exists()
+    assert (app_root / "color_block_grasper_agent").exists()
+    assert not (app_root / "inspection_agent").exists()
     assert not (repo_root / "ros2_ws" / "src" / "agentic_msgs").exists()
     assert not (repo_root / "ros2_ws" / "src" / "agentic_capability_bridge").exists()
     assert (repo_root / "ros2_bridge_src" / "agentic_msgs").exists()
@@ -123,7 +125,7 @@ def test_agentic_entrypoint_supports_environment_and_natural_language_shell(runt
 def test_demo_app_script_uses_real_runtime_mode(runtime_src):
     script = (runtime_src / "scripts" / "run_demo_app.sh").read_text(encoding="utf-8")
 
-    assert "python -m agentic_runtime.cli run-app room_inspection_app" in script
+    assert "python -m agentic_runtime.cli run-app app_template" in script
     assert "--real" in script
     assert "--mock" not in script
     assert "../agentic_runtime\"" not in script

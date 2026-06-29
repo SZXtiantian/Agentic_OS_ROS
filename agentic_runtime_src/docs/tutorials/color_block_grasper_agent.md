@@ -25,6 +25,9 @@ capabilities include:
 
 - `agenticos.runtime.llm_chat`
 - `llm.chat`
+- `arm.get_state`
+- `arm.move_named`
+- `perception.center_color_block`
 - `perception.detect_color_block`
 - `perception.verify_held_color_block`
 - `manipulation.pick_color_block`
@@ -52,15 +55,22 @@ safety guards, and audit logs.
 6. Ask for human confirmation when the LLM plan requires it.
 7. Check `robot.get_state` and `arm.get_state`; arm state also carries gripper
    readiness.
-8. Call `perception.detect_color_block`.
-9. Call `perception.capture_photo` for pre-pick evidence.
-10. Call `manipulation.pick_color_block`.
-11. Capture post-pick evidence and call `perception.verify_held_color_block`.
-12. Continue only if the verification result contains `verified_held=true`.
-13. Call `manipulation.place_color_block` or keep the gripper in
+8. Call `arm.move_named` with `arm_home` to start from the calibrated grasp
+   posture.
+9. Call `perception.center_color_block` so the tuned visual-servo bridge aligns
+   the requested color block in the camera view.
+10. Call `perception.detect_color_block` after centering.
+11. Call `perception.capture_photo` for pre-pick evidence.
+12. Call `manipulation.pick_color_block`.
+13. Call `arm.move_named` with `arm_home`; the manipulation bridge preserves the
+    closed gripper when the previous gripper command was close.
+14. Capture post-pick evidence and call `perception.verify_held_color_block`
+    with a post-reset verification context.
+15. Continue only if the verification result contains `verified_held=true`.
+16. Call `manipulation.place_color_block` or keep the gripper in
     `hold_position`.
-14. Write memory and storage result evidence.
-15. Call `report.say`.
+17. Write memory and storage result evidence.
+18. Call `report.say`.
 
 Allowed plan colors are `red`, `green`, `blue`, and `yellow`. A plan with any
 other color returns `COLOR_BLOCK_LLM_PLAN_INVALID`. The app must not parse the
@@ -76,14 +86,20 @@ LLM error such as `LLMCHAT_UNAVAILABLE`, `LLM_PROVIDER_UNCONFIGURED`, or
 The runtime skill manifests are:
 
 - `agentic_runtime_src/skills/perception_detect_color_block.yaml`
+- `agentic_runtime_src/skills/perception_center_color_block.yaml`
 - `agentic_runtime_src/skills/perception_verify_held_color_block.yaml`
+- `agentic_runtime_src/skills/arm_get_state.yaml`
+- `agentic_runtime_src/skills/arm_move_named.yaml`
 - `agentic_runtime_src/skills/manipulation_pick_color_block.yaml`
 - `agentic_runtime_src/skills/manipulation_place_color_block.yaml`
 
 They map to Agentic bridge contracts:
 
 - `/agentic/perception/detect_color_block`
+- `/agentic/perception/center_color_block`
 - `/agentic/perception/verify_held_color_block`
+- `/agentic/arm/get_state`
+- `/agentic/arm/move_named`
 - `/agentic/manipulation/pick_color_block`
 - `/agentic/manipulation/place_color_block`
 
@@ -99,9 +115,13 @@ completion criterion. A real tutorial acceptance must include post-pick image
 and metadata evidence plus `perception.verify_held_color_block` output proving
 the requested color block is in the gripper-held ROI, no longer overlaps the
 pre-pick tabletop detection, and appears larger/closer to the gripper camera
-than the pre-pick detection. If the red block merely disappears from the
-tabletop, is pushed into the ROI while still table-bound, or the verifier cannot
+than the pre-pick detection under the current verification posture. If the red
+block merely disappears from the tabletop, is pushed into the ROI while still
+table-bound, or the verifier cannot
 prove it is held, the app must return `COLOR_BLOCK_PICK_VERIFICATION_FAILED`.
+In the post-reset `arm_home` posture, depth delta is retained as evidence but
+is not the hard acceptance gate; ROI position, size ratio, non-overlap, and
+closed-gripper state carry the held check.
 The app repeats held verification after a short delay; a block that is lifted
 briefly but slips back to the tabletop is not a successful tutorial result.
 
@@ -145,7 +165,7 @@ If those dependencies are not configured, report:
 
 ```text
 UNVERIFIED_REAL_DEPENDENCY
-missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.detect_color_block, perception.verify_held_color_block, manipulation.pick_color_block, manipulation.place_color_block
+missing: AGENTIC_LLM_ENABLED=1, AGENTIC_LLM_REQUIRE=1, perception.center_color_block, perception.detect_color_block, perception.verify_held_color_block, manipulation.pick_color_block, manipulation.place_color_block
 next_action: configure the Runtime LLM provider and Agentic perception/manipulation/held-verification bridge contracts, then rerun real-e2e
 ```
 

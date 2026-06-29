@@ -1,9 +1,0 @@
-version: 0.1.0
-keys:
-  last_requested_place:
-    type: string
-  last_inspection:
-    type: object
-    required:
-      - place
-      - summary

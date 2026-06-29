@@ -5,12 +5,17 @@ steps:
   - check_robot
   - check_arm_gripper
   - human_confirmation
+  - prepare_arm_pose
+  - center_color_block
   - detect_color_block
   - capture_evidence
   - pick_color_block
+  - reset_arm_home_holding_gripper
   - post_pick_gripper_state
   - capture_post_pick_evidence
   - post_pick_verify
+  - capture_post_pick_stability_evidence
+  - post_pick_stability_verify
   - place_color_block
   - remember_result
   - write_result

@@ -1,5 +1,10 @@
 # Agentic App Developer Guide
 
+For the full application-developer interface reference, see
+`agentic_runtime_src/docs/app_developer_interface.md`.
+完整的应用开发者接口手册见
+`agentic_runtime_src/docs/app_developer_interface.md`。
+
 Agentic App development starts by copying `agentic_apps/app_template`.
 开发 Agentic App 必须从 `agentic_apps/app_template` 复制开始。
 

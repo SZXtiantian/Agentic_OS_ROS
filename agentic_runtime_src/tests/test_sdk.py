@@ -15,17 +15,18 @@ from agentic_runtime.sdk import AgentContext, KernelAccessDeniedError, KernelSDK
 from agentic_runtime.types import AppManifest, SkillResult
 
 
-def test_sdk_room_flow_reports_ros_bridge_unavailable():
+def test_sdk_template_flow_uses_existing_agent_lifecycle_and_access_checks():
     async def run():
         server = create_test_runtime_server()
         manager = AppManager(server.config.app_root, server.executor)
-        session_id = "sess_sdk_room"
-        agent = server.kernel_service.create_agent(app_id="inspection_agent", session_id=session_id, agent_id="agent_sdk_room")
+        session_id = "sess_sdk_template"
+        agent = server.kernel_service.create_agent(app_id="app_template", session_id=session_id, agent_id="agent_sdk_template")
         server.kernel_service.start_agent(agent.agent_id)
-        result = await manager.run_app("inspection_agent", place="厨房", session_id=session_id, agent_id=agent.agent_id)
-        assert result["result"]["success"] is False
-        assert result["result"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
-        assert server.test_bridge_calls[0]["command"][3] == "/agentic/world/resolve_place"
+        result = await manager.run_app("app_template", message="sdk smoke", session_id=session_id, agent_id=agent.agent_id)
+        assert result["agent_id"] == agent.agent_id
+        assert result["result"]["results"]["storage"]["error_code"] == "ACCESS_INTERVENTION_REQUIRED"
+        assert server.kernel_service.get_agent(agent.agent_id)["status"] == "ready"
+        assert server.test_bridge_calls == []
 
     asyncio.run(run())
 

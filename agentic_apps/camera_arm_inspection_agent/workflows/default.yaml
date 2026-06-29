@@ -1,4 +1,0 @@
-steps:
-  - observe_workspace
-  - optional_allowed_arm_action
-  - record_evidence

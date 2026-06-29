@@ -101,7 +101,16 @@ async def _run_bare_kernel(tmp_path, *, llm_chat, message: str):
             ],
             ["agenticos.runtime.llm_chat", "llm.chat"],
         )
-        ctx = AgentContext(Executor(), app, "sess_hello")
+        session_id = "sess_hello"
+        agent = service.create_agent(
+            app_id=app.name,
+            session_id=session_id,
+            agent_name=app.name,
+            agent_id="agent_hello_world_smoke",
+        )
+        start = service.start_agent(agent.agent_id)
+        assert start.success
+        ctx = AgentContext(Executor(), app, session_id, agent_id=agent.agent_id)
         return await _load_run()(ctx, message=message), llm_chat
     finally:
         service.stop()
