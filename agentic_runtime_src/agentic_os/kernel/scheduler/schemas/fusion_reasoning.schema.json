@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fusion_reasoning.schema.json",
+  "type": "object",
+  "required": ["fusion_plan_id", "decision_supported", "risk_summary", "required_audit_events"],
+  "properties": {
+    "fusion_plan_id": { "type": "string", "minLength": 1 },
+    "decision_supported": { "type": "boolean" },
+    "risk_summary": { "type": "string" },
+    "required_audit_events": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": false
+}

@@ -25,6 +25,9 @@
 - **Agentic Runtime / Kernel**: runtime services for permissions, scheduling, memory, context, storage, skills, and audit.
 - **Agentic SDK**: high-level APIs for Agent Apps.
 - **Robot Capability Layer**: policy-aware capability dispatch for robot tasks.
+- **Environment-Aware DAG Scheduler**: explicit kernel policy
+  `env_aware_priority_dag` for global TaskGraph scheduling, fact reuse,
+  resource leases, lifecycle integration, audit, and debug export.
 - **ROS2 Bridge Packages**: AgenticOS-owned adapters between the Runtime and ROS2.
 - **Agent App templates and examples**: starter structure for building native Agent Apps.
 
@@ -65,7 +68,9 @@ The key boundary is simple: Agent Apps and Runtime code stay above ROS2; ROS2-sp
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish
 scripts/run_tests.sh
-scripts/verify_agentic_app_tutorials.sh
+scripts/verify_foundation.sh
+scripts/verify_capability_truth.sh
+scripts/verify_no_fake_mock.sh
 ```
 
 For Runtime development:
@@ -75,6 +80,12 @@ cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pip install -e ".[dev]"
 PYTHONPATH=. pytest -q
 ```
+
+The environment-aware scheduler is documented in
+[`agentic_runtime_src/docs/scheduler_environment_aware_dag.md`](agentic_runtime_src/docs/scheduler_environment_aware_dag.md).
+Real scheduler LLM and capability verification scripts are opt-in and return
+`UNVERIFIED_REAL_DEPENDENCY` until real providers, bridges, and capability
+backends are configured.
 
 ---
 

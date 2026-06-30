@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "debug_snapshot.schema.json",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "success",
+    "error_code",
+    "message",
+    "scheduler_policy",
+    "global_revision",
+    "graphs",
+    "nodes_by_status",
+    "ready_queue",
+    "running_nodes",
+    "blocked_nodes",
+    "completed_nodes",
+    "failed_nodes",
+    "leases",
+    "expired_leases",
+    "facts",
+    "expired_facts",
+    "opportunity_windows",
+    "fusion_plans",
+    "recent_audit_event_ids",
+    "recent_kernel_event_ids",
+    "provider_status_summary"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "success": { "type": "boolean" },
+    "error_code": { "type": "string" },
+    "message": { "type": "string" },
+    "scheduler_policy": { "type": "string" },
+    "global_revision": { "type": "integer" },
+    "graphs": { "type": "object" },
+    "nodes_by_status": { "type": "object" },
+    "ready_queue": { "type": "array" },
+    "running_nodes": { "type": "array", "items": { "type": "string" } },
+    "blocked_nodes": { "type": "array", "items": { "type": "string" } },
+    "completed_nodes": { "type": "array", "items": { "type": "string" } },
+    "failed_nodes": { "type": "array", "items": { "type": "string" } },
+    "leases": { "type": "array" },
+    "expired_leases": { "type": "array" },
+    "facts": { "type": "array" },
+    "expired_facts": { "type": "array" },
+    "opportunity_windows": { "type": "array" },
+    "fusion_plans": { "type": "array" },
+    "recent_audit_event_ids": { "type": "array", "items": { "type": "string" } },
+    "recent_kernel_event_ids": { "type": "array", "items": { "type": "string" } },
+    "provider_status_summary": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "success": { "const": true }
+        },
+        "required": ["success"]
+      },
+      "then": {
+        "properties": {
+          "error_code": { "const": "" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "success": { "const": false }
+        },
+        "required": ["success"]
+      },
+      "then": {
+        "properties": {
+          "error_code": { "const": "SCHEDULER_DEBUG_EXPORT_FAILED" }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

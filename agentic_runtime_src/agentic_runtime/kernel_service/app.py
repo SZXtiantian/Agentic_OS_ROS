@@ -21,7 +21,7 @@ from agentic_os.kernel.hooks import InMemoryKernelEventSink, KernelQueueStore, s
 from agentic_os.kernel.human import HumanInteractionManager
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
 from agentic_os.kernel.memory import MemoryManager
-from agentic_os.kernel.scheduler import FIFOKernelScheduler, RoundRobinKernelScheduler
+from agentic_os.kernel.scheduler import EnvironmentAwareDAGScheduler, FIFOKernelScheduler, RoundRobinKernelScheduler
 from agentic_os.kernel.skill_library import RuntimeSkillBackend, SkillManager
 from agentic_os.kernel.storage import StorageManager
 from agentic_os.kernel.system_call import KernelQuery, KernelResponse, SyscallExecutionResult, SyscallExecutor
@@ -138,6 +138,122 @@ class KernelService:
         )
         return response
 
+    def checkpoint_request(
+        self,
+        syscall_id: str,
+        *,
+        reason: str = "",
+        node_id: str = "",
+        task_graph_id: str = "",
+        agent_id: str = "",
+    ) -> KernelResponse:
+        if not syscall_id:
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={"reason": "syscall_id required"},
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        syscall = self.executor.active_syscall(syscall_id)
+        if syscall is None:
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={"syscall_id": syscall_id, "reason": "syscall is not active in KernelService"},
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        queue_name = str(getattr(syscall, "queue_name", "") or syscall.target)
+        manager = self.managers.get(queue_name) or self.managers.get(syscall.target)
+        if manager is None:
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={"syscall_id": syscall_id, "queue_name": queue_name, "reason": "checkpoint manager not found"},
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        checkpoint_method = getattr(manager, "checkpoint_request", None)
+        if not callable(checkpoint_method):
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={
+                    "syscall_id": syscall_id,
+                    "queue_name": queue_name,
+                    "manager": manager.__class__.__name__,
+                    "reason": "manager does not expose checkpoint_request",
+                },
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        try:
+            raw_response = self._call_checkpoint_manager(
+                checkpoint_method,
+                syscall,
+                reason=reason,
+                node_id=node_id,
+                task_graph_id=task_graph_id,
+                agent_id=agent_id,
+            )
+        except TimeoutError:
+            raise
+        except Exception as exc:
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={
+                    "syscall_id": syscall_id,
+                    "queue_name": queue_name,
+                    "manager": manager.__class__.__name__,
+                    "reason": str(exc),
+                },
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        response = self._normalize_checkpoint_response(raw_response)
+        if not response.success:
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        checkpoint = self._extract_checkpoint_payload(syscall, response)
+        if not checkpoint:
+            response = KernelResponse.error(
+                "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                metadata={
+                    "syscall_id": syscall_id,
+                    "queue_name": queue_name,
+                    "manager": manager.__class__.__name__,
+                    "reason": "checkpoint response did not include preserved progress",
+                },
+            )
+            self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return response
+
+        persisted = self._persist_checkpoint(
+            syscall,
+            checkpoint,
+            reason=reason,
+            node_id=node_id,
+            task_graph_id=task_graph_id,
+            agent_id=agent_id,
+        )
+        if not persisted.success:
+            self._emit_checkpoint_result(syscall_id, persisted, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+            return persisted
+
+        data = {
+            "syscall_id": syscall_id,
+            "checkpoint": checkpoint,
+            "checkpoint_id": checkpoint.get("checkpoint_id", ""),
+            "completed_coverage": list(checkpoint.get("completed_coverage") or []),
+            "context_snapshot_id": persisted.metadata.get("snapshot_id", ""),
+        }
+        response = KernelResponse.ok(data, metadata=data, data=data)
+        self._emit_checkpoint_result(syscall_id, response, node_id=node_id, task_graph_id=task_graph_id, agent_id=agent_id)
+        return response
+
     def create_agent(
         self,
         *,
@@ -171,22 +287,39 @@ class KernelService:
         return [agent.to_dict() for agent in self.agent_lifecycle.list_agents(include_reaped=include_reaped)]
 
     def suspend_agent(self, agent_id: str, reason: str = "operator_requested") -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.suspend_agent(agent_id, reason=reason))
+        response = self._lifecycle_response(self.agent_lifecycle.suspend_agent(agent_id, reason=reason))
+        self._notify_scheduler_lifecycle("suspended", response, agent_id, reason)
+        return response
 
     def resume_agent(self, agent_id: str, reason: str = "operator_requested") -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.resume_agent(agent_id, reason=reason))
+        response = self._lifecycle_response(self.agent_lifecycle.resume_agent(agent_id, reason=reason))
+        self._notify_scheduler_lifecycle("resumed", response, agent_id, reason)
+        return response
 
     def kill_agent(self, agent_id: str, reason: str = "operator_requested", force: bool = False) -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.kill_agent(agent_id, reason=reason, force=force))
+        response = self._lifecycle_response(self.agent_lifecycle.kill_agent(agent_id, reason=reason, force=force))
+        self._notify_scheduler_lifecycle("killed", response, agent_id, reason)
+        return response
 
     def exit_agent(self, agent_id: str, reason: str = "app_completed") -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.exit_agent(agent_id, reason=reason))
+        response = self._lifecycle_response(self.agent_lifecycle.exit_agent(agent_id, reason=reason))
+        self._notify_scheduler_lifecycle("exited", response, agent_id, reason)
+        return response
+
+    def fail_agent(self, agent_id: str, reason: str, error_code: str = "AGENT_FAILED") -> KernelResponse:
+        response = self._lifecycle_response(self.agent_lifecycle.fail_agent(agent_id, reason=reason, error_code=error_code))
+        self._notify_scheduler_lifecycle("failed", response, agent_id, reason)
+        return response
 
     def crash_agent(self, agent_id: str, reason: str, error_code: str = "AGENT_CRASHED") -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.crash_agent(agent_id, reason=reason, error_code=error_code))
+        response = self._lifecycle_response(self.agent_lifecycle.crash_agent(agent_id, reason=reason, error_code=error_code))
+        self._notify_scheduler_lifecycle("crashed", response, agent_id, reason)
+        return response
 
     def reap_agent(self, agent_id: str, reason: str = "reap", remove_from_live: bool = True) -> KernelResponse:
-        return self._lifecycle_response(self.agent_lifecycle.reap_agent(agent_id, reason=reason, remove_from_live=remove_from_live))
+        response = self._lifecycle_response(self.agent_lifecycle.reap_agent(agent_id, reason=reason, remove_from_live=remove_from_live))
+        self._notify_scheduler_lifecycle("reaped", response, agent_id, reason)
+        return response
 
     def status(self) -> dict[str, Any]:
         bridge_status = self._bridge_client_status() if self.runtime_server is not None else None
@@ -312,6 +445,19 @@ class KernelService:
 
     def _build_scheduler(self):
         policy = str(self.kernel_config.get("scheduler_policy") or getattr(self.config, "scheduler_policy", "fifo")).lower()
+        if policy in {"environment_aware_dag", "env_aware_priority_dag"}:
+            capability_registry = getattr(getattr(self.runtime_server, "registry", None), "capabilities", None)
+            return EnvironmentAwareDAGScheduler(
+                self.queue_store,
+                self.managers,
+                kernel_service=self,
+                policy=policy,
+                event_sink=self.event_sink,
+                agent_lifecycle=self.agent_lifecycle,
+                audit_logger=self.audit_logger,
+                capability_registry=capability_registry,
+                device_arbiter=self._runtime_device_arbiter(),
+            )
         if policy in {"rr", "round_robin", "round-robin"}:
             return RoundRobinKernelScheduler(
                 self.queue_store,
@@ -325,6 +471,206 @@ class KernelService:
             event_sink=self.event_sink,
             agent_lifecycle=self.agent_lifecycle,
         )
+
+    def _runtime_device_arbiter(self):
+        resource_manager = getattr(getattr(self.runtime_server, "executor", None), "resource_manager", None)
+        return getattr(resource_manager, "kernel", None)
+
+    def _call_checkpoint_manager(
+        self,
+        checkpoint_method,
+        syscall,
+        *,
+        reason: str,
+        node_id: str,
+        task_graph_id: str,
+        agent_id: str,
+    ):
+        try:
+            return checkpoint_method(
+                syscall,
+                reason=reason,
+                node_id=node_id,
+                task_graph_id=task_graph_id,
+                agent_id=agent_id,
+            )
+        except TypeError:
+            return checkpoint_method(syscall.syscall_id)
+
+    def _normalize_checkpoint_response(self, response: Any) -> KernelResponse:
+        if isinstance(response, KernelResponse):
+            if not isinstance(response.success, bool):
+                return KernelResponse.error(
+                    "KERNEL_RESULT_INVALID",
+                    metadata={"reason": "checkpoint response success field must be boolean"},
+                )
+            if response.success:
+                return response
+            return KernelResponse.error(
+                response.error_code or "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                response_message=response.response_message,
+                metadata=dict(response.metadata or {}),
+                data=response.data,
+            )
+        if not isinstance(response, dict):
+            return KernelResponse.error(
+                "KERNEL_RESULT_INVALID",
+                metadata={"reason": f"checkpoint manager returned {type(response).__name__}"},
+            )
+        if "success" not in response or not isinstance(response.get("success"), bool):
+            return KernelResponse.error(
+                "KERNEL_RESULT_INVALID",
+                metadata={"reason": "checkpoint manager response must include boolean success", "data": dict(response)},
+            )
+        if response["success"] is False:
+            return KernelResponse.error(
+                str(response.get("error_code") or "SCHEDULER_PREEMPTION_UNSUPPORTED"),
+                metadata=dict(response),
+                data=dict(response),
+            )
+        return KernelResponse.ok(dict(response), metadata=dict(response), data=dict(response))
+
+    def _extract_checkpoint_payload(self, syscall, response: KernelResponse) -> dict[str, Any]:
+        mapping = response.as_mapping()
+        combined: dict[str, Any] = {}
+        for key in ("response_message", "data", "metadata"):
+            value = mapping.get(key)
+            if isinstance(value, dict):
+                combined.update(value)
+        combined.update({key: value for key, value in mapping.items() if key not in {"response_message", "data", "metadata"}})
+
+        nested = combined.get("checkpoint") if isinstance(combined.get("checkpoint"), dict) else {}
+        checkpoint_id = str(
+            combined.get("checkpoint_id")
+            or nested.get("checkpoint_id")
+            or nested.get("id")
+            or ""
+        )
+        partial_result = _first_checkpoint_value(
+            [combined, nested],
+            ("partial_result", "partial_results", "partial_response", "partial_text"),
+        )
+        completed_coverage = _first_checkpoint_value(
+            [combined, nested],
+            ("completed_coverage", "coverage_completed", "covered_requirements"),
+        )
+        coverage_payload = list(completed_coverage) if isinstance(completed_coverage, list) else []
+        if not checkpoint_id and partial_result is None and not coverage_payload:
+            return {}
+        if not checkpoint_id:
+            checkpoint_id = f"checkpoint_{syscall.syscall_id}"
+
+        payload: dict[str, Any] = {
+            "checkpoint_id": checkpoint_id,
+            "syscall_id": syscall.syscall_id,
+            "source": "kernel_service.checkpoint_request",
+        }
+        if partial_result is not None:
+            payload["partial_result"] = partial_result
+        if coverage_payload:
+            payload["completed_coverage"] = coverage_payload
+        if nested:
+            payload["checkpoint"] = nested
+        return payload
+
+    def _persist_checkpoint(
+        self,
+        syscall,
+        checkpoint: dict[str, Any],
+        *,
+        reason: str,
+        node_id: str,
+        task_graph_id: str,
+        agent_id: str,
+    ) -> KernelResponse:
+        query = getattr(syscall, "query", None)
+        query_metadata = dict(getattr(query, "metadata", {}) or {})
+        session_id = str(
+            getattr(query, "session_id", "")
+            or query_metadata.get("session_id")
+            or syscall.params.get("session_id")
+            or "kernel"
+        )
+        owner = str(syscall.agent_name or query_metadata.get("agent_name") or query_metadata.get("app_id") or "kernel")
+        checkpoint_id = str(checkpoint.get("checkpoint_id") or f"checkpoint_{syscall.syscall_id}")
+        metadata = {
+            "pid": syscall.get_pid() or "",
+            "syscall_id": syscall.syscall_id,
+            "queue_name": str(getattr(syscall, "queue_name", "") or syscall.target),
+            "operation_type": syscall.operation_type,
+            "reason": reason,
+            "node_id": node_id,
+            "task_graph_id": task_graph_id,
+            "agent_id": agent_id or str(getattr(syscall, "agent_id", "") or ""),
+        }
+        state = {
+            "checkpoint": dict(checkpoint),
+            "partial_result": checkpoint.get("partial_result"),
+            "completed_coverage": list(checkpoint.get("completed_coverage") or []),
+            "syscall": {
+                "syscall_id": syscall.syscall_id,
+                "operation_type": syscall.operation_type,
+                "queue_name": str(getattr(syscall, "queue_name", "") or syscall.target),
+                "status": syscall.status,
+            },
+            "scheduler": {
+                "node_id": node_id,
+                "task_graph_id": task_graph_id,
+                "agent_id": agent_id or str(getattr(syscall, "agent_id", "") or ""),
+                "reason": reason,
+            },
+        }
+        try:
+            result = self.context.provider.snapshot(owner, session_id, checkpoint_id, state, metadata)
+        except Exception as exc:
+            return KernelResponse.error(
+                "CONTEXT_PROVIDER_UNAVAILABLE",
+                metadata={"reason": str(exc), "checkpoint_id": checkpoint_id, "syscall_id": syscall.syscall_id},
+            )
+        if not isinstance(result, dict) or not isinstance(result.get("success"), bool):
+            return KernelResponse.error(
+                "CONTEXT_PROVIDER_RESULT_INVALID",
+                metadata={"reason": "context provider checkpoint snapshot returned malformed result", "syscall_id": syscall.syscall_id},
+            )
+        if result["success"] is False:
+            return KernelResponse.error(
+                str(result.get("error_code") or "CONTEXT_PROVIDER_UNAVAILABLE"),
+                metadata={**dict(result), "syscall_id": syscall.syscall_id},
+            )
+        return KernelResponse.ok(result, metadata=dict(result), data=result)
+
+    def _emit_checkpoint_result(
+        self,
+        syscall_id: str,
+        response: KernelResponse,
+        *,
+        node_id: str,
+        task_graph_id: str,
+        agent_id: str,
+    ) -> None:
+        self.event_sink.emit(
+            "kernel.checkpoint_request",
+            syscall_id=syscall_id,
+            agent_id=agent_id,
+            task_graph_id=task_graph_id,
+            node_id=node_id,
+            success=response.success,
+            error_code=response.error_code,
+            checkpoint_id=str(response.get("checkpoint_id", "")),
+            completed_coverage=list(response.get("completed_coverage", []) or []),
+        )
+
+    def _notify_scheduler_lifecycle(self, event_name: str, response: KernelResponse, agent_id: str, reason: str) -> None:
+        if not response.success:
+            return
+        scheduler = getattr(self, "scheduler", None)
+        payload = dict(response.data or {}) if isinstance(response.data, dict) else {}
+        if event_name == "suspended" and hasattr(scheduler, "on_agent_suspended"):
+            scheduler.on_agent_suspended(agent_id, reason=reason, held_syscall_ids=list(payload.get("held_syscalls") or []))
+        elif event_name == "resumed" and hasattr(scheduler, "on_agent_resumed"):
+            scheduler.on_agent_resumed(agent_id, reason=reason, resumed_syscall_ids=list(payload.get("resumed_syscalls") or []))
+        elif event_name in {"killed", "exited", "failed", "crashed", "reaped"} and hasattr(scheduler, "on_agent_terminal"):
+            scheduler.on_agent_terminal(agent_id, event_type=event_name, reason=reason, cancelled_syscall_ids=list(payload.get("cancelled_syscalls") or []))
 
     def _config_summary(self) -> dict[str, Any]:
         llm_config = dict(self.kernel_config.get("llm") or {})
@@ -595,3 +941,11 @@ class KernelService:
             "required_fields": list(TRUTH_STATUS_FIELDS),
             **providers,
         }
+
+
+def _first_checkpoint_value(mappings: list[dict[str, Any]], keys: tuple[str, ...]) -> Any:
+    for mapping in mappings:
+        for key in keys:
+            if key in mapping:
+                return mapping[key]
+    return None

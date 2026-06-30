@@ -118,6 +118,110 @@ def test_runtime_robot_capability_backend_unwraps_sdk_args():
     assert executor.calls[0][3] == "sess_color"
 
 
+def test_runtime_robot_capability_backend_passes_syscall_id_as_call_id():
+    class Executor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def execute(self, app, skill_name, args, session_id, *, call_id="", agent_id=""):
+            self.calls.append((app, skill_name, dict(args), session_id, call_id, agent_id))
+            return SkillResult(True, data={"args": dict(args), "call_id": call_id})
+
+    executor = Executor()
+    backend = RuntimeRobotCapabilityBackend(SimpleNamespace(executor=executor))
+    query = SkillQuery(
+        operation_type="skill_call",
+        skill_name="robot.inspect_area",
+        app_id="inspection_agent",
+        session_id="sess_inspect",
+        params={"args": {"place": "lab"}, "permissions": ("perception.inspect",)},
+        metadata={"agent_id": "agent_inspect"},
+    )
+    syscall = SimpleNamespace(
+        agent_name="inspection_agent",
+        operation_type="skill_call",
+        params=query.params,
+        query=query,
+        syscall_id="ksc_inspect",
+        agent_id="agent_inspect",
+    )
+
+    response = backend.execute_capability(syscall)
+
+    assert response["success"] is True
+    assert executor.calls[0][1] == "robot.inspect_area"
+    assert executor.calls[0][4] == "ksc_inspect"
+    assert executor.calls[0][5] == "agent_inspect"
+
+
+def test_runtime_robot_capability_backend_checkpoint_requires_executor_support():
+    backend = RuntimeRobotCapabilityBackend(SimpleNamespace(executor=object()))
+    query = SkillQuery(
+        operation_type="skill_call",
+        skill_name="robot.inspect_area",
+        app_id="inspection_agent",
+        session_id="sess_inspect",
+    )
+    syscall = SimpleNamespace(
+        agent_name="inspection_agent",
+        operation_type="skill_call",
+        params={},
+        query=query,
+        syscall_id="ksc_inspect",
+    )
+
+    result = backend.checkpoint_request(syscall, reason="operator_suspend")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SCHEDULER_PREEMPTION_UNSUPPORTED"
+    assert result["reason"] == "runtime executor does not expose checkpoint capability"
+    assert result["syscall_id"] == "ksc_inspect"
+
+
+def test_runtime_robot_capability_backend_checkpoint_delegates_to_executor_hook():
+    class Executor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def checkpoint_capability(self, syscall, **metadata):
+            self.calls.append((syscall, metadata))
+            return SkillResult(
+                True,
+                data={
+                    "checkpoint_id": "inspect_cp_runtime",
+                    "partial_result": {"visited_waypoints": ["north_hall"]},
+                    "completed_coverage": ["zone_north"],
+                },
+                audit_id="audit_checkpoint",
+            )
+
+    executor = Executor()
+    backend = RuntimeRobotCapabilityBackend(SimpleNamespace(executor=executor))
+    query = SkillQuery(
+        operation_type="skill_call",
+        skill_name="robot.inspect_area",
+        app_id="inspection_agent",
+        session_id="sess_inspect",
+    )
+    syscall = SimpleNamespace(
+        agent_name="inspection_agent",
+        operation_type="skill_call",
+        params={},
+        query=query,
+        syscall_id="ksc_inspect",
+    )
+
+    result = backend.checkpoint_request(syscall, reason="operator_suspend", node_id="inspect_node")
+
+    assert result["success"] is True
+    assert result["skill_name"] == "robot.inspect_area"
+    assert result["checkpoint_id"] == "inspect_cp_runtime"
+    assert result["partial_result"] == {"visited_waypoints": ["north_hall"]}
+    assert result["completed_coverage"] == ["zone_north"]
+    assert result["audit_id"] == "audit_checkpoint"
+    assert executor.calls == [(syscall, {"reason": "operator_suspend", "node_id": "inspect_node"})]
+
+
 def test_runtime_skill_backend_cancel_requires_call_id():
     executor = RuntimeCompatibleExecutor()
     backend = RuntimeSkillBackend(SimpleNamespace(executor=executor, registry=RuntimeCompatibleRegistry()))

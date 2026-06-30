@@ -146,6 +146,71 @@ def test_robot_manager_rejects_non_object_backend_result():
     assert result["error_code"] == "ROBOT_RESULT_INVALID"
 
 
+def test_robot_manager_checkpoint_requires_real_backend_support():
+    manager = RobotCapabilityManager()
+    request = RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.inspect_area")
+    created = create_syscall("agent_a", request)
+
+    result = manager.checkpoint_request(created, reason="operator_suspend")
+
+    assert result["success"] is False
+    assert result["error_code"] == "SCHEDULER_PREEMPTION_UNSUPPORTED"
+    assert result["reason"] == "runtime robot checkpoint backend not configured"
+
+
+def test_robot_manager_checkpoint_delegates_and_audits_progress():
+    class Backend:
+        def __init__(self):
+            self.calls = []
+
+        def execute_capability(self, syscall):
+            return {"success": True}
+
+        def checkpoint_request(self, syscall, **metadata):
+            self.calls.append((syscall, metadata))
+            return {
+                "success": True,
+                "checkpoint_id": "inspect_cp_backend",
+                "partial_result": {"visited_waypoints": ["north_hall"]},
+                "completed_coverage": ["zone_north"],
+            }
+
+    sink = InMemoryKernelEventSink()
+    backend = Backend()
+    manager = RobotCapabilityManager(backend, event_sink=sink)
+    request = RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.inspect_area")
+    created = create_syscall("agent_a", request)
+
+    result = manager.checkpoint_request(created, reason="operator_suspend", node_id="inspect_node")
+
+    assert result["success"] is True
+    assert result["checkpoint_id"] == "inspect_cp_backend"
+    assert result["completed_coverage"] == ["zone_north"]
+    assert backend.calls == [(created, {"reason": "operator_suspend", "node_id": "inspect_node"})]
+    event = [event for event in sink.recent(limit=10) if event["event_type"] == "robot.checkpoint"][-1]
+    assert event["metadata"]["success"] is True
+    assert event["metadata"]["checkpoint_id"] == "inspect_cp_backend"
+    assert event["metadata"]["completed_coverage"] == ["zone_north"]
+
+
+def test_robot_manager_checkpoint_rejects_malformed_backend_result():
+    class Backend:
+        def execute_capability(self, syscall):
+            return {"success": True}
+
+        def checkpoint_request(self, syscall, **metadata):
+            return "ok"
+
+    manager = RobotCapabilityManager(Backend())
+    request = RobotCapabilityQuery(operation_type="execute_skill", skill_name="robot.inspect_area")
+    created = create_syscall("agent_a", request)
+
+    result = manager.checkpoint_request(created, reason="operator_suspend")
+
+    assert result["success"] is False
+    assert result["error_code"] == "ROBOT_RESULT_INVALID"
+
+
 def test_human_manager_returns_not_wired_without_adapter():
     manager = HumanInteractionManager()
     syscall = SyscallExecutor().create_syscall("agent_a", "human", "human.ask", {"question": "Ready?"})

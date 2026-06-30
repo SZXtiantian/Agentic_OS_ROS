@@ -1,0 +1,22 @@
+# path|regex|reason
+agentic_runtime/config.py|SIMULATED_CONFIG_VALUES|rejects unsupported configured simulation values
+agentic_runtime/config.py|mock|rejects unsupported configured simulation values
+agentic_runtime/config.py|fake|rejects unsupported configured simulation values
+agentic_runtime/config.py|stub|rejects unsupported configured simulation values
+agentic_runtime/config.py|dummy|rejects unsupported configured simulation values
+agentic_runtime/config.py|simulated|rejects unsupported configured simulation values
+agentic_os/kernel/llm_core/adapter.py|mock|routes unsupported provider names to structured errors
+agentic_os/kernel/llm_core/adapter.py|fake|routes unsupported provider names to structured errors
+agentic_os/kernel/llm_core/adapter.py|stub|routes unsupported provider names to structured errors
+agentic_os/kernel/llm_core/adapter.py|dummy|routes unsupported provider names to structured errors
+agentic_os/kernel/capability/registry.py|mock|rejects unsupported backend names
+agentic_os/kernel/capability/registry.py|fake|rejects unsupported backend names
+agentic_os/kernel/capability/registry.py|stub|rejects unsupported backend names
+agentic_os/kernel/capability/registry.py|dummy|rejects unsupported backend names
+agentic_os/kernel/capability/registry.py|SIMULATED_DISABLED|disabled capability kind marker
+scripts/verify_no_fake_mock.sh|.*|scanner implementation contains the forbidden patterns it detects
+scripts/no_fake_mock_allowlist.txt|.*|allowlist documents approved static guard exceptions
+agentic_apps/robot_photographer_agent/prompts/intent_parser.system.md|fake success|LLM prompt forbids non-real success claims
+ros2_bridge_src/agentic_app_runtime_bridge/README.md|simulated success|bridge boundary doc forbids non-real success paths
+tests/test_kernel_storage_syscalls.py|monkeypatch\.setattr\(storage, "write", lambda \*args, \*\*kwargs: \{"success"|negative malformed-provider contract test
+tests/test_kernel_storage_syscalls.py|monkeypatch\.setattr\(storage, "index", lambda \*args, \*\*kwargs: \{"success"|negative malformed-provider contract test

@@ -157,6 +157,8 @@ def test_context_syscall_queue_scheduler_roundtrip(tmp_path):
     assert put.success is True
     assert got.success is True
     assert got.response.data["value"] == "inspect"
+    assert got.response.data["backend"] == "context.sqlite"
+    assert got.response.data["real_dependency"] == "context.sqlite"
     assert put.metadata["queue_name"] == "context"
     assert service.status()["context"]["state"] == "ready"
     assert service.status()["queues"]["context"]["added_count"] >= 2

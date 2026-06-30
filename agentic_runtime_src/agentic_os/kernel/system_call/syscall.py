@@ -27,7 +27,7 @@ def skill_queue_name(skill_name: str) -> str:
     normalized = (skill_name or "").lower()
     if normalized.startswith("human."):
         return KernelQueueName.HUMAN
-    if normalized.startswith(("robot.navigate_to", "robot.stop", "arm.", "gripper.")):
+    if normalized.startswith(("robot.navigate_to", "robot.stop", "arm.", "gripper.", "manipulation.")):
         return KernelQueueName.ROBOT_MOTION
     if normalized.startswith(("perception.", "world.")) or normalized in {"robot.get_state", "robot.inspect_area"}:
         return KernelQueueName.ROBOT_SENSOR

@@ -47,6 +47,92 @@ def test_ros2_cli_bridge_client_parses_ros_repr_style_response():
     asyncio.run(run())
 
 
+def test_ros2_cli_bridge_client_inspect_area_uses_supplied_request_id():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        return '{"success": true, "error_code": "", "summary": "ok", "objects": [], "anomalies": [], "result_json": "{}"}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.inspect_area("lab", 5, request_id="ksc_inspect")
+        assert result["success"] is True
+
+    asyncio.run(run())
+
+    command = calls[0][0]
+    assert command[:4] == ["ros2", "service", "call", "/agentic/perception/inspect_area"]
+    payload = json.loads(command[5])
+    assert payload["request_id"] == "ksc_inspect"
+
+
+def test_ros2_cli_bridge_client_checkpoint_capability_calls_bridge_service_and_preserves_progress():
+    calls = []
+
+    async def runner(command, timeout_s):
+        calls.append((command, timeout_s))
+        assert "/agentic/capability/checkpoint" in command
+        return (
+            '{"success": true, "error_code": "", "reason": "", '
+            '"checkpoint_id": "inspect_cp_bridge", '
+            '"partial_result_json": "{\\"visited_waypoints\\": [\\"north_hall\\"]}", '
+            '"completed_coverage_json": "[\\"zone_north\\"]", '
+            '"progress_json": "{\\"percent\\": 50}"}'
+        )
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.checkpoint_capability(
+            skill_name="robot.inspect_area",
+            args={"place": "lab", "timeout_s": 30},
+            app_id="app",
+            session_id="sess",
+            syscall_id="ksc_checkpoint",
+            metadata={"reason": "operator_suspend"},
+        )
+        assert result["success"] is True
+        assert result["checkpoint_id"] == "inspect_cp_bridge"
+        assert result["partial_result"] == {"visited_waypoints": ["north_hall"]}
+        assert result["completed_coverage"] == ["zone_north"]
+        assert result["progress"] == {"percent": 50}
+
+    asyncio.run(run())
+
+    command = calls[0][0]
+    assert command[:4] == ["ros2", "service", "call", "/agentic/capability/checkpoint"]
+    assert command[4] == "agentic_msgs/srv/CheckpointCapability"
+    payload = json.loads(command[5])
+    assert payload["skill_name"] == "robot.inspect_area"
+    assert json.loads(payload["args_json"]) == {"place": "lab", "timeout_s": 30}
+    assert payload["syscall_id"] == "ksc_checkpoint"
+
+
+def test_ros2_cli_bridge_client_checkpoint_rejects_success_without_preserved_progress():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return '{"success": true, "error_code": "", "reason": ""}'
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        result = await client.checkpoint_capability(
+            skill_name="robot.inspect_area",
+            args={"place": "lab"},
+            app_id="app",
+            session_id="sess",
+            syscall_id="ksc_checkpoint",
+            metadata={},
+        )
+        status = client.status()
+        assert result["success"] is False
+        assert result["error_code"] == "ROS_RESULT_INVALID"
+        assert "preserved progress" in result["reason"]
+        assert status["last_success"] is False
+        assert status["last_error"]["operation"] == "checkpoint_capability"
+
+    asyncio.run(run())
+
+
 def test_ros2_cli_bridge_client_parses_yaml_style_action_result():
     async def runner(command, timeout_s):
         del command, timeout_s

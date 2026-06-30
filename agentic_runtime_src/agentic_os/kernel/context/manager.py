@@ -153,6 +153,7 @@ class ContextManager:
         result = self.provider.get(owner, session_id, namespace, key)
         if result is None:
             return KernelResponse.error("CONTEXT_NOT_FOUND", metadata={"key": key})
+        result = self._with_provider_provenance(result)
         return KernelResponse.ok(result, data=result)
 
     def _delete(self, owner: str, session_id: str, namespace: str, params: dict[str, Any]) -> KernelResponse:
@@ -172,7 +173,8 @@ class ContextManager:
             prefix=str(params.get("prefix") or ""),
             limit=int(params.get("limit", 100)),
         )
-        return KernelResponse.ok({"entries": entries}, data={"entries": entries})
+        payload = self._with_provider_provenance({"entries": entries})
+        return KernelResponse.ok(payload, data=payload)
 
     def _snapshot(
         self,
@@ -213,8 +215,23 @@ class ContextManager:
         if invalid is not None:
             return KernelResponse.error(str(invalid["error_code"]), metadata=invalid)
         if result.get("success") is True:
+            result = self._with_provider_provenance(result)
             return KernelResponse.ok(result, data=result)
         return KernelResponse.error(str(result.get("error_code") or "CONTEXT_PROVIDER_UNAVAILABLE"), metadata=result)
+
+    def _with_provider_provenance(self, result: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(result)
+        provider_name = self._provider_name()
+        payload.setdefault("backend", f"context.{provider_name}")
+        payload.setdefault("real_dependency", f"context.{provider_name}")
+        return payload
+
+    def _provider_name(self) -> str:
+        try:
+            status = self.provider.status()
+        except Exception:
+            return self.provider.__class__.__name__
+        return str(status.get("provider") or self.provider.__class__.__name__)
 
     def _invalid_provider_result(self, result: Any, *, operation: str) -> dict[str, Any] | None:
         if not isinstance(result, dict):

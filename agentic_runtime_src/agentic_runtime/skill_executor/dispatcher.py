@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from pathlib import Path
@@ -23,6 +24,7 @@ class SkillDispatcher:
         app_id: str,
         session_id: str,
         cancel_event=None,
+        call_id: str = "",
     ) -> dict[str, Any]:
         if skill_name == "world.resolve_place":
             return await self.bridge_client.resolve_place(args["name"])
@@ -35,7 +37,7 @@ class SkillDispatcher:
                 cancel_event=cancel_event,
             )
         if skill_name == "robot.inspect_area":
-            return await self.bridge_client.inspect_area(args["place"], int(args.get("timeout_s", 60)))
+            return await self.bridge_client.inspect_area(args["place"], int(args.get("timeout_s", 60)), request_id=call_id)
         if skill_name == "perception.observe":
             return await self.bridge_client.observe(args.get("target", "workspace"), int(args.get("timeout_s", 10)))
         if skill_name == "perception.capture_photo":
@@ -190,6 +192,43 @@ class SkillDispatcher:
         if skill_name == "report.say":
             return await self.bridge_client.report_say(args["message"])
         return {"success": False, "error_code": "BACKEND_UNAVAILABLE", "reason": f"no dispatcher for {skill_name}"}
+
+    async def checkpoint_capability(
+        self,
+        skill_name: str,
+        args: dict[str, Any],
+        app_id: str,
+        session_id: str,
+        *,
+        syscall_id: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        checkpoint_method = getattr(self.bridge_client, "checkpoint_capability", None)
+        if callable(checkpoint_method):
+            result = checkpoint_method(
+                skill_name=skill_name,
+                args=dict(args),
+                app_id=app_id,
+                session_id=session_id,
+                syscall_id=syscall_id,
+                metadata=dict(metadata or {}),
+            )
+            if inspect.isawaitable(result):
+                result = await result
+            return result
+        checkpoint_method = getattr(self.bridge_client, "checkpoint_request", None)
+        if callable(checkpoint_method):
+            result = checkpoint_method(syscall_id, skill_name=skill_name, session_id=session_id, metadata=dict(metadata or {}))
+            if inspect.isawaitable(result):
+                result = await result
+            return result
+        return {
+            "success": False,
+            "error_code": "SCHEDULER_PREEMPTION_UNSUPPORTED",
+            "reason": "bridge client does not expose checkpoint capability",
+            "skill_name": skill_name,
+            "syscall_id": syscall_id,
+        }
 
     def _list_recent_photos(self, limit: int, app_id: str = "") -> dict[str, Any]:
         app_index = self._app_photo_index(app_id)

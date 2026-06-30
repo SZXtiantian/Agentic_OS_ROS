@@ -1,8 +1,10 @@
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+from agentic_os.kernel.system_call import RobotCapabilityQuery
 from agentic_os.kernel.access import AccessManager, AlwaysAllowTestInterventionProvider
 from agentic_runtime.audit import AuditLogger
 from agentic_runtime.config import RuntimeConfig
@@ -57,6 +59,24 @@ def make_executor(tmp_path, *, access_manager=True):
 
 def app_with_permissions(permissions):
     return AppManifest("test_app", "0", "", "main:run", permissions, [])
+
+
+def checkpoint_syscall():
+    query = RobotCapabilityQuery(
+        operation_type="robot.inspect_area",
+        skill_name="robot.inspect_area",
+        app_id="test_app",
+        session_id="sess_checkpoint",
+        params={"place": "lab", "timeout_s": 30},
+        metadata={"permissions": FULL_PERMS, "session_id": "sess_checkpoint"},
+    )
+    return SimpleNamespace(
+        agent_name="test_app",
+        operation_type="robot.inspect_area",
+        params=query.params,
+        query=query,
+        syscall_id="ksc_checkpoint",
+    )
 
 
 def test_navigate_fails_fast_when_ros2_bridge_unavailable(tmp_path):
@@ -170,6 +190,121 @@ def test_inspect_area_fails_fast_when_ros2_bridge_unavailable(tmp_path):
         assert bridge_calls[0]["command"][3] == "/agentic/safety/check"
         assert all("/agentic/perception/inspect_area" not in call["command"] for call in bridge_calls)
         assert resources.snapshot() == {}
+
+    asyncio.run(run())
+
+
+def test_checkpoint_capability_uses_real_bridge_checkpoint_service(tmp_path):
+    async def run():
+        executor, bridge_calls, _, _ = make_executor(tmp_path)
+
+        result = await executor.checkpoint_capability(checkpoint_syscall(), reason="operator_suspend")
+
+        assert result.success is False
+        assert result.error_code == "ROS_BRIDGE_UNAVAILABLE"
+        assert bridge_calls
+        assert bridge_calls[0]["command"][:4] == ["ros2", "service", "call", "/agentic/capability/checkpoint"]
+        assert bridge_calls[0]["command"][4] == "agentic_msgs/srv/CheckpointCapability"
+        audit = executor.audit_logger.recent(limit=1)[0]
+        assert audit["skill_name"] == "robot.inspect_area"
+        assert audit["status"] == "failed"
+        assert audit["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+
+    asyncio.run(run())
+
+
+def test_skill_executor_passes_call_id_to_inspection_bridge_request(tmp_path):
+    class InspectionBridge:
+        def __init__(self):
+            self.inspect_calls = []
+
+        async def check_safety(self, skill_name, args, app_id):
+            return {"allowed": True, "error_code": "", "reason": ""}
+
+        async def inspect_area(self, place, timeout_s, request_id=""):
+            self.inspect_calls.append({"place": place, "timeout_s": timeout_s, "request_id": request_id})
+            return {"success": True, "summary": "inspection finished", "objects": [], "anomalies": []}
+
+    async def run():
+        executor, _, resources, _ = make_executor(tmp_path)
+        bridge = InspectionBridge()
+        executor.dispatcher.bridge_client = bridge
+
+        result = await executor.execute(
+            app_with_permissions(FULL_PERMS),
+            "robot.inspect_area",
+            {"place": "lab", "timeout_s": 2},
+            "sess",
+            call_id="ksc_inspect",
+        )
+
+        assert result.success is True
+        assert bridge.inspect_calls == [{"place": "lab", "timeout_s": 2, "request_id": "ksc_inspect"}]
+        assert resources.snapshot() == {}
+
+    asyncio.run(run())
+
+
+def test_checkpoint_capability_delegates_to_bridge_and_audits_progress(tmp_path):
+    class CheckpointBridge:
+        def __init__(self):
+            self.calls = []
+
+        async def checkpoint_capability(self, **kwargs):
+            self.calls.append(kwargs)
+            return {
+                "success": True,
+                "checkpoint_id": "inspect_bridge_cp",
+                "partial_result": {"visited_waypoints": ["north_hall"]},
+                "completed_coverage": ["zone_north"],
+            }
+
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        bridge = CheckpointBridge()
+        executor.dispatcher.bridge_client = bridge
+
+        result = await executor.checkpoint_capability(checkpoint_syscall(), reason="operator_suspend", node_id="inspect_node")
+
+        assert result.success is True
+        assert result.data["checkpoint_id"] == "inspect_bridge_cp"
+        assert result.data["partial_result"] == {"visited_waypoints": ["north_hall"]}
+        assert result.data["completed_coverage"] == ["zone_north"]
+        assert bridge.calls == [
+            {
+                "skill_name": "robot.inspect_area",
+                "args": {"place": "lab", "timeout_s": 30},
+                "app_id": "test_app",
+                "session_id": "sess_checkpoint",
+                "syscall_id": "ksc_checkpoint",
+                "metadata": {"reason": "operator_suspend", "node_id": "inspect_node"},
+            }
+        ]
+        audit = executor.audit_logger.recent(limit=1)[0]
+        assert audit["status"] == "succeeded"
+        assert audit["error_code"] == ""
+        assert result.audit_id
+
+    asyncio.run(run())
+
+
+def test_checkpoint_capability_rejects_malformed_bridge_checkpoint_result(tmp_path):
+    class BadCheckpointBridge:
+        async def checkpoint_capability(self, **kwargs):
+            return {"success": "yes", "checkpoint_id": "bad"}
+
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        executor.dispatcher.bridge_client = BadCheckpointBridge()
+
+        result = await executor.checkpoint_capability(checkpoint_syscall(), reason="operator_suspend")
+
+        assert result.success is False
+        assert result.error_code == "SKILL_RESULT_INVALID"
+        assert "success field must be boolean" in result.reason
+        audit = executor.audit_logger.recent(limit=1)[0]
+        assert audit["status"] == "failed"
+        assert audit["error_code"] == "SKILL_RESULT_INVALID"
 
     asyncio.run(run())
 

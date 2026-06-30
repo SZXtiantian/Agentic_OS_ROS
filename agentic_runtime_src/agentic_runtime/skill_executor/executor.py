@@ -172,7 +172,14 @@ class SkillExecutor:
             syscall.mark_started(SyscallStatus.EXECUTING)
             self._record_syscall(syscall)
             raw = await run_with_timeout(
-                self.dispatcher.dispatch(skill.name, args, app.name, session_id, cancel_event=cancel_event),
+                self.dispatcher.dispatch(
+                    skill.name,
+                    args,
+                    app.name,
+                    session_id,
+                    cancel_event=cancel_event,
+                    call_id=call.call_id,
+                ),
                 timeout_s,
             )
             result = self._result_from_backend(raw)
@@ -284,6 +291,120 @@ class SkillExecutor:
                     self.agent_lifecycle.mark_resource_released(handle_id)
             if hasattr(self.cancellation_manager, "clear_call"):
                 self.cancellation_manager.clear_call(session_id, call.call_id)
+
+    async def checkpoint_capability(self, syscall, **metadata: Any) -> SkillResult:
+        query = getattr(syscall, "query", None)
+        params = dict(getattr(query, "params", {}) or getattr(syscall, "params", {}) or {})
+        skill_name = str(getattr(query, "skill_name", "") or params.get("skill_name") or getattr(syscall, "operation_type", ""))
+        app_id = str(getattr(query, "app_id", "") or getattr(syscall, "agent_name", "") or metadata.get("app_id") or "kernel")
+        session_id = str(
+            getattr(query, "session_id", "")
+            or getattr(query, "metadata", {}).get("session_id", "")
+            or params.get("session_id", "")
+            or metadata.get("session_id", "")
+            or "kernel"
+        )
+        permissions = tuple(getattr(query, "metadata", {}).get("permissions") or params.get("permissions") or ())
+        app = AppManifest(
+            name=app_id,
+            version="kernel",
+            description="kernel robot checkpoint request",
+            entrypoint="kernel:robot_checkpoint",
+            permissions=list(permissions),
+            required_capabilities=[],
+        )
+        started = time.monotonic()
+        permission_result = "not_checked"
+        safety_result = "not_required"
+        resource_result = "not_required"
+        backend_name = "checkpoint_capability"
+        call = SkillCall(skill_name or "unknown", params, app.name, session_id, call_id=str(getattr(syscall, "syscall_id", "") or "checkpoint"))
+
+        try:
+            skill = self.registry.get_skill(skill_name)
+            self.permission_manager.check(app, skill)
+            permission_result = "allowed"
+            if self._requires_access_check(skill.name):
+                if self.access_manager is None:
+                    raise PermissionDeniedError(
+                        "kernel access manager is required for robot checkpoint capability",
+                        code="ACCESS_MANAGER_UNAVAILABLE",
+                    )
+                access_decision = self.access_manager.check(
+                    AccessRequest(
+                        subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),
+                        action="execute",
+                        resource=AccessResource(self._access_resource_type(skill.name), skill.name),
+                        irreversible=False,
+                        reason=f"runtime checkpoint request: {skill.name}",
+                    )
+                )
+                if not access_decision.allowed:
+                    raise PermissionDeniedError(
+                        access_decision.reason or access_decision.error_code,
+                        code=access_decision.error_code or "PERMISSION_DENIED",
+                    )
+            raw = await self.dispatcher.checkpoint_capability(
+                skill.name,
+                params,
+                app.name,
+                session_id,
+                syscall_id=str(getattr(syscall, "syscall_id", "")),
+                metadata=dict(metadata),
+            )
+            result = self._result_from_backend(raw)
+            status = "succeeded" if result.success else self._status_for_error(result.error_code)
+        except KeyError as exc:
+            result = SkillResult(
+                success=False,
+                error_code="SKILL_NOT_FOUND",
+                reason=str(exc),
+                recoverable=False,
+                suggested_recovery=["check_skill_registry"],
+            )
+            status = "rejected"
+        except PermissionDeniedError as exc:
+            permission_result = "denied"
+            result = SkillResult(
+                success=False,
+                error_code=exc.code,
+                reason=exc.message,
+                recoverable=False,
+                suggested_recovery=list(exc.suggested_recovery),
+            )
+            status = "rejected"
+        except Exception as exc:
+            result = SkillResult(
+                success=False,
+                error_code="SCHEDULER_PREEMPTION_UNSUPPORTED",
+                reason=str(exc),
+                recoverable=True,
+                suggested_recovery=["retry", "cancel"],
+            )
+            status = "failed"
+
+        result.audit_id = self._audit(
+            call,
+            permission_result,
+            safety_result,
+            resource_result,
+            backend_name,
+            status,
+            result.error_code,
+            started,
+            result.to_dict(),
+        )
+        self._emit_event(
+            "skill.checkpoint",
+            app_id=app.name,
+            session_id=session_id,
+            skill_name=skill_name,
+            syscall_id=str(getattr(syscall, "syscall_id", "")),
+            success=result.success,
+            error_code=result.error_code,
+            audit_id=result.audit_id,
+        )
+        return result
 
     def _requires_safety(self, constraints: dict[str, Any]) -> bool:
         return bool(

@@ -68,6 +68,9 @@ def sanitize_event_payload(value: Any) -> Any:
         for key, item in value.items():
             key_text = str(key)
             lowered = key_text.lower()
+            if lowered == "sanitized_metadata":
+                sanitized[key_text] = sanitize_event_payload(item)
+                continue
             if any(part in lowered for part in SENSITIVE_KEY_PARTS):
                 sanitized[key_text] = "[REDACTED]"
             else:

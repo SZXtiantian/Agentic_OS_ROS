@@ -70,6 +70,29 @@ class RobotCapabilityManager:
         self._audit_result(syscall, result)
         return result
 
+    def checkpoint_request(self, syscall: KernelSyscall, **metadata: Any) -> dict[str, Any]:
+        if self.skill_adapter is None:
+            result = {
+                "success": False,
+                "error_code": "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                "skill_name": self._skill_name(syscall),
+                "reason": "runtime robot checkpoint backend not configured",
+            }
+            self._audit_checkpoint(syscall, result)
+            return result
+        if not hasattr(self.skill_adapter, "checkpoint_request"):
+            result = {
+                "success": False,
+                "error_code": "SCHEDULER_PREEMPTION_UNSUPPORTED",
+                "skill_name": self._skill_name(syscall),
+                "reason": "robot backend does not expose checkpoint_request",
+            }
+            self._audit_checkpoint(syscall, result)
+            return result
+        result = self._normalize_result(self.skill_adapter.checkpoint_request(syscall, **metadata), syscall)
+        self._audit_checkpoint(syscall, result)
+        return result
+
     def _skill_name(self, syscall: KernelSyscall) -> str:
         query = getattr(syscall, "query", None)
         return str(getattr(query, "skill_name", "") or syscall.params.get("skill_name") or syscall.operation_type)
@@ -115,5 +138,20 @@ class RobotCapabilityManager:
                 agent_name=syscall.agent_name,
                 success=bool(result.get("success", False)),
                 error_code=str(result.get("error_code") or ""),
+                backend=self.skill_adapter.__class__.__name__ if self.skill_adapter is not None else "",
+            )
+
+    def _audit_checkpoint(self, syscall: KernelSyscall, result: dict[str, Any]) -> None:
+        if self.event_sink is not None:
+            self.event_sink.emit(
+                "robot.checkpoint",
+                operation_type=syscall.operation_type,
+                skill_name=self._skill_name(syscall),
+                syscall_id=syscall.syscall_id,
+                agent_name=syscall.agent_name,
+                success=bool(result.get("success", False)),
+                error_code=str(result.get("error_code") or ""),
+                checkpoint_id=str(result.get("checkpoint_id") or ""),
+                completed_coverage=list(result.get("completed_coverage") or []),
                 backend=self.skill_adapter.__class__.__name__ if self.skill_adapter is not None else "",
             )

@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from agentic_os.kernel.access import AlwaysAllowTestInterventionProvider
 from agentic_os.kernel.scheduler import RoundRobinKernelScheduler
-from agentic_os.kernel.system_call import KernelSyscall, LLMQuery, MemoryQuery, ToolQuery
+from agentic_os.kernel.system_call import KernelResponse, KernelSyscall, LLMQuery, MemoryQuery, RobotCapabilityQuery, ToolQuery
 from agentic_runtime.kernel_service import KernelService
 from agentic_runtime.server import RuntimeServer
 from runtime_test_helpers import create_test_runtime_server
@@ -264,6 +264,141 @@ def test_kernel_service_cancel_request_reports_missing_and_cancels_queued(tmp_pa
         and event["metadata"]["error_code"] == "SYSCALL_NOT_FOUND"
         for event in status["events"]["recent"]
     )
+
+
+def test_kernel_service_checkpoint_request_rejects_manager_without_real_checkpoint_support(tmp_path):
+    class BlockingMemoryManager:
+        def __init__(self):
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.active_syscall = None
+
+        def address_request(self, syscall):
+            self.active_syscall = syscall
+            self.started.set()
+            self.release.wait(timeout=2.0)
+            return {"success": False, "error_code": "MEMORY_INTERRUPTED"}
+
+    manager = BlockingMemoryManager()
+    service = KernelService(config=make_config(tmp_path), managers={"memory": manager})
+    service.start()
+    try:
+        result_holder = {}
+
+        def submit_request():
+            result_holder["result"] = service.execute_request(
+                "agent_a",
+                MemoryQuery(operation_type="recall", metadata={"kernel_internal": True}),
+                timeout_s=2.0,
+            )
+
+        thread = threading.Thread(target=submit_request)
+        thread.start()
+        assert manager.started.wait(timeout=2.0)
+        syscall = manager.active_syscall
+        assert syscall is not None
+
+        response = service.checkpoint_request(syscall.syscall_id, reason="operator_suspend")
+        manager.release.set()
+
+        assert response.success is False
+        assert response.error_code == "SCHEDULER_PREEMPTION_UNSUPPORTED"
+        assert response.metadata["reason"] == "manager does not expose checkpoint_request"
+        assert any(
+            event["event_type"] == "kernel.checkpoint_request"
+            and event["metadata"]["error_code"] == "SCHEDULER_PREEMPTION_UNSUPPORTED"
+            for event in service.status()["events"]["recent"]
+        )
+        thread.join(timeout=2.0)
+    finally:
+        manager.release.set()
+        service.stop()
+
+
+def test_kernel_service_checkpoint_request_delegates_and_persists_real_checkpoint(tmp_path):
+    class CheckpointRobotSensorManager:
+        def __init__(self):
+            self.started = threading.Event()
+            self.release = threading.Event()
+            self.active_syscall = None
+            self.checkpoint_calls = []
+
+        def address_request(self, syscall):
+            self.active_syscall = syscall
+            self.started.set()
+            self.release.wait(timeout=2.0)
+            return {"success": False, "error_code": "ROBOT_CAPABILITY_INTERRUPTED"}
+
+        def checkpoint_request(self, syscall, **metadata):
+            self.checkpoint_calls.append((syscall, metadata))
+            self.release.set()
+            return KernelResponse.ok(
+                {
+                    "checkpoint_id": "inspect_cp_real_1",
+                    "partial_result": {"visited_waypoints": ["north_hall"]},
+                    "completed_coverage": ["zone_north"],
+                },
+                data={
+                    "checkpoint_id": "inspect_cp_real_1",
+                    "partial_result": {"visited_waypoints": ["north_hall"]},
+                    "completed_coverage": ["zone_north"],
+                },
+            )
+
+    manager = CheckpointRobotSensorManager()
+    service = KernelService(config=make_config(tmp_path), managers={"robot_sensor": manager})
+    service.start()
+    try:
+        result_holder = {}
+
+        def submit_request():
+            result_holder["result"] = service.execute_request(
+                "agent_a",
+                RobotCapabilityQuery(
+                    operation_type="robot.inspect_area",
+                    skill_name="robot.inspect_area",
+                    app_id="app",
+                    session_id="sess_checkpoint",
+                    metadata={"kernel_internal": True, "session_id": "sess_checkpoint"},
+                ),
+                timeout_s=2.0,
+            )
+
+        thread = threading.Thread(target=submit_request)
+        thread.start()
+        assert manager.started.wait(timeout=2.0)
+        syscall = manager.active_syscall
+        assert syscall is not None
+
+        response = service.checkpoint_request(
+            syscall.syscall_id,
+            reason="operator_suspend",
+            node_id="inspect_node",
+            task_graph_id="graph_checkpoint",
+            agent_id="agent_checkpoint",
+        )
+        thread.join(timeout=2.0)
+
+        recovered = service.context.recover("sess_checkpoint", "agent_a", checkpoint="inspect_cp_real_1")
+
+        assert response.success is True
+        assert response.data["checkpoint"]["checkpoint_id"] == "inspect_cp_real_1"
+        assert response.data["checkpoint"]["partial_result"] == {"visited_waypoints": ["north_hall"]}
+        assert response.data["checkpoint"]["completed_coverage"] == ["zone_north"]
+        assert manager.checkpoint_calls[0][0] is syscall
+        assert manager.checkpoint_calls[0][1]["node_id"] == "inspect_node"
+        assert recovered is not None
+        assert recovered.state["checkpoint"] == response.data["checkpoint"]
+        assert recovered.state["completed_coverage"] == ["zone_north"]
+        assert any(
+            event["event_type"] == "kernel.checkpoint_request"
+            and event["metadata"]["checkpoint_id"] == "inspect_cp_real_1"
+            and event["metadata"]["completed_coverage"] == ["zone_north"]
+            for event in service.status()["events"]["recent"]
+        )
+    finally:
+        manager.release.set()
+        service.stop()
 
 
 def test_kernel_service_executes_memory_query(tmp_path):

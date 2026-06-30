@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "task_graph.schema.json",
+  "type": "object",
+  "required": [
+    "task_graph_id",
+    "user_goal_id",
+    "agent_id",
+    "app_id",
+    "session_id",
+    "root_goal",
+    "nodes",
+    "edges",
+    "status"
+  ],
+  "properties": {
+    "task_graph_id": { "type": "string", "minLength": 1 },
+    "user_goal_id": { "type": "string" },
+    "agent_id": { "type": "string" },
+    "app_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "root_goal": { "type": "string" },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": { "type": "object" }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["edge_id", "source_id", "target_id", "edge_type"],
+        "properties": {
+          "edge_id": { "type": "string" },
+          "source_id": { "type": "string" },
+          "target_id": { "type": "string" },
+          "edge_type": {
+            "type": "string",
+            "enum": [
+              "precedence",
+              "produces_fact",
+              "consumes_fact",
+              "reuses_fact",
+              "mutex",
+              "facilitates",
+              "hinders",
+              "temporal",
+              "safety_block"
+            ]
+          },
+          "fact_key": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "priority": { "type": "integer" },
+    "deadline_ns": { "type": ["integer", "null"] },
+    "max_concurrency": { "type": "integer", "minimum": 1 },
+    "route_intent": { "type": ["object", "null"] },
+    "coverage_requirements": { "type": "array", "items": { "type": "object" } },
+    "parent_goal_ids": { "type": "array", "items": { "type": "string" } },
+    "merged_goal_ids": { "type": "array", "items": { "type": "string" } },
+    "fusion_policy": { "type": "object" },
+    "planner_call_syscall_id": { "type": "string" },
+    "planner_model": { "type": "string" },
+    "planner_schema_id": { "type": "string" },
+    "validated_schema_version": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["created", "admitted", "running", "completed", "failed", "cancelled", "partially_suspended", "rejected"]
+    },
+    "created_ns": { "type": "integer" },
+    "updated_ns": { "type": "integer" }
+  },
+  "additionalProperties": true
+}

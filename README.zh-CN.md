@@ -25,6 +25,9 @@
 - **Agentic Runtime / Kernel**：权限、调度、内存、上下文、存储、技能和审计等 Runtime 服务。
 - **Agentic SDK**：面向 Agent App 的高层 API。
 - **Robot Capability Layer**：带策略约束的机器人任务能力分发。
+- **环境感知 DAG Scheduler**：显式 kernel policy
+  `env_aware_priority_dag`，用于全局 TaskGraph 调度、事实复用、资源租约、
+  生命周期联动、审计和 debug export。
 - **ROS2 Bridge Packages**：AgenticOS 拥有的 Runtime 与 ROS2 适配层。
 - **Agent App 模板和示例**：用于开发原生 Agent App 的起点。
 
@@ -65,7 +68,9 @@ User
 ```bash
 cd /home/ubuntu/Agentic_OS_ROS_publish
 scripts/run_tests.sh
-scripts/verify_agentic_app_tutorials.sh
+scripts/verify_foundation.sh
+scripts/verify_capability_truth.sh
+scripts/verify_no_fake_mock.sh
 ```
 
 Runtime 开发：
@@ -75,6 +80,12 @@ cd /home/ubuntu/Agentic_OS_ROS_publish/agentic_runtime_src
 python -m pip install -e ".[dev]"
 PYTHONPATH=. pytest -q
 ```
+
+环境感知调度器文档见
+[`agentic_runtime_src/docs/scheduler_environment_aware_dag.md`](agentic_runtime_src/docs/scheduler_environment_aware_dag.md)。
+真实 scheduler LLM 和 capability 验证脚本需要显式开启；在真实 provider、
+bridge 和 capability backend 尚未配置时，会返回
+`UNVERIFIED_REAL_DEPENDENCY`。
 
 ---
 

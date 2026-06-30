@@ -45,4 +45,20 @@ scripts/verify_capability_truth.sh
 scripts/verify_real_ros2.sh
 scripts/verify_real_llm.sh
 scripts/verify_real_human.sh
+scripts/verify_real_scheduler_llm.sh
+scripts/verify_real_scheduler_capability.sh
+scripts/verify_no_fake_mock.sh
 ```
+
+## Scheduler Real-Only Contract
+
+The `env_aware_priority_dag` kernel policy keeps the same real-only contract.
+TaskGraph planning and fusion-plan explanation use runtime-owned `LLMQuery`
+syscalls; capability TaskNodes use typed kernel queries submitted through
+`KernelService.execute_request`. Missing providers or bridge backends return
+structured errors such as `SCHEDULER_LLM_REAL_PROVIDER_REQUIRED`,
+`SCHEDULER_CAPABILITY_UNAVAILABLE`, or `UNVERIFIED_REAL_DEPENDENCY`.
+
+Environment facts are reusable only when they carry traceable syscall and audit
+metadata from a real capability result. LLM planning output cannot create
+physical facts such as `cup_pose`.

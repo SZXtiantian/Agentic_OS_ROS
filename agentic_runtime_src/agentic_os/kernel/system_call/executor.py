@@ -59,6 +59,8 @@ class SyscallExecutor:
     ) -> None:
         self._handlers: dict[str, SyscallHandler] = {}
         self._lock = Lock()
+        self._active_lock = Lock()
+        self._active_syscalls: dict[str, KernelSyscall] = {}
         self._pid_lock = Lock()
         self._next_pid_value = 0
         self.queue_store = queue_store or KernelQueueStore()
@@ -118,54 +120,58 @@ class SyscallExecutor:
                     metadata={"agent_id": agent_id, "syscall_id": syscall.syscall_id},
                 )
 
-        syscall.mark_active()
-        syscall.set_pid(self._next_pid())
-        syscall.set_created_time(time.time())
-        self._emit("syscall.created", syscall, queue_name=getattr(syscall, "queue_name", syscall.target))
-        syscall.mark_queued()
-        queue_name = getattr(syscall, "queue_name", syscall.target)
-        self.queue_store.add(queue_name, syscall)
+        self._track_syscall(syscall)
+        try:
+            syscall.mark_active()
+            syscall.set_pid(self._next_pid())
+            syscall.set_created_time(time.time())
+            self._emit("syscall.created", syscall, queue_name=getattr(syscall, "queue_name", syscall.target))
+            syscall.mark_queued()
+            queue_name = getattr(syscall, "queue_name", syscall.target)
+            self.queue_store.add(queue_name, syscall)
 
-        wait_timeout = self.default_timeout_s if timeout_s is None else timeout_s
-        syscall.time_limit_s = wait_timeout
-        completed = syscall.wait(wait_timeout)
-        ended = time.monotonic()
-        if not completed:
-            response = KernelResponse.error("KERNEL_SYSCALL_TIMEOUT")
-            if syscall.status in {
-                KernelSyscallStatus.CREATED,
-                KernelSyscallStatus.ACTIVE,
-                KernelSyscallStatus.QUEUED,
-                KernelSyscallStatus.SUSPENDING,
-                KernelSyscallStatus.SUSPENDED,
-                KernelSyscallStatus.RESUMING,
-            }:
-                syscall.timeout(response=response)
-                self._emit("syscall.timeout", syscall, queue_name=queue_name, error_code=response.error_code)
-            else:
-                self._emit("syscall.wait_timeout", syscall, queue_name=queue_name, error_code=response.error_code)
+            wait_timeout = self.default_timeout_s if timeout_s is None else timeout_s
+            syscall.time_limit_s = wait_timeout
+            completed = syscall.wait(wait_timeout)
+            ended = time.monotonic()
+            if not completed:
+                response = KernelResponse.error("KERNEL_SYSCALL_TIMEOUT")
+                if syscall.status in {
+                    KernelSyscallStatus.CREATED,
+                    KernelSyscallStatus.ACTIVE,
+                    KernelSyscallStatus.QUEUED,
+                    KernelSyscallStatus.SUSPENDING,
+                    KernelSyscallStatus.SUSPENDED,
+                    KernelSyscallStatus.RESUMING,
+                }:
+                    syscall.timeout(response=response)
+                    self._emit("syscall.timeout", syscall, queue_name=queue_name, error_code=response.error_code)
+                else:
+                    self._emit("syscall.wait_timeout", syscall, queue_name=queue_name, error_code=response.error_code)
+                return SyscallExecutionResult(
+                    syscall=syscall,
+                    response=response,
+                    success=False,
+                    error_code=response.error_code,
+                    started_monotonic=started,
+                    ended_monotonic=ended,
+                    metadata={"queue_name": queue_name, "pid": syscall.get_pid(), "wait_timeout": True},
+                )
+
+            response = syscall.get_response()
+            success = self._response_success(syscall, response)
+            error_code = self._response_error_code(syscall, response)
             return SyscallExecutionResult(
                 syscall=syscall,
                 response=response,
-                success=False,
-                error_code=response.error_code,
+                success=success,
+                error_code=error_code,
                 started_monotonic=started,
                 ended_monotonic=ended,
-                metadata={"queue_name": queue_name, "pid": syscall.get_pid(), "wait_timeout": True},
+                metadata={"queue_name": queue_name, "pid": syscall.get_pid()},
             )
-
-        response = syscall.get_response()
-        success = self._response_success(syscall, response)
-        error_code = self._response_error_code(syscall, response)
-        return SyscallExecutionResult(
-            syscall=syscall,
-            response=response,
-            success=success,
-            error_code=error_code,
-            started_monotonic=started,
-            ended_monotonic=ended,
-            metadata={"queue_name": queue_name, "pid": syscall.get_pid()},
-        )
+        finally:
+            self._untrack_syscall(syscall.syscall_id)
 
     def execute(self, syscall: KernelSyscall) -> SyscallExecutionResult:
         with self._lock:
@@ -238,6 +244,26 @@ class SyscallExecutor:
         )
         self._emit_cancel_result(syscall_id, response)
         return response
+
+    def active_syscall(self, syscall_id: str) -> KernelSyscall | None:
+        with self._active_lock:
+            return self._active_syscalls.get(syscall_id)
+
+    def active_syscalls(self) -> list[KernelSyscall]:
+        with self._active_lock:
+            return list(self._active_syscalls.values())
+
+    def _track_syscall(self, syscall: KernelSyscall) -> None:
+        if not syscall.syscall_id:
+            return
+        with self._active_lock:
+            self._active_syscalls[syscall.syscall_id] = syscall
+
+    def _untrack_syscall(self, syscall_id: str) -> None:
+        if not syscall_id:
+            return
+        with self._active_lock:
+            self._active_syscalls.pop(syscall_id, None)
 
     def _next_pid(self) -> int:
         with self._pid_lock:

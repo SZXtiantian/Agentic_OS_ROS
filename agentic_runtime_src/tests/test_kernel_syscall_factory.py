@@ -63,6 +63,20 @@ def test_factory_creates_robot_motion_syscall_lane():
     assert syscall.target == KernelQueueName.ROBOT_MOTION
 
 
+def test_factory_routes_manipulation_to_robot_motion_lane():
+    robot_capability = create_syscall(
+        "agent_a",
+        RobotCapabilityQuery(operation_type="execute_skill", skill_name="manipulation.pick_color_block"),
+    )
+    skill = create_syscall(
+        "agent_a",
+        SkillQuery(operation_type="skill_call", skill_name="manipulation.pick_color_block"),
+    )
+
+    assert robot_capability.queue_name == KernelQueueName.ROBOT_MOTION
+    assert skill.queue_name == KernelQueueName.ROBOT_MOTION
+
+
 def test_factory_routes_robot_sensor_and_human_lanes():
     sensor = create_syscall(
         "agent_a",

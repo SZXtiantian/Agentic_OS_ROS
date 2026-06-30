@@ -12,7 +12,7 @@ class RosBridgeClient(Protocol):
 
     async def navigate_to(self, place: str, timeout_s: int, cancel_event=None) -> dict[str, Any]: ...
 
-    async def inspect_area(self, place: str, timeout_s: int) -> dict[str, Any]: ...
+    async def inspect_area(self, place: str, timeout_s: int, request_id: str = "") -> dict[str, Any]: ...
 
     async def observe(self, target: str, timeout_s: int) -> dict[str, Any]: ...
 
@@ -56,6 +56,17 @@ class RosBridgeClient(Protocol):
     ) -> dict[str, Any]: ...
 
     async def stop_robot(self, reason: str) -> dict[str, Any]: ...
+
+    async def checkpoint_capability(
+        self,
+        *,
+        skill_name: str,
+        args: dict[str, Any],
+        app_id: str,
+        session_id: str,
+        syscall_id: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]: ...
 
     async def ask_human(self, question: str, options=None, timeout_s: int = 60, require_confirmation: bool = False) -> dict[str, Any]: ...
 

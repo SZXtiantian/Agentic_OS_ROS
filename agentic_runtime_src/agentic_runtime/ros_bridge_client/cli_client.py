@@ -160,12 +160,12 @@ class Ros2CliBridgeClient:
             "result": result_json,
         }
 
-    async def inspect_area(self, place: str, timeout_s: int) -> dict[str, Any]:
+    async def inspect_area(self, place: str, timeout_s: int, request_id: str = "") -> dict[str, Any]:
         try:
             output = await self._service_call(
                 "/agentic/perception/inspect_area",
                 "agentic_msgs/srv/InspectArea",
-                {"place": place, "request_id": new_id("inspect"), "timeout_s": int(timeout_s)},
+                {"place": place, "request_id": request_id or new_id("inspect"), "timeout_s": int(timeout_s)},
                 timeout_s + 5,
             )
             data = _parse_required_response(output)
@@ -488,6 +488,80 @@ class Ros2CliBridgeClient:
             "reason": reason,
         }
 
+    async def checkpoint_capability(
+        self,
+        *,
+        skill_name: str,
+        args: dict[str, Any],
+        app_id: str,
+        session_id: str,
+        syscall_id: str,
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        payload = {
+            "skill_name": skill_name,
+            "args_json": json.dumps(args, ensure_ascii=False, sort_keys=True),
+            "app_id": app_id,
+            "session_id": session_id,
+            "syscall_id": syscall_id,
+            "metadata_json": json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+        }
+        try:
+            output = await self._service_call(
+                "/agentic/capability/checkpoint",
+                "agentic_msgs/srv/CheckpointCapability",
+                payload,
+                self.timeout_s,
+            )
+            data = _parse_required_response(output)
+            success = self._finalize_response(
+                "checkpoint_capability",
+                data,
+                "success",
+                default_failure_code="SCHEDULER_PREEMPTION_UNSUPPORTED",
+            )
+        except RosBridgeCommandError as exc:
+            self._record_error("checkpoint_capability", exc)
+            return _bridge_error(
+                exc,
+                checkpoint={},
+                checkpoint_id="",
+                partial_result={},
+                completed_coverage=[],
+                progress={},
+                skill_name=skill_name,
+                syscall_id=syscall_id,
+            )
+        result = _checkpoint_result_from_bridge_data(data)
+        if success and not _checkpoint_has_preserved_progress(result):
+            reason = "ROS2 bridge checkpoint result did not include preserved progress"
+            self._record_operation_result(
+                "checkpoint_capability",
+                success=False,
+                error_code="ROS_RESULT_INVALID",
+                reason=reason,
+            )
+            return {
+                "success": False,
+                "error_code": "ROS_RESULT_INVALID",
+                "reason": reason,
+                "checkpoint": {},
+                "checkpoint_id": "",
+                "partial_result": {},
+                "completed_coverage": [],
+                "progress": {},
+                "skill_name": skill_name,
+                "syscall_id": syscall_id,
+            }
+        return {
+            "success": success,
+            "error_code": str(data.get("error_code", "")),
+            "reason": str(data.get("reason", "")),
+            "skill_name": skill_name,
+            "syscall_id": syscall_id,
+            **result,
+        }
+
     async def ask_human(
         self,
         question: str,
@@ -723,6 +797,49 @@ def _decode_json_field(value: Any) -> dict[str, Any]:
     return decoded if isinstance(decoded, dict) else {}
 
 
+def _decode_list_field(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return list(value)
+    if not value:
+        return []
+    try:
+        decoded = json.loads(str(value))
+    except json.JSONDecodeError:
+        return []
+    return list(decoded) if isinstance(decoded, list) else []
+
+
+def _checkpoint_result_from_bridge_data(data: dict[str, Any]) -> dict[str, Any]:
+    checkpoint = _decode_json_field(data.get("checkpoint_json") or data.get("checkpoint"))
+    partial_result = _decode_json_field(data.get("partial_result_json") or data.get("partial_result"))
+    progress = _decode_json_field(data.get("progress_json") or data.get("progress"))
+    completed_coverage = _decode_list_field(data.get("completed_coverage_json") or data.get("completed_coverage"))
+    if not partial_result:
+        partial_result = _decode_json_field(checkpoint.get("partial_result"))
+    if not progress:
+        progress = _decode_json_field(checkpoint.get("progress"))
+    if not completed_coverage:
+        completed_coverage = _decode_list_field(checkpoint.get("completed_coverage"))
+    checkpoint_id = str(data.get("checkpoint_id") or checkpoint.get("checkpoint_id") or checkpoint.get("id") or "")
+    return {
+        "checkpoint": checkpoint,
+        "checkpoint_id": checkpoint_id,
+        "partial_result": partial_result,
+        "completed_coverage": completed_coverage,
+        "progress": progress,
+    }
+
+
+def _checkpoint_has_preserved_progress(result: dict[str, Any]) -> bool:
+    return bool(
+        result.get("checkpoint_id")
+        or result.get("partial_result")
+        or result.get("completed_coverage")
+        or result.get("progress")
+        or result.get("checkpoint")
+    )
+
+
 def _parse_response(output: str) -> dict[str, Any]:
     text = output.strip()
     if not text:
@@ -786,6 +903,11 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         "detection_json",
         "alignment_json",
         "verification_json",
+        "checkpoint_id",
+        "checkpoint_json",
+        "partial_result_json",
+        "completed_coverage_json",
+        "progress_json",
         "evidence_path",
         "evidence_json",
         "image_path",
@@ -800,7 +922,7 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         match = re.search(rf"\b{key}\s*[:=]\s*([^\n,)]+)", text)
         if match:
             result[key] = match.group(1).strip()
-    for key in ["objects", "anomalies"]:
+    for key in ["objects", "anomalies", "completed_coverage"]:
         match = re.search(rf"\b{key}\s*[:=]\s*(\[[^\]]*\])", text)
         if match:
             try:

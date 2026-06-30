@@ -53,3 +53,14 @@ DEFAULT_SCHEDULER_LANES = (
     ),
     SchedulerLaneSpec("human", KernelQueueName.HUMAN, concurrent=True, max_workers=1, manager_key="human"),
 )
+
+
+DEFAULT_DAG_DISPATCH_LANES = {
+    "emergency": KernelQueueName.ROBOT_MOTION,
+    "safety": KernelQueueName.ROBOT_SENSOR,
+    "motion": KernelQueueName.ROBOT_MOTION,
+    "perception": KernelQueueName.ROBOT_SENSOR,
+    "llm_tool": KernelQueueName.LLM,
+    "io_audit": KernelQueueName.STORAGE,
+    "background": KernelQueueName.CONTEXT,
+}

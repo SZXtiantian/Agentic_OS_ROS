@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fusion_plan.schema.json",
+  "type": "object",
+  "required": ["fusion_plan_id", "incoming_graph_id", "base_global_dag_revision", "accepted", "reason", "reuse_edges"],
+  "properties": {
+    "fusion_plan_id": { "type": "string" },
+    "incoming_graph_id": { "type": "string" },
+    "base_global_dag_revision": { "type": "integer" },
+    "accepted": { "type": "boolean" },
+    "reason": { "type": "string" },
+    "reject_reason": { "type": "string" },
+    "reuse_edges": { "type": "array", "items": { "type": "object" } },
+    "insertions": { "type": "array", "items": { "type": "object" } },
+    "reorderings": { "type": "array", "items": { "type": "object" } },
+    "blocked_nodes": { "type": "array", "items": { "type": "string" } },
+    "coverage_impact": { "type": "object" },
+    "resource_impact": { "type": "object" },
+    "safety_impact": { "type": "object" },
+    "required_audit_events": { "type": "array", "items": { "type": "string" } },
+    "audit_metadata": {
+      "type": "object",
+      "properties": {
+        "fusion_score": { "type": "integer" },
+        "fusion_score_components": {
+          "type": "object",
+          "properties": {
+            "route_overlap_score": { "type": "integer" },
+            "fact_reuse_score": { "type": "integer" },
+            "resource_window_score": { "type": "integer" },
+            "deadline_slack_score": { "type": "integer" },
+            "coverage_preservation_score": { "type": "integer" },
+            "user_priority_score": { "type": "integer" },
+            "safety_risk_penalty": { "type": "integer" },
+            "coverage_loss_penalty": { "type": "integer" },
+            "resource_contention_penalty": { "type": "integer" },
+            "fusion_score": { "type": "integer" }
+          },
+          "additionalProperties": true
+        },
+        "fusion_score_inputs": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
