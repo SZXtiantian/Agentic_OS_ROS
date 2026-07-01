@@ -1,10 +1,8 @@
 # 如何开发 Agent App
 
-{% file src="../assets/color-block-grasper/demo-lift-red-block.mp4" %}
-Demo：真实机器人执行“夹起红色方块”的效果。
-{% endfile %}
+{% embed url="https://cdn.jsdelivr.net/gh/SZXtiantian/Agentic_OS_ROS@main/gitbook/zh/assets/color-block-grasper/demo-lift-red-block.mp4" %}
 
-_如果浏览器没有自动预览，可以点击上面的 Demo 文件打开播放。_
+_Demo：真实机器人执行“夹起红色方块”的效果。_
 
 这一节完整演示如何从零开发一个 Agent App。我们要开发的 Agent 叫 **彩色积木抓取 Agent**：用户用自然语言说“夹起红色方块”，Agent 负责理解任务、确认风险、调用视觉识别、控制机械臂和夹爪完成抓取，再验证积木确实被夹住，最后根据计划保持夹持或放到指定位置并保存执行记录。
 
