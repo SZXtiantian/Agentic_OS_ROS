@@ -1,24 +1,31 @@
-# Agent App SDK Overview
+# Agentic SDK
 
-The Agent App SDK is accessed through the Runtime-injected `AgentContext`. Apps do not touch ROS2 directly; they call high-level namespaces.
+Agentic SDK is the Python interface used directly by Agent App code. Runtime injects an `AgentContext`, and the app uses `ctx` to request capabilities protected by permissions, safety checks, resource locks, and audit logs.
+
+Agent Apps do not import `rclpy`, publish `/cmd_vel`, call Nav2 or MoveIt directly, or talk to robot vendor drivers.
+
+## SDK Namespaces
 
 | Namespace | Purpose |
 | --- | --- |
-| `ctx.robot` | Robot state, navigation, inspection, stop |
-| `ctx.world` | Place resolution and world-model reads |
-| `ctx.memory` | App-level key-value memory |
-| `ctx.human` | Human questions and confirmations |
-| `ctx.report` | User-facing or runtime report messages |
-| `ctx.llm` | Runtime-owned JSON planning |
-| `ctx.perception` | Observation, photo capture, evidence |
-| `ctx.arm` | Arm state and named actions |
-| `ctx.gripper` | Gripper open, close, and controlled commands |
-| `ctx.storage` | Runtime-managed photo/evidence index |
-| `ctx.kernel` | Advanced syscall facade |
+| `ctx.robot` | Read robot state, navigate, inspect an area, stop |
+| `ctx.world` | Resolve place names into Runtime-usable locations |
+| `ctx.perception` | Observe the environment, capture photos, read perception results |
+| `ctx.arm` | Read arm state and run named arm motions |
+| `ctx.gripper` | Open, close, or set controlled gripper commands |
+| `ctx.memory` | Store and recall small pieces of app data |
+| `ctx.storage` | Query app-visible evidence records; currently exposes recent photo records |
+| `ctx.human` | Ask a human or request confirmation |
+| `ctx.report` | Report progress and results |
+| `ctx.llm` | Ask Runtime to run structured LLM calls |
 
-## Result Model
+`ctx.kernel.*` is not part of the Agentic SDK getting-started surface. It is the Agentic System Call facade for apps that need to issue Kernel system calls directly.
 
-Low-level skills return:
+## Result Behavior
+
+SDK methods return dataclasses, plain Python values, or `SkillResult` on success. Failures usually raise `AgenticRuntimeError` or a subclass.
+
+The basic `SkillResult` shape is:
 
 ```python
 SkillResult(
@@ -32,9 +39,7 @@ SkillResult(
 )
 ```
 
-High-level SDK calls return dataclasses or `SkillResult` on success and usually raise `AgenticRuntimeError` subclasses on failure.
-
-## Minimal Example
+## Example
 
 ```python
 from agentic_runtime.errors import AgenticRuntimeError

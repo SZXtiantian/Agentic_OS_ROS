@@ -1,8 +1,6 @@
 # ctx.world.resolve_place
 
-`resolve_place` 将用户输入或业务地点名解析为 Runtime 已注册地点。
-
-## Signature
+`resolve_place`: 把地点名称解析成 Runtime 可用的 `PlaceRef`。
 
 ```python
 async def resolve_place(name: str) -> PlaceRef
@@ -10,44 +8,27 @@ async def resolve_place(name: str) -> PlaceRef
 
 ## Parameters
 
-| 参数 | 类型 | 说明 |
-| --- | --- | --- |
-| `name` | `str` | 地点名，例如 `"厨房"`、`"客厅"` |
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `name` | `str` | required | App 中使用的地点名称，例如 `"厨房"` 或 `"workspace"`。 |
 
 ## Returns
 
 `PlaceRef`
 
 ```python
-id: str
-name: str
-frame_id: str
-pose: dict[str, float]
-allowed: bool
-metadata: dict
+PlaceRef(
+    name: str,
+    kind: str = "",
+    frame_id: str = "map",
+    pose: dict = {},
+    metadata: dict = {},
+)
 ```
-
-## Runtime Contract
-
-| 项 | 值 |
-| --- | --- |
-| Skill | `world.resolve_place` |
-| 权限 | `world.read` |
-| 后端 | ROS2 service `/agentic/world/resolve_place` |
-| 资源锁 | 无 |
-| Timeout | `10s` |
-
-## Common Errors
-
-- `PLACE_NOT_FOUND`
-- `PERMISSION_DENIED`
-- `ROS_BRIDGE_UNAVAILABLE`
-- `ROS_SERVICE_UNAVAILABLE`
 
 ## Example
 
 ```python
 place = await ctx.world.resolve_place("厨房")
-if not place.allowed:
-    return {"success": False, "error_code": "FORBIDDEN_ZONE", "reason": f"{place.name} is forbidden"}
+await ctx.robot.navigate_to(place.name)
 ```

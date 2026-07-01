@@ -1,8 +1,6 @@
 # ctx.memory.remember
 
-`remember` writes app-level memory.
-
-## Signature
+`remember`: Store a piece of app data under a key.
 
 ```python
 async def remember(key: str, value: Any) -> SkillResult
@@ -10,33 +8,17 @@ async def remember(key: str, value: Any) -> SkillResult
 
 ## Parameters
 
-| Parameter | Type | Description |
-| --- | --- | --- |
-| `key` | `str` | Memory key |
-| `value` | `Any` | JSON-like value |
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `key` | `str` | required | Memory key. |
+| `value` | `Any` | required | Value to store, usually compact JSON-compatible data. |
 
 ## Returns
 
 `SkillResult`
 
-## Runtime Contract
-
-| Item | Value |
-| --- | --- |
-| Skill | `memory.remember` |
-| Permission | `memory.write` |
-| Backend | Runtime internal memory store, SQLite by default |
-| Timeout | `3s` |
-
-## Common Errors
-
-- `PERMISSION_DENIED`
-- `MEMORY_PROVIDER_UNAVAILABLE`
-- `MEMORY_RESULT_INVALID`
-- `SCHEMA_INVALID`
-
 ## Example
 
 ```python
-await ctx.memory.remember("last_requested_place", "kitchen")
+await ctx.memory.remember("last_inspection", {"place": "kitchen", "ok": True})
 ```

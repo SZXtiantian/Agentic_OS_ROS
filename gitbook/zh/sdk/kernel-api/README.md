@@ -1,10 +1,22 @@
-# Kernel API
+# Agentic System Calls
 
-`ctx.kernel` 是进阶 syscall facade，适合需要 context、memory、storage、tool、skill、access 等 Runtime/Kernel 能力的应用。普通机器人动作优先使用 `ctx.robot.*`。
+`ctx.kernel.*` 是 Agentic System Call facade。它把 Python 调用转换成 Kernel 可调度、可审计的 system call operation。
 
-如果要按 Runtime 源码目录理解这些能力，请看 [Kernel Modules](../../kernel-modules/README.md)。
+普通 Agent App 先使用 Agentic SDK，例如 `ctx.robot.*`、`ctx.memory.*`、`ctx.report.*`。只有当 App 需要直接操作 Kernel context、memory、storage、LLM、tool 或 skill 调度时，才使用 `ctx.kernel.*`。
 
-所有 Kernel SDK 调用返回：
+## Call Model
+
+```text
+ctx.kernel.storage.write(...)
+  -> StorageQuery(operation_type="sto_write")
+  -> Kernel scheduler / executor
+  -> storage manager
+  -> KernelSDKResult
+```
+
+## Result
+
+大多数 `ctx.kernel.*` 调用返回：
 
 ```python
 KernelSDKResult(
@@ -18,25 +30,19 @@ KernelSDKResult(
 )
 ```
 
-## APIs
+`ctx.kernel.access.*` 是 access manager facade，返回 access decision dict，不进入 queued system call。
 
-| Namespace | Methods |
+## Namespaces
+
+| Facade | System call operations |
 | --- | --- |
-| `ctx.kernel` | `status()`、`cancel(syscall_id="")` |
-| `ctx.kernel.context` | `put`、`get`、`delete`、`list`、`snapshot`、`recover`、`compact`、`clear` |
-| `ctx.kernel.memory` | `remember`、`add`、`search`、`get`、`update`、`delete`、`list`、`export`、`import_` |
-| `ctx.kernel.storage` | `mount`、`mkdir`、`create_file`、`write`、`read`、`list`、`delete`、`stat`、`history`、`rollback`、`share`、`index`、`retrieve` |
-| `ctx.kernel.tool` | `call`、`list`、`describe`、`load_manifest`、`unload`、`register_builtin`、`status`、`cancel` |
-| `ctx.kernel.skill` | `call`、`list`、`describe`、`status`、`cancel` |
-| `ctx.kernel.llm` | `chat`、`complete`、`embed`、`status`、`cancel` |
-| `ctx.kernel.access` | `check`、`assert_allowed` |
-
-## 重要约束
-
-- `ctx.kernel.tool.call("robot.navigate_to", ...)` 会被拒绝，错误码是 `TOOL_FORBIDDEN_ROBOT_CAPABILITY`。
-- 机器人动作仍应走 `ctx.robot.*` 或受控的 `ctx.kernel.skill.call(...)`。
-- 高风险 storage、tool、skill、robot 或 human 操作可能触发 access/intervention。
-- 不要依赖 Runtime/Kernel manager 内部类。
+| `ctx.kernel.context` | `ctx_put`, `ctx_get`, `ctx_delete`, `ctx_list`, `ctx_snapshot`, `ctx_recover`, `ctx_compact`, `ctx_clear` |
+| `ctx.kernel.memory` | `mem_remember`, `mem_search`, `mem_get`, `mem_update`, `mem_delete`, `mem_list`, `mem_export`, `mem_import` |
+| `ctx.kernel.storage` | `sto_mount`, `sto_mkdir`, `sto_create_file`, `sto_write`, `sto_read`, `sto_list`, `sto_delete`, `sto_stat`, `sto_history`, `sto_rollback`, `sto_share`, `sto_index`, `sto_retrieve` |
+| `ctx.kernel.llm` | `llm_chat`, `llm_complete`, `llm_embed`, `llm_status`, `llm_cancel` |
+| `ctx.kernel.tool` | `tool_call`, `tool_list`, `tool_describe`, `tool_load_manifest`, `tool_unload`, `tool_register_builtin`, `tool_status`, `tool_cancel` |
+| `ctx.kernel.skill` | `skill_call`, `skill_list`, `skill_describe`, `skill_status`, `skill_cancel` |
+| `ctx.kernel.access` | access decision facade; not a queued system call |
 
 ## Example
 

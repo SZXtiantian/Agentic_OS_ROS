@@ -1,11 +1,15 @@
 # ctx.kernel.access
 
-Kernel access API explicitly checks whether an action is allowed on a resource.
+`ctx.kernel.access` is an access manager facade for explicitly checking whether an action is allowed on a resource.
 
-## Methods
+It does not create a queued Agentic System Call and has no `operation_type`. It returns an access decision dict instead of `KernelSDKResult`.
+
+## ctx.kernel.access.check
+
+`check`: Return an access decision.
 
 ```python
-await ctx.kernel.access.check(
+async def check(
     action: str,
     resource_type: str,
     resource_id: str,
@@ -17,8 +21,14 @@ await ctx.kernel.access.check(
     irreversible: bool = False,
     reason: str = "",
 ) -> dict
+```
 
-await ctx.kernel.access.assert_allowed(...) -> dict
+## ctx.kernel.access.assert_allowed
+
+`assert_allowed`: Call `check` and raise `KernelAccessDeniedError` if access is denied.
+
+```python
+async def assert_allowed(*args, **kwargs) -> dict
 ```
 
 ## Returns

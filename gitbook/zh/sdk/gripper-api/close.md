@@ -1,8 +1,6 @@
 # ctx.gripper.close
 
-关闭夹爪。`force="low"` 会映射为 allowlist 命令 `"close_gripper_low_force"`。
-
-## Signature
+`close`: 关闭夹爪。
 
 ```python
 async def close(force: str = "low", timeout_s: int = 5) -> SkillResult
@@ -12,11 +10,15 @@ async def close(force: str = "low", timeout_s: int = 5) -> SkillResult
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `force` | `str` | `"low"` | 夹爪力度策略 |
-| `timeout_s` | `int` | `5` | 超时时间 |
+| `force` | `str` | `"low"` | 夹爪力度。默认低力度。 |
+| `timeout_s` | `int` | `5` | 等待命令完成的超时时间。 |
+
+## Returns
+
+`SkillResult`
 
 ## Example
 
 ```python
-await ctx.gripper.close(force="low")
+await ctx.gripper.close(force="low", timeout_s=5)
 ```

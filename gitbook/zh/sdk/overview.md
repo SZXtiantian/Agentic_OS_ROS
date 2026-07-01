@@ -1,24 +1,31 @@
-# Agent App SDK 概览
+# Agentic SDK
 
-Agent App SDK 的入口是 Runtime 注入的 `AgentContext`。应用代码不直接访问 ROS2，而是调用高层 namespace：
+Agentic SDK 是 Agent App 代码直接使用的 Python 接口。Runtime 会把 `AgentContext` 注入 App，App 通过 `ctx` 请求受权限、安全检查、资源锁和审计保护的能力。
+
+Agent App 不直接导入 `rclpy`，不发布 `/cmd_vel`，不直接调用 Nav2、MoveIt 或机器人厂商驱动。
+
+## SDK Namespaces
 
 | Namespace | 用途 |
 | --- | --- |
-| `ctx.robot` | 机器人状态、导航、区域检查、停止 |
-| `ctx.world` | 地点解析和世界模型读取 |
-| `ctx.memory` | 应用级键值记忆 |
+| `ctx.robot` | 读取机器人状态、导航、区域检查、停止 |
+| `ctx.world` | 把地点名称解析成 Runtime 可用的位置 |
+| `ctx.perception` | 观察环境、拍照、获取感知结果 |
+| `ctx.arm` | 读取机械臂状态、执行命名动作 |
+| `ctx.gripper` | 控制夹爪开合或设置夹爪命令 |
+| `ctx.memory` | 保存和读取 App 的小段数据 |
+| `ctx.storage` | 查询 App 可用的 evidence 记录；当前公开最近照片记录 |
 | `ctx.human` | 向人询问或请求确认 |
-| `ctx.report` | 向用户或运行日志报告消息 |
-| `ctx.llm` | Runtime-owned JSON planning |
-| `ctx.perception` | 观察、拍照和感知 evidence |
-| `ctx.arm` | 机械臂状态和命名动作 |
-| `ctx.gripper` | 夹爪打开、关闭和低层受控命令 |
-| `ctx.storage` | Runtime 管理的照片/evidence 索引 |
-| `ctx.kernel` | 进阶 syscall facade |
+| `ctx.report` | 报告任务进度和结果 |
+| `ctx.llm` | 请求 Runtime 执行结构化 LLM 调用 |
 
-## 返回模型
+`ctx.kernel.*` 不放在 Agentic SDK 入门表里。它是 Agentic System Call facade，用于需要直接发起 Kernel system call 的场景。
 
-底层 skill 返回：
+## Result Behavior
+
+SDK 方法成功时返回 dataclass、普通 Python 值或 `SkillResult`。失败时通常抛出 `AgenticRuntimeError` 或其子类。
+
+`SkillResult` 的基本形状是：
 
 ```python
 SkillResult(
@@ -32,9 +39,7 @@ SkillResult(
 )
 ```
 
-高层 SDK 成功时返回 dataclass 或 `SkillResult`；失败时通常抛出 `AgenticRuntimeError` 或子类。
-
-## 最小示例
+## Example
 
 ```python
 from agentic_runtime.errors import AgenticRuntimeError

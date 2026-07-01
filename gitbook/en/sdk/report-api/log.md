@@ -1,8 +1,6 @@
 # ctx.report.log
 
-`log` is a convenience wrapper around `report.say`. It formats messages as `[level] message`.
-
-## Signature
+`log`: Report a message with a level prefix.
 
 ```python
 async def log(message: str, level: str = "info") -> SkillResult
@@ -12,8 +10,8 @@ async def log(message: str, level: str = "info") -> SkillResult
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `message` | `str` | required | Log message |
-| `level` | `str` | `"info"` | Log level |
+| `message` | `str` | required | Message to report. |
+| `level` | `str` | `"info"` | Message level added as a prefix. |
 
 ## Returns
 
@@ -22,5 +20,5 @@ async def log(message: str, level: str = "info") -> SkillResult
 ## Example
 
 ```python
-await ctx.report.log("inspection completed", level="info")
+await ctx.report.log("Starting kitchen inspection", level="info")
 ```

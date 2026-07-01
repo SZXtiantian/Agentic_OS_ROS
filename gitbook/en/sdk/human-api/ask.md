@@ -1,8 +1,6 @@
 # ctx.human.ask
 
-`ask` asks a human operator or requests confirmation. The current implementation uses the Runtime human file queue and does not auto-answer.
-
-## Signature
+`ask`: Ask a human operator a question and wait for an answer or confirmation.
 
 ```python
 async def ask(
@@ -17,46 +15,30 @@ async def ask(
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `question` | `str` | required | Question text |
-| `options` | `list[str] \| None` | `None` | Optional choices |
-| `timeout_s` | `int` | `60` | Seconds to wait for operator response |
-| `require_confirmation` | `bool` | `False` | Whether this is a confirmation flow |
+| `question` | `str` | required | Question shown to the operator. |
+| `options` | `list[str] \| None` | `None` | Optional answer choices. |
+| `timeout_s` | `int` | `60` | Timeout for waiting for an answer. |
+| `require_confirmation` | `bool` | `False` | Whether explicit confirmation is required. |
 
 ## Returns
 
 `HumanAnswer`
 
 ```python
-answered: bool
-answer: str
-reason: str
+HumanAnswer(
+    answered: bool,
+    answer: str,
+    reason: str = "",
+)
 ```
-
-## Runtime Contract
-
-| Item | Value |
-| --- | --- |
-| Skill | `human.ask` |
-| Permission | `human.ask` |
-| Backend | Runtime human file queue |
-| Access | required, resource type `human` |
-| Timeout | `60s` |
-
-## Common Errors
-
-- `PERMISSION_DENIED`
-- `ACCESS_INTERVENTION_REQUIRED`
-- `HUMAN_BACKEND_UNAVAILABLE`
-- `HUMAN_OPERATOR_TIMEOUT`
-- `HUMAN_CANCELLED`
 
 ## Example
 
 ```python
 answer = await ctx.human.ask(
-    "Navigation failed. Retry once?",
-    options=["Retry", "Cancel"],
-    timeout_s=30,
+    "Can the robot start inspecting the kitchen?",
+    options=["yes", "no"],
+    timeout_s=60,
     require_confirmation=True,
 )
 ```

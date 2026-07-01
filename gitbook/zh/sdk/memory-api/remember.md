@@ -1,8 +1,6 @@
 # ctx.memory.remember
 
-`remember` 写入应用级记忆。
-
-## Signature
+`remember`: 把一段 App 数据保存到指定 key。
 
 ```python
 async def remember(key: str, value: Any) -> SkillResult
@@ -10,33 +8,17 @@ async def remember(key: str, value: Any) -> SkillResult
 
 ## Parameters
 
-| 参数 | 类型 | 说明 |
-| --- | --- | --- |
-| `key` | `str` | 记忆键 |
-| `value` | `Any` | JSON-like 值 |
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `key` | `str` | required | 记忆 key。 |
+| `value` | `Any` | required | 要保存的值，通常是小段 JSON-compatible 数据。 |
 
 ## Returns
 
 `SkillResult`
 
-## Runtime Contract
-
-| 项 | 值 |
-| --- | --- |
-| Skill | `memory.remember` |
-| 权限 | `memory.write` |
-| 后端 | Runtime internal memory store，默认 SQLite |
-| Timeout | `3s` |
-
-## Common Errors
-
-- `PERMISSION_DENIED`
-- `MEMORY_PROVIDER_UNAVAILABLE`
-- `MEMORY_RESULT_INVALID`
-- `SCHEMA_INVALID`
-
 ## Example
 
 ```python
-await ctx.memory.remember("last_requested_place", "厨房")
+await ctx.memory.remember("last_inspection", {"place": "厨房", "ok": True})
 ```

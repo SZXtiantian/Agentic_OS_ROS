@@ -1,8 +1,6 @@
 # ctx.report.log
 
-`log` 是 `report.say` 的便利封装，会把消息格式化为 `[level] message`。
-
-## Signature
+`log`: 带级别前缀报告一条消息。
 
 ```python
 async def log(message: str, level: str = "info") -> SkillResult
@@ -12,8 +10,8 @@ async def log(message: str, level: str = "info") -> SkillResult
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `message` | `str` | required | 日志内容 |
-| `level` | `str` | `"info"` | 日志级别 |
+| `message` | `str` | required | 要报告的消息。 |
+| `level` | `str` | `"info"` | 消息级别，会作为前缀写入报告消息。 |
 
 ## Returns
 
@@ -22,5 +20,5 @@ async def log(message: str, level: str = "info") -> SkillResult
 ## Example
 
 ```python
-await ctx.report.log("inspection completed", level="info")
+await ctx.report.log("开始检查厨房", level="info")
 ```

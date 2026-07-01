@@ -1,25 +1,11 @@
 # Storage API
 
-`ctx.storage` currently reads Runtime-managed photo evidence indexes.
+`ctx.storage` exposes app-visible evidence records. The current SDK method reads recent photo evidence records.
 
-## ctx.storage.list_recent_photos
+For direct Runtime storage file operations, use the Agentic System Call facade `ctx.kernel.storage.*`.
 
-```python
-async def list_recent_photos(limit: int = 5) -> list[dict]
-```
+## APIs
 
-Runtime contract:
-
-| Item | Value |
+| API | Description |
 | --- | --- |
-| Skill | `storage.list_recent_photos` |
-| Permission | `storage.read` |
-| Backend | Runtime internal storage index |
-| Limit | `1..20` |
-| Timeout | `5s` |
-
-Example:
-
-```python
-photos = await ctx.storage.list_recent_photos(limit=3)
-```
+| [`ctx.storage.list_recent_photos(limit=5)`](list_recent_photos.md) | List recent photo evidence records. |

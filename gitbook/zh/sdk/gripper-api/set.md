@@ -1,8 +1,6 @@
 # ctx.gripper.set
 
-执行 allowlist 中的夹爪命令。
-
-## Signature
+`set`: 发送受控夹爪命令。
 
 ```python
 async def set(
@@ -13,18 +11,21 @@ async def set(
 ) -> SkillResult
 ```
 
-## Runtime Contract
+## Parameters
 
-| 项 | 值 |
-| --- | --- |
-| Skill | `gripper.set` |
-| 权限 | `gripper.control` |
-| 后端 | ROS2 service `/agentic/gripper/set` |
-| 资源锁 | `gripper` |
-| Safety | gripper allowlist、estop released |
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `command` | `str` | required | 夹爪命令，例如 `"open"` 或 `"close_gripper_low_force"`。 |
+| `force` | `str` | `"low"` | 夹爪力度标签。 |
+| `percentage` | `float \| None` | `None` | 可选开合百分比。 |
+| `timeout_s` | `int` | `5` | 等待命令完成的超时时间。 |
+
+## Returns
+
+`SkillResult`
 
 ## Example
 
 ```python
-await ctx.gripper.set("open", force="low")
+await ctx.gripper.set("open", timeout_s=5)
 ```

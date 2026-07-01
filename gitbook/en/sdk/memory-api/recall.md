@@ -1,39 +1,21 @@
 # ctx.memory.recall
 
-`recall` reads app-level memory. It returns `default` when the stored value is missing or `None`.
-
-## Signature
+`recall`: Read app memory by key.
 
 ```python
-async def recall(key: str, default: Any = None) -> Any
+async def recall(key: str, default=None) -> Any
 ```
 
 ## Parameters
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `key` | `str` | required | Memory key |
-| `default` | `Any` | `None` | Value returned when missing |
+| `key` | `str` | required | Memory key to read. |
+| `default` | `Any` | `None` | Value returned when the stored value is missing or `None`. |
 
 ## Returns
 
-The stored value or `default`.
-
-## Runtime Contract
-
-| Item | Value |
-| --- | --- |
-| Skill | `memory.recall` |
-| Permission | `memory.read` |
-| Backend | Runtime internal memory store, SQLite by default |
-| Timeout | `3s` |
-
-## Common Errors
-
-- `PERMISSION_DENIED`
-- `MEMORY_PROVIDER_UNAVAILABLE`
-- `MEMORY_BACKEND_UNAVAILABLE`
-- `MEMORY_RESULT_INVALID`
+The stored value. If the value is missing or `None`, returns `default`.
 
 ## Example
 

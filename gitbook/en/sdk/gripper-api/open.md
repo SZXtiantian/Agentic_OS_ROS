@@ -1,21 +1,23 @@
 # ctx.gripper.open
 
-Open the gripper with low force.
-
-## Signature
+`open`: Open the gripper.
 
 ```python
 async def open(timeout_s: int = 5) -> SkillResult
 ```
 
-## Equivalent
+## Parameters
 
-```python
-await ctx.gripper.set("open", force="low", timeout_s=timeout_s)
-```
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `timeout_s` | `int` | `5` | Timeout for waiting for the command to complete. |
+
+## Returns
+
+`SkillResult`
 
 ## Example
 
 ```python
-await ctx.gripper.open()
+await ctx.gripper.open(timeout_s=5)
 ```

@@ -1,27 +1,50 @@
 # ctx.kernel.memory
 
-Kernel memory API provides general memory add/search/update/delete operations. Ordinary app key-value memory should use `ctx.memory.*` first.
+`ctx.kernel.memory` sends memory system calls for general memory write, search, read, update, delete, import, and export operations. Ordinary app key-value memory should use `ctx.memory.*` first.
 
-## Methods
+All methods return `KernelSDKResult`.
+
+| API | System Call |
+| --- | --- |
+| `remember(content, key="", **metadata)` | `MemoryQuery(operation_type="mem_remember")` |
+| `add(content, key="", **metadata)` | `MemoryQuery(operation_type="mem_remember")` |
+| `search(query, limit=5, **filters)` | `MemoryQuery(operation_type="mem_search")` |
+| `get(key, **kwargs)` | `MemoryQuery(operation_type="mem_get")` |
+| `update(key, content, **metadata)` | `MemoryQuery(operation_type="mem_update")` |
+| `delete(key, **kwargs)` | `MemoryQuery(operation_type="mem_delete")` |
+| `list(limit=100, **kwargs)` | `MemoryQuery(operation_type="mem_list")` |
+| `export(path, **kwargs)` | `MemoryQuery(operation_type="mem_export")` |
+| `import_(path, **kwargs)` | `MemoryQuery(operation_type="mem_import")` |
+
+## Signatures
 
 ```python
-await ctx.kernel.memory.remember(content, key: str = "", **metadata)
-await ctx.kernel.memory.add(content, key: str = "", **metadata)
-await ctx.kernel.memory.search(query: str, limit: int = 5, **filters)
-await ctx.kernel.memory.get(key: str, **kwargs)
-await ctx.kernel.memory.update(key: str, content, **metadata)
-await ctx.kernel.memory.delete(key: str, **kwargs)
-await ctx.kernel.memory.list(limit: int = 100, **kwargs)
-await ctx.kernel.memory.export(path: str, **kwargs)
-await ctx.kernel.memory.import_(path: str, **kwargs)
+async def remember(content, key: str = "", **metadata) -> KernelSDKResult
+async def add(content, key: str = "", **metadata) -> KernelSDKResult
+async def search(query: str, limit: int = 5, **filters) -> KernelSDKResult
+async def get(key: str, **kwargs) -> KernelSDKResult
+async def update(key: str, content, **metadata) -> KernelSDKResult
+async def delete(key: str, **kwargs) -> KernelSDKResult
+async def list(limit: int = 100, **kwargs) -> KernelSDKResult
+async def export(path: str, **kwargs) -> KernelSDKResult
+async def import_(path: str, **kwargs) -> KernelSDKResult
 ```
 
-## Returns
+## Parameters
 
-`KernelSDKResult`
+| Parameter | Description |
+| --- | --- |
+| `content` | Content to store or update. |
+| `key` | Memory key; mapped to `memory_id` in the system call payload. |
+| `query` | Search text. |
+| `limit` | Maximum number of results. |
+| `path` | Import or export path. |
+| `metadata` / `filters` / `kwargs` | Optional metadata, filters, and `timeout_s`. |
 
 ## Example
 
 ```python
-await ctx.kernel.memory.add({"summary": "inspection completed"}, key="last_inspection")
+result = await ctx.kernel.memory.search("inspection", limit=5, timeout_s=5)
+if result.success:
+    matches = result.response.data.get("matches", [])
 ```

@@ -1,10 +1,22 @@
-# Kernel API
+# Agentic System Calls
 
-`ctx.kernel` is the advanced syscall facade for context, memory, storage, tool, skill, access, and Kernel operations. Ordinary robot actions should use `ctx.robot.*` first.
+`ctx.kernel.*` is the Agentic System Call facade. It converts Python calls into Kernel system call operations that can be scheduled, audited, and executed by Runtime.
 
-To understand these capabilities by Runtime source directory, see [Kernel Modules](../../kernel-modules/README.md).
+Ordinary Agent Apps should use Agentic SDK APIs first, such as `ctx.robot.*`, `ctx.memory.*`, and `ctx.report.*`. Use `ctx.kernel.*` when an app needs direct Kernel context, memory, storage, LLM, tool, or skill scheduling operations.
 
-All Kernel SDK calls return:
+## Call Model
+
+```text
+ctx.kernel.storage.write(...)
+  -> StorageQuery(operation_type="sto_write")
+  -> Kernel scheduler / executor
+  -> storage manager
+  -> KernelSDKResult
+```
+
+## Result
+
+Most `ctx.kernel.*` calls return:
 
 ```python
 KernelSDKResult(
@@ -18,25 +30,19 @@ KernelSDKResult(
 )
 ```
 
-## APIs
+`ctx.kernel.access.*` is an access manager facade. It returns an access decision dict and does not enter the queued system call path.
 
-| Namespace | Methods |
+## Namespaces
+
+| Facade | System call operations |
 | --- | --- |
-| `ctx.kernel` | `status()`、`cancel(syscall_id="")` |
-| `ctx.kernel.context` | `put`, `get`, `delete`, `list`, `snapshot`, `recover`, `compact`, `clear` |
-| `ctx.kernel.memory` | `remember`, `add`, `search`, `get`, `update`, `delete`, `list`, `export`, `import_` |
-| `ctx.kernel.storage` | `mount`, `mkdir`, `create_file`, `write`, `read`, `list`, `delete`, `stat`, `history`, `rollback`, `share`, `index`, `retrieve` |
-| `ctx.kernel.tool` | `call`, `list`, `describe`, `load_manifest`, `unload`, `register_builtin`, `status`, `cancel` |
-| `ctx.kernel.skill` | `call`, `list`, `describe`, `status`, `cancel` |
-| `ctx.kernel.llm` | `chat`, `complete`, `embed`, `status`, `cancel` |
-| `ctx.kernel.access` | `check`, `assert_allowed` |
-
-## Constraints
-
-- `ctx.kernel.tool.call("robot.navigate_to", ...)` is rejected with `TOOL_FORBIDDEN_ROBOT_CAPABILITY`.
-- Robot actions should use `ctx.robot.*` or controlled `ctx.kernel.skill.call(...)`.
-- High-risk storage, tool, skill, robot, or human operations may trigger access/intervention.
-- Do not depend on Runtime/Kernel manager internals.
+| `ctx.kernel.context` | `ctx_put`, `ctx_get`, `ctx_delete`, `ctx_list`, `ctx_snapshot`, `ctx_recover`, `ctx_compact`, `ctx_clear` |
+| `ctx.kernel.memory` | `mem_remember`, `mem_search`, `mem_get`, `mem_update`, `mem_delete`, `mem_list`, `mem_export`, `mem_import` |
+| `ctx.kernel.storage` | `sto_mount`, `sto_mkdir`, `sto_create_file`, `sto_write`, `sto_read`, `sto_list`, `sto_delete`, `sto_stat`, `sto_history`, `sto_rollback`, `sto_share`, `sto_index`, `sto_retrieve` |
+| `ctx.kernel.llm` | `llm_chat`, `llm_complete`, `llm_embed`, `llm_status`, `llm_cancel` |
+| `ctx.kernel.tool` | `tool_call`, `tool_list`, `tool_describe`, `tool_load_manifest`, `tool_unload`, `tool_register_builtin`, `tool_status`, `tool_cancel` |
+| `ctx.kernel.skill` | `skill_call`, `skill_list`, `skill_describe`, `skill_status`, `skill_cancel` |
+| `ctx.kernel.access` | access decision facade; not a queued system call |
 
 ## Example
 

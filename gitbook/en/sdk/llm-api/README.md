@@ -1,46 +1,9 @@
 # LLM API
 
-`ctx.llm` is the Runtime-owned LLM facade. Agent Apps do not create provider clients, read API keys, or directly depend on OpenAI/LiteLLM/vLLM SDKs.
+`ctx.llm` asks Runtime to run structured LLM calls. App code does not read provider secrets or construct provider clients.
 
-## ctx.llm.chat_json
+## APIs
 
-```python
-async def chat_json(
-    *,
-    system_prompt: str,
-    user_prompt: str,
-    timeout_s: int | None = None,
-) -> LLMJSONResult
-```
-
-`LLMJSONResult` fields:
-
-```python
-success: bool
-plan: dict
-error_code: str
-reason: str
-metadata: dict
-```
-
-This API returns `LLMJSONResult(success=False, ...)` on failure; it does not raise via `raise_for_result()`.
-
-Common errors:
-
-- `LLMCHAT_UNAVAILABLE`
-- `LLM_PROVIDER_UNCONFIGURED`
-- `LLM_PROVIDER_REQUEST_FAILED`
-- `LLM_RESPONSE_INVALID`
-
-Example:
-
-```python
-plan = await ctx.llm.chat_json(
-    system_prompt=system_prompt,
-    user_prompt=f"User task: {task_text}",
-)
-if not plan.success:
-    return {"success": False, "error_code": plan.error_code, "reason": plan.reason}
-```
-
-The LLM may generate a plan or intent only. Actual robot actions still go through SDK and Runtime checks.
+| API | Description |
+| --- | --- |
+| [`ctx.llm.chat_json(system_prompt=..., user_prompt=..., timeout_s=None)`](chat_json.md) | Ask Runtime for a JSON object result. |

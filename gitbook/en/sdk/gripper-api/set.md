@@ -1,8 +1,6 @@
 # ctx.gripper.set
 
-Execute an allowlisted gripper command.
-
-## Signature
+`set`: Send a controlled gripper command.
 
 ```python
 async def set(
@@ -13,18 +11,21 @@ async def set(
 ) -> SkillResult
 ```
 
-## Runtime Contract
+## Parameters
 
-| Item | Value |
-| --- | --- |
-| Skill | `gripper.set` |
-| Permission | `gripper.control` |
-| Backend | ROS2 service `/agentic/gripper/set` |
-| Resource lock | `gripper` |
-| Safety | gripper allowlist, estop released |
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `command` | `str` | required | Gripper command, such as `"open"` or `"close_gripper_low_force"`. |
+| `force` | `str` | `"low"` | Gripper force label. |
+| `percentage` | `float \| None` | `None` | Optional open/close percentage. |
+| `timeout_s` | `int` | `5` | Timeout for waiting for the command to complete. |
+
+## Returns
+
+`SkillResult`
 
 ## Example
 
 ```python
-await ctx.gripper.set("open", force="low")
+await ctx.gripper.set("open", timeout_s=5)
 ```

@@ -1,8 +1,6 @@
 # ctx.perception.capture_photo
 
-Capture a photo and return image, metadata, and evidence information.
-
-## Signature
+`capture_photo`: Capture a photo of a target area and return image and metadata paths.
 
 ```python
 async def capture_photo(
@@ -16,34 +14,27 @@ async def capture_photo(
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `target` | `str` | `"workspace"` | Capture target |
-| `label` | `str` | `"photo"` | Evidence label |
-| `timeout_s` | `int` | `5` | Timeout |
+| `target` | `str` | `"workspace"` | Target area to capture. |
+| `label` | `str` | `"photo"` | Evidence label. |
+| `timeout_s` | `int` | `5` | Timeout for waiting for photo capture to complete. |
 
 ## Returns
 
 `PhotoCaptureResult`
 
 ```python
-success: bool
-image_path: str
-metadata_path: str
-evidence: dict
-audit_id: str
+PhotoCaptureResult(
+    success: bool,
+    image_path: str,
+    metadata_path: str,
+    evidence: dict,
+    audit_id: str = "",
+)
 ```
-
-## Runtime Contract
-
-| Item | Value |
-| --- | --- |
-| Skill | `perception.capture_photo` |
-| Permission | `perception.capture` |
-| Backend | ROS2 service `/agentic/perception/capture_photo` |
-| Resource lock | `camera` |
-| Timeout | `20s` |
 
 ## Example
 
 ```python
-photo = await ctx.perception.capture_photo(target="workspace", label="before_pick")
+photo = await ctx.perception.capture_photo(target="workspace", label="precheck")
+await ctx.report.say(photo.image_path)
 ```

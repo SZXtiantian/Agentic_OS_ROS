@@ -33,5 +33,5 @@ async def run(ctx: AgentContext, **kwargs) -> dict:
 - [Arm API](sdk/arm-api/README.md)
 - [Gripper API](sdk/gripper-api/README.md)
 - [Storage API](sdk/storage-api/README.md)
-- [Kernel API](sdk/kernel-api/README.md)
+- [Agentic System Calls](sdk/kernel-api/README.md)
 - [Kernel Modules](kernel-modules/README.md)

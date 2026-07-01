@@ -1,8 +1,6 @@
 # ctx.arm.move_named
 
-Execute an allowlisted named arm action. Apps must not send joint, torque, servo, or MoveIt commands directly.
-
-## Signature
+`move_named`: Run a configured named arm motion.
 
 ```python
 async def move_named(name: str, timeout_s: int = 8) -> SkillResult
@@ -12,18 +10,12 @@ async def move_named(name: str, timeout_s: int = 8) -> SkillResult
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `name` | `str` | required | Named action; `home`/`init` map to `arm_home` |
-| `timeout_s` | `int` | `8` | Timeout |
+| `name` | `str` | required | Named motion. `"home"` and `"init"` map to `"arm_home"`. |
+| `timeout_s` | `int` | `8` | Timeout for waiting for the motion to complete. |
 
-## Runtime Contract
+## Returns
 
-| Item | Value |
-| --- | --- |
-| Skill | `arm.move_named` |
-| Permission | `arm.move.named` |
-| Backend | ROS2 action `/agentic/arm/move_named` |
-| Resource lock | `arm` |
-| Safety | named action allowlist, workspace bounds, estop released |
+`SkillResult`
 
 ## Example
 

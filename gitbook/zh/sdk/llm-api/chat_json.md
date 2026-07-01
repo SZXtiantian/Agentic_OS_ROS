@@ -1,8 +1,6 @@
 # ctx.llm.chat_json
 
-`chat_json` 调用 Runtime-owned LLM facade，返回受约束 JSON plan。
-
-## Signature
+`chat_json`: 请求 Runtime 调用 LLM，并返回 JSON object。
 
 ```python
 async def chat_json(
@@ -15,40 +13,33 @@ async def chat_json(
 
 ## Parameters
 
-| 参数 | 类型 | 说明 |
-| --- | --- | --- |
-| `system_prompt` | `str` | 系统提示词 |
-| `user_prompt` | `str` | 用户输入或任务描述 |
-| `timeout_s` | `int \| None` | 当前 facade 接收但不直接使用 |
+| 参数 | 类型 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `system_prompt` | `str` | required | 系统提示词。 |
+| `user_prompt` | `str` | required | 用户提示词。 |
+| `timeout_s` | `int \| None` | `None` | 预留参数；当前 SDK facade 不直接使用。 |
 
 ## Returns
 
 `LLMJSONResult`
 
 ```python
-success: bool
-plan: dict
-error_code: str
-reason: str
-metadata: dict
+LLMJSONResult(
+    success: bool,
+    plan: dict = {},
+    error_code: str = "",
+    reason: str = "",
+    metadata: dict = {},
+)
 ```
-
-该 API 失败时返回 `success=False`，不抛 `AgenticRuntimeError`。
-
-## Common Errors
-
-- `LLMCHAT_UNAVAILABLE`
-- `LLM_PROVIDER_UNCONFIGURED`
-- `LLM_PROVIDER_REQUEST_FAILED`
-- `LLM_RESPONSE_INVALID`
 
 ## Example
 
 ```python
 plan = await ctx.llm.chat_json(
-    system_prompt=system_prompt,
-    user_prompt=f"User task: {task_text}",
+    system_prompt="Return JSON only.",
+    user_prompt="Plan a kitchen inspection.",
 )
 if not plan.success:
-    return {"success": False, "error_code": plan.error_code, "reason": plan.reason}
+    return {"success": False, "error_code": plan.error_code}
 ```
