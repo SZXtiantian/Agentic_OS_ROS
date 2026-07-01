@@ -1,13 +1,12 @@
-# Agentic OS Docs
+# Agentic OS 文档
 
-Agentic OS exposes high-level, permissioned, safe, auditable robot capabilities to Agent Apps. This documentation is organized for GitBook as a developer portal: overview first, Agent App workflow next, then SDK namespaces, kernel module references, and capability reference material.
+Agentic OS 向 Agent Apps 暴露高层、带权限、安全、可审计的机器人能力。当前 GitBook 暂时只展示中文文档；英文文档文件仍保留在仓库中，后续需要双语展示时再恢复导航入口。
 
-Choose a language:
+进入文档：
 
 - [中文文档](zh/README.md)
-- [English Docs](en/README.md)
 
-The API reference is intentionally organized around `AgentContext` namespaces:
+API 文档围绕 `AgentContext` namespace 组织：
 
 - `ctx.robot`
 - `ctx.world`
@@ -21,6 +20,6 @@ The API reference is intentionally organized around `AgentContext` namespaces:
 - `ctx.storage`
 - `ctx.kernel`
 
-Kernel internals are also documented by source module under `agentic_runtime_src/agentic_os/kernel`, so developers can map app-facing APIs back to the Runtime implementation boundary.
+Kernel 内部也会按照 `agentic_runtime_src/agentic_os/kernel` 源码目录说明，方便开发者把 App 可用 API 对应回 Runtime 实现边界。
 
-Agent Apps must not import ROS2 libraries, publish robot topics, call Nav2 or MoveIt directly, or perform realtime closed-loop control. Robot actions go through Agentic Runtime permission checks, access/intervention, resource locks, safety guards, and audit logs.
+Agent App 不允许导入 ROS2 库，不允许发布机器人 topic，不允许直接调用 Nav2 或 MoveIt，也不允许执行实时闭环控制。所有机器人动作都必须经过 Agentic Runtime 的权限检查、access/intervention、资源锁、安全守卫和审计日志。
