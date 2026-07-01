@@ -22,7 +22,7 @@ entrypoint: main:run
 Runtime 启动 App 时会注入 `AgentContext`，然后调用 `main.py` 里的 `run(ctx, **kwargs)`。用户侧需要提供自然语言任务，例如：
 
 ```python
-result = await run(ctx, task_text="Pick the red block and place it at the workspace tray.")
+result = await run(ctx, task_text="夹起红色积木")
 ```
 
 也可以使用 `message` 或 `text` 字段。三者都没有时，App 会返回结构化错误：
