@@ -664,7 +664,292 @@ place = await call_skill(
 
 `place_target` 必须来自 LLM plan 并经过 App 校验。App 不应该直接传 Nav2 pose 或 MoveIt pose。
 
-## 第十三步：保存结果和报告
+## 第十三步：理解核心 system skill 的底层实现
+
+前面写的是 App 层代码。开发者还需要理解：`perception.detect_color_block`、`manipulation.pick_color_block`、`manipulation.place_color_block` 虽然是系统能力，但它们不是黑盒。它们由三层组成：
+
+```text
+Agent App
+  -> ctx.kernel.skill.call(...)
+  -> Runtime SkillExecutor
+  -> system skill contract
+  -> ROS2 bridge service/action
+  -> camera / depth / kinematics / servo backend
+```
+
+App 开发者通常不改 bridge 代码，但必须理解它返回的数据、错误和安全边界。需要新增或替换底层机器人能力时，应该改 ROS2 bridge package 或 robot profile，而不是在 App 里直接 import `rclpy`。
+
+## Runtime 如何执行 system skill
+
+当 App 调：
+
+```python
+await ctx.kernel.skill.call("perception.detect_color_block", {"color": "green"})
+```
+
+Runtime 会走 `SkillExecutor`：
+
+1. 从 skill registry 找到 `agentic_runtime_src/system_skills/perception.detect_color_block/SKILL.md`。
+2. 用 `input_schema` 校验参数，例如 `color` 必须是 `red`、`green`、`blue`、`yellow`。
+3. 用 App manifest 做 permission check，例如必须有 `perception.detect.color_block`。
+4. 对高风险或资源相关能力做 access/intervention check。
+5. 调 safety guard，例如机械臂动作要确认急停、时长、工作空间约束。
+6. 根据 `resource_requirements.locks` 锁资源，例如 `camera`、`arm`、`gripper`。
+7. 根据 `implementation.type` 选择 runner：`ros2_service`、`ros2_action`、`runtime_internal` 或 `python`。
+8. 创建 syscall/audit 记录，执行完成后释放资源锁。
+
+`ros2_service` 和 `ros2_action` 的 runner 会读取 `implementation`：
+
+```json
+{
+  "type": "ros2_service",
+  "service": "/agentic/perception/detect_color_block",
+  "service_type": "agentic_msgs/srv/DetectColorBlock",
+  "request_id_field": "request_id",
+  "json_output_fields": {
+    "detection": "detection_json",
+    "evidence": "evidence_json"
+  }
+}
+```
+
+这表示 Runtime 会把 App 的参数变成 ROS2 service 请求，把 bridge 返回的 `detection_json` 和 `evidence_json` 解码成普通 dict，再返回给 App。
+
+## 视觉识别的底层实现
+
+视觉相关 bridge 在：
+
+```text
+ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/inspection_bridge_node.py
+```
+
+这个 node 会订阅 robot profile 中配置的 RGB、depth、CameraInfo topic，并提供这些 Runtime-facing service：
+
+```text
+/agentic/perception/capture_photo
+/agentic/perception/detect_color_block
+/agentic/perception/center_color_block
+/agentic/perception/verify_held_color_block
+```
+
+### detect_color_block 做了什么
+
+`perception.detect_color_block` 对应 ROS2 service：
+
+```text
+/agentic/perception/detect_color_block
+agentic_msgs/srv/DetectColorBlock
+```
+
+请求字段：
+
+```text
+color
+target
+evidence_label
+request_id
+timeout_s
+```
+
+底层执行流程：
+
+1. 等待新鲜 RGB 图像、深度图和 CameraInfo。
+2. 把 `sensor_msgs/Image` 转成 OpenCV BGR image。
+3. 把 depth image 转成深度数组，支持 `16UC1`、`mono16`、`32FC1`。
+4. 从 robot profile、调参文件或默认配置读取目标颜色的 LAB 阈值。
+5. 把 BGR 图像 resize、GaussianBlur，然后转 LAB。
+6. 用 `cv2.inRange` 生成颜色 mask。
+7. 通过 erode/dilate 做简单形态学清理。
+8. 找 contours，过滤最小面积和 ROI。
+9. 用 `cv2.minEnclosingCircle` 取候选块中心、半径和面积。
+10. 选择面积最大的候选。
+11. 在候选中心附近读取 depth ROI，估算 `depth_m`。
+12. 用 CameraInfo 内参把像素点和深度转换成 `camera_position_m`。
+13. 写 debug image 和 metadata 到 `/opt/agentic/var/evidence/color_block`。
+14. 返回 `detection_json` 和 `evidence_json`。
+
+返回给 App 的核心字段类似：
+
+```json
+{
+  "detection_id": "det_xxx",
+  "color": "green",
+  "target": "workspace",
+  "confidence": 0.92,
+  "frame_id": "rgb_camera_link",
+  "center_px": [318.0, 221.0],
+  "radius_px": 34.0,
+  "area_px": 2382.0,
+  "depth_m": 0.33761,
+  "camera_position_m": [0.32, 0.04, 0.02],
+  "evidence_image_path": "/opt/agentic/var/evidence/color_block/...",
+  "evidence_metadata_path": "/opt/agentic/var/evidence/color_block/..."
+}
+```
+
+App 继续抓取前必须校验 `color`、`center_px`、`confidence`、`depth_m` 和 `camera_position_m`。如果 bridge 只返回“检测到了”但没有空间坐标，App 不能继续抓取。
+
+### center_color_block 做了什么
+
+`perception.center_color_block` 对应：
+
+```text
+/agentic/perception/center_color_block
+agentic_msgs/srv/CenterColorBlock
+```
+
+它不是简单“检测一次”。它会做慢速视觉对中：
+
+1. 检查 servo command topic 是否有 subscriber。
+2. 读取 profile 中的目标中心比例，例如 `center_target_x_ratio`、`center_target_y_ratio`。
+3. 每轮读取一帧 RGB 图像，并用同样的 LAB 分割找到目标颜色块。
+4. 计算目标中心和画面目标中心之间的 `dx`、`dy`。
+5. 用 profile 中的 gain、max step 和 pulse limits 计算 base/pitch servo pulse 调整量。
+6. 发布 `servo_controller_msgs/ServosPosition`，调整底座和相机俯仰。
+7. 等待 settle 时间，继续下一轮。
+8. 进入 tolerance 范围后返回 `centered: true`。
+9. 超时或迭代次数用尽则返回 `COLOR_BLOCK_ALIGNMENT_FAILED`。
+
+这一步的意义是把目标积木移动到后续抓取规划更稳定的位置。它仍然是 system skill，因为它会动相机/机械臂相关 servo，所以需要资源锁和安全检查。
+
+### verify_held_color_block 做了什么
+
+`perception.verify_held_color_block` 对应：
+
+```text
+/agentic/perception/verify_held_color_block
+agentic_msgs/srv/VerifyHeldColorBlock
+```
+
+它接收抓取前 detection 和 pick_result，不相信 pick backend 自己说“抓到了”。底层会：
+
+1. 等待新的 RGB 图像。
+2. 在 profile 配置的 gripper-held ROI 中做目标颜色 LAB 分割。
+3. 读取 depth，并估算候选块深度。
+4. 检查候选是否和抓取前桌面 detection 重叠。
+5. 检查候选半径相对抓取前是否变大，证明更接近夹爪相机。
+6. 检查 depth delta 是否超过阈值，证明积木被抬起。
+7. 检查候选是否位于夹爪口区域。
+8. 写 held verification debug image 和 metadata。
+9. 只有所有条件满足时返回 `verified_held: true`。
+
+所以 App 里必须把抓取后验证作为硬条件。`manipulation.pick_color_block` 返回成功，只表示动作执行完成；最终是否真的夹住，要看 `perception.verify_held_color_block`。
+
+## 抓取的底层实现
+
+抓取相关 bridge 在：
+
+```text
+ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/manipulation_bridge_node.py
+```
+
+这个 node 提供：
+
+```text
+/agentic/arm/move_named
+/agentic/arm/get_state
+/agentic/gripper/set
+/agentic/manipulation/pick_color_block
+/agentic/manipulation/place_color_block
+```
+
+`manipulation.pick_color_block` 是 ROS2 action：
+
+```text
+/agentic/manipulation/pick_color_block
+agentic_msgs/action/PickColorBlock
+```
+
+Goal 字段：
+
+```text
+color
+target
+detection_json
+evidence_json
+request_id
+timeout_s
+```
+
+底层执行流程：
+
+1. 校验 `color` 只能是允许颜色。
+2. 解析 `detection_json`。
+3. 检查 detection 的 `color` 必须和 pick color 一致。
+4. 检查 detection 必须有 `camera_position_m`。
+5. 检查 gripper servo topic 是否有 subscriber。
+6. 检查 kinematics services 是否可用：当前末端位姿和 IK 求解 service。
+7. 读取当前末端矩阵。
+8. 用 hand-to-camera 标定矩阵把 `camera_position_m` 转换到机械臂坐标。
+9. 叠加 profile 中的 pick offset，例如 `pick_x_offset_m`、`pick_y_offset_m`、`pick_z_offset_m`。
+10. 检查 workspace bounds。
+11. 根据目标 z 高度选择 pitch。
+12. 调 IK，分别求 pregrasp、pick、lift 三个位置的 servo pulse。
+13. 执行动作序列：打开夹爪、对齐底座、移动到 pregrasp、下探到 pick、闭合夹爪、抬升、回到安全姿态。
+14. 每个阶段通过 action feedback 返回状态和 progress。
+15. 返回 `result_json`，包含 pick pose、pulse、duration、motion_completed 等信息。
+
+关键点：pick backend 不直接宣称最终抓取成功。它返回：
+
+```json
+{
+  "motion_completed": true,
+  "held": false,
+  "held_verified": false,
+  "held_claim_source": "post_pick_vision_verification_required"
+}
+```
+
+这就是为什么 App 后面必须调用视觉验证。
+
+## 放置的底层实现
+
+`manipulation.place_color_block` 是 ROS2 action：
+
+```text
+/agentic/manipulation/place_color_block
+agentic_msgs/action/PlaceColorBlock
+```
+
+Goal 字段：
+
+```text
+color
+place_target
+pick_result_json
+request_id
+timeout_s
+```
+
+底层执行流程：
+
+1. 解析 `pick_result_json`。
+2. 如果 `place_target` 是 `hold_position`、`held`、`lifted`、`keep_holding`，bridge 不打开夹爪，只返回仍保持 holding。
+3. 否则检查 gripper backend 是否可用。
+4. 检查当前没有其他 active arm action。
+5. 读取 profile 中的 `place_sequence`；如果没有配置，就使用默认 servo pulse 序列。
+6. 按 sequence 发布 `ServosPosition`：移动到放置姿态、保持夹爪闭合、打开夹爪释放、回安全姿态。
+7. 每个阶段通过 action feedback 返回 `place_step_*`。
+8. 成功时返回 `released: true`。
+
+这说明 `place_target` 在当前实现里不是 App 直接传底层 pose，而是由 bridge/profile 映射为受控放置序列。要新增托盘、货架、回收区等放置目标，应扩展 robot profile 或 bridge 中的 allowlisted place sequence，而不是让 App 传任意机械臂坐标。
+
+## 什么时候改 App，什么时候改 bridge
+
+| 需求 | 应该改哪里 |
+| --- | --- |
+| 改任务流程，例如先拍照再对中 | App 的 `main.py` 和 workflow |
+| 改 LLM 允许的颜色、步骤、风险等级 | App 的 prompt 和 plan validator |
+| 改候选排序策略 | App skill `skills/find_best_block/impl.py` |
+| 改颜色阈值、ROI、对中增益、held ROI | robot profile 或 perception bridge 配置 |
+| 改 RGB/depth topic | robot profile |
+| 改抓取 offset、workspace bounds、pick/lift 高度 | robot profile |
+| 改 IK、servo sequence、place sequence | manipulation bridge 或 robot profile |
+| 接入新的真实相机、机械臂或夹爪 backend | ROS2 bridge package |
+
+App 的职责是“编排和验证”，bridge 的职责是“把受控 capability 转成具体机器人 backend 调用”。这条线不能混。
+
+## 第十四步：保存结果和报告
 
 任务开始时写 context 和 start record：
 
@@ -712,7 +997,7 @@ await ctx.kernel.skill.call(
 
 `syscall_ids` 和 `audit_ids` 很重要。真实机器人任务出问题时，开发者可以用它们回查每一步调用了哪个 backend、拿到了什么错误。
 
-## 第十四步：写 workflow 清单
+## 第十五步：写 workflow 清单
 
 `workflows/default.yaml` 不替代代码逻辑，但它能让开发者快速理解任务顺序：
 
@@ -741,7 +1026,7 @@ steps:
   - report_result
 ```
 
-## 第十五步：写测试
+## 第十六步：写测试
 
 至少覆盖这些测试：
 

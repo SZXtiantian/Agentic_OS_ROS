@@ -662,7 +662,292 @@ place = await call_skill(
 
 `place_target` comes from the validated LLM plan. The app should not pass raw Nav2 or MoveIt poses.
 
-## Step 13: Persist and Report
+## Step 13: Understand the Low-Level Implementation Behind System Skills
+
+The previous steps describe the App layer. Developers also need to understand that `perception.detect_color_block`, `manipulation.pick_color_block`, and `manipulation.place_color_block` are not magic boxes. They are implemented as a layered chain:
+
+```text
+Agent App
+  -> ctx.kernel.skill.call(...)
+  -> Runtime SkillExecutor
+  -> system skill contract
+  -> ROS2 bridge service/action
+  -> camera / depth / kinematics / servo backend
+```
+
+App developers usually do not edit bridge code, but they must understand the data, errors, and safety boundaries returned by the bridge. To add or replace low-level robot behavior, update a ROS2 bridge package or robot profile. Do not import `rclpy` from an Agent App.
+
+## How Runtime Executes a System Skill
+
+When the app calls:
+
+```python
+await ctx.kernel.skill.call("perception.detect_color_block", {"color": "green"})
+```
+
+Runtime goes through `SkillExecutor`:
+
+1. Load `agentic_runtime_src/system_skills/perception.detect_color_block/SKILL.md` from the skill registry.
+2. Validate args against `input_schema`, for example `color` must be `red`, `green`, `blue`, or `yellow`.
+3. Check the App manifest permission, for example `perception.detect.color_block`.
+4. Run access/intervention checks for resource-facing or high-risk skills.
+5. Run safety checks, such as estop, duration, and workspace constraints for arm motion.
+6. Lock resources from `resource_requirements.locks`, such as `camera`, `arm`, and `gripper`.
+7. Select a runner from `implementation.type`: `ros2_service`, `ros2_action`, `runtime_internal`, or `python`.
+8. Create syscall/audit records, then release resource locks after completion.
+
+The `ros2_service` and `ros2_action` runners read `implementation`:
+
+```json
+{
+  "type": "ros2_service",
+  "service": "/agentic/perception/detect_color_block",
+  "service_type": "agentic_msgs/srv/DetectColorBlock",
+  "request_id_field": "request_id",
+  "json_output_fields": {
+    "detection": "detection_json",
+    "evidence": "evidence_json"
+  }
+}
+```
+
+Runtime turns App args into a ROS2 service request, decodes `detection_json` and `evidence_json` into dictionaries, and returns them to the App.
+
+## Low-Level Visual Recognition
+
+Visual bridge code lives in:
+
+```text
+ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/inspection_bridge_node.py
+```
+
+This node subscribes to RGB, depth, and CameraInfo topics from the robot profile and exposes Runtime-facing services:
+
+```text
+/agentic/perception/capture_photo
+/agentic/perception/detect_color_block
+/agentic/perception/center_color_block
+/agentic/perception/verify_held_color_block
+```
+
+### What detect_color_block Does
+
+`perception.detect_color_block` maps to:
+
+```text
+/agentic/perception/detect_color_block
+agentic_msgs/srv/DetectColorBlock
+```
+
+Request fields:
+
+```text
+color
+target
+evidence_label
+request_id
+timeout_s
+```
+
+Bridge flow:
+
+1. Wait for fresh RGB image, depth image, and CameraInfo.
+2. Convert `sensor_msgs/Image` into an OpenCV BGR image.
+3. Convert the depth image into an array, supporting `16UC1`, `mono16`, and `32FC1`.
+4. Load LAB thresholds for the requested color from robot profile, tuning files, or defaults.
+5. Resize and blur the BGR image, then convert it to LAB.
+6. Use `cv2.inRange` to create a color mask.
+7. Clean the mask with erode/dilate.
+8. Find contours and filter them by minimum area and ROI.
+9. Use `cv2.minEnclosingCircle` to compute candidate center, radius, and area.
+10. Select the largest valid candidate.
+11. Estimate `depth_m` from a depth ROI around the candidate center.
+12. Use CameraInfo intrinsics to convert pixel + depth into `camera_position_m`.
+13. Write debug image and metadata under `/opt/agentic/var/evidence/color_block`.
+14. Return `detection_json` and `evidence_json`.
+
+Core result fields:
+
+```json
+{
+  "detection_id": "det_xxx",
+  "color": "green",
+  "target": "workspace",
+  "confidence": 0.92,
+  "frame_id": "rgb_camera_link",
+  "center_px": [318.0, 221.0],
+  "radius_px": 34.0,
+  "area_px": 2382.0,
+  "depth_m": 0.33761,
+  "camera_position_m": [0.32, 0.04, 0.02],
+  "evidence_image_path": "/opt/agentic/var/evidence/color_block/...",
+  "evidence_metadata_path": "/opt/agentic/var/evidence/color_block/..."
+}
+```
+
+Before picking, the App must validate `color`, `center_px`, `confidence`, `depth_m`, and `camera_position_m`. If the bridge only says "detected" but does not provide spatial coordinates, the App must not pick.
+
+### What center_color_block Does
+
+`perception.center_color_block` maps to:
+
+```text
+/agentic/perception/center_color_block
+agentic_msgs/srv/CenterColorBlock
+```
+
+This service performs slow visual centering:
+
+1. Check that the servo command topic has a subscriber.
+2. Read target center ratios, such as `center_target_x_ratio` and `center_target_y_ratio`, from the profile.
+3. On each iteration, read one RGB frame and use the same LAB segmentation to find the target block.
+4. Compute `dx` and `dy` between the block center and the desired image center.
+5. Use configured gain, max step, and pulse limits to compute base/pitch servo pulse changes.
+6. Publish `servo_controller_msgs/ServosPosition` to adjust base and camera pitch.
+7. Wait for settle time and repeat.
+8. Return `centered: true` once the error is inside tolerance.
+9. Return `COLOR_BLOCK_ALIGNMENT_FAILED` on timeout or max iterations.
+
+This step moves camera/arm-related servos, so it remains a system skill with resource locks and safety checks.
+
+### What verify_held_color_block Does
+
+`perception.verify_held_color_block` maps to:
+
+```text
+/agentic/perception/verify_held_color_block
+agentic_msgs/srv/VerifyHeldColorBlock
+```
+
+It receives pre-pick detection and pick result. It does not trust the pick backend alone. The bridge:
+
+1. Waits for a fresh RGB image.
+2. Segments the target color inside the configured gripper-held ROI.
+3. Reads depth and estimates candidate depth.
+4. Checks whether the candidate overlaps the pre-pick tabletop detection.
+5. Checks whether candidate radius increased enough to prove it moved closer to the gripper camera.
+6. Checks whether depth delta exceeds the configured threshold.
+7. Checks whether the candidate is in the gripper-mouth part of the ROI.
+8. Writes held-verification debug image and metadata.
+9. Returns `verified_held: true` only when all checks pass.
+
+This is why the App must treat post-pick verification as a hard gate. `manipulation.pick_color_block` success means the motion sequence completed; it does not prove the object is held.
+
+## Low-Level Pick Implementation
+
+Manipulation bridge code lives in:
+
+```text
+ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/manipulation_bridge_node.py
+```
+
+The node provides:
+
+```text
+/agentic/arm/move_named
+/agentic/arm/get_state
+/agentic/gripper/set
+/agentic/manipulation/pick_color_block
+/agentic/manipulation/place_color_block
+```
+
+`manipulation.pick_color_block` is a ROS2 action:
+
+```text
+/agentic/manipulation/pick_color_block
+agentic_msgs/action/PickColorBlock
+```
+
+Goal fields:
+
+```text
+color
+target
+detection_json
+evidence_json
+request_id
+timeout_s
+```
+
+Bridge flow:
+
+1. Validate that `color` is allowlisted.
+2. Parse `detection_json`.
+3. Verify detection color matches the pick color.
+4. Require `camera_position_m`.
+5. Check that the gripper servo topic has a subscriber.
+6. Check kinematics services for current endpoint pose and IK solving.
+7. Read the current endpoint matrix.
+8. Transform `camera_position_m` into arm coordinates with hand-to-camera calibration.
+9. Apply profile offsets such as `pick_x_offset_m`, `pick_y_offset_m`, and `pick_z_offset_m`.
+10. Check workspace bounds.
+11. Select pick pitch based on target z.
+12. Solve IK for pregrasp, pick, and lift positions.
+13. Execute the motion sequence: open gripper, align base, move to pregrasp, descend to pick, close gripper, lift, reset.
+14. Publish action feedback for each phase.
+15. Return `result_json` with pose, pulse, duration, and motion status.
+
+The pick backend intentionally does not claim final hold success:
+
+```json
+{
+  "motion_completed": true,
+  "held": false,
+  "held_verified": false,
+  "held_claim_source": "post_pick_vision_verification_required"
+}
+```
+
+Final success must come from `perception.verify_held_color_block`.
+
+## Low-Level Place Implementation
+
+`manipulation.place_color_block` is a ROS2 action:
+
+```text
+/agentic/manipulation/place_color_block
+agentic_msgs/action/PlaceColorBlock
+```
+
+Goal fields:
+
+```text
+color
+place_target
+pick_result_json
+request_id
+timeout_s
+```
+
+Bridge flow:
+
+1. Parse `pick_result_json`.
+2. If `place_target` is `hold_position`, `held`, `lifted`, or `keep_holding`, keep the gripper closed and return still holding.
+3. Otherwise check that the gripper backend is available.
+4. Check that no other arm action is active.
+5. Load `place_sequence` from the robot profile; if none exists, use the default servo pulse sequence.
+6. Publish `ServosPosition` commands: move to place pose, keep gripper closed, open gripper to release, return to safe pose.
+7. Publish action feedback as `place_step_*`.
+8. Return `released: true` on success.
+
+In the current design, `place_target` is not a raw low-level pose from the App. The bridge/profile maps allowed placement behavior into controlled servo sequences. To add tray, shelf, or bin placement, extend the robot profile or bridge allowlist rather than passing arbitrary arm coordinates from the App.
+
+## When to Change the App vs the Bridge
+
+| Requirement | Change |
+| --- | --- |
+| Change task order, such as capture before centering | App `main.py` and workflow |
+| Change allowed colors, steps, or risk classes | App prompt and plan validator |
+| Change candidate ranking | App skill `skills/find_best_block/impl.py` |
+| Change color thresholds, ROI, centering gain, or held ROI | robot profile or perception bridge config |
+| Change RGB/depth topics | robot profile |
+| Change pick offsets, workspace bounds, pick/lift height | robot profile |
+| Change IK, servo sequence, or place sequence | manipulation bridge or robot profile |
+| Connect a new real camera, arm, or gripper backend | ROS2 bridge package |
+
+The App orchestrates and validates. The bridge turns controlled capabilities into concrete robot backend calls. Keep that boundary clean.
+
+## Step 14: Persist and Report
 
 At task start, write context and a start record:
 
@@ -710,7 +995,7 @@ await ctx.kernel.skill.call(
 
 `syscall_ids` and `audit_ids` are essential for debugging. They let developers trace which backend was called and what error or result it returned.
 
-## Step 14: Write the Workflow File
+## Step 15: Write the Workflow File
 
 `workflows/default.yaml` does not replace code, but it makes the sequence easy to inspect:
 
@@ -739,7 +1024,7 @@ steps:
   - report_result
 ```
 
-## Step 15: Write Tests
+## Step 16: Write Tests
 
 Cover at least:
 
