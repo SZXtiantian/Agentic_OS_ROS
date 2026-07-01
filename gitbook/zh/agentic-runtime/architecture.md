@@ -19,4 +19,4 @@ Agentic OS 不是 ROS2 fork，也不是把业务节点塞进 ROS2。
 /home/ubuntu/agentic_ws/ros2_bridge_src/*
 ```
 
-这些 bridge 是 AgenticOS-owned HAL/adapter，不是 Agent App workspace。
+这些 bridge 是 Agentic OS-owned HAL/adapter，不是 Agent App workspace。

@@ -2,6 +2,8 @@
 
 `ctx.kernel` is the advanced syscall facade for context, memory, storage, tool, skill, access, and Kernel operations. Ordinary robot actions should use `ctx.robot.*` first.
 
+To understand these capabilities by Runtime source directory, see [Kernel Modules](../../kernel-modules/README.md).
+
 All Kernel SDK calls return:
 
 ```python

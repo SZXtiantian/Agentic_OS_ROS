@@ -2,6 +2,14 @@
 
 System skills 是 Runtime 真正执行的 capability contract。Agent App 通常通过 SDK 调用它们；专用应用可以在权限允许时通过 `ctx.kernel.skill.call(...)` 编排部分 system skill。
 
+System skill 位于：
+
+```text
+agentic_runtime_src/system_skills/<skill_name>/SKILL.md
+```
+
+`SKILL.md` 只定义 contract。真正 backend 由 `implementation` 决定：`runtime_internal` 指向 Runtime 内部实现，`ros2_service`/`ros2_action` 指向 Agentic OS-owned bridge。新增 Python 后端 skill 时，应把后端代码放在同一个 skill 目录，或在 contract 中明确 backend 归属。
+
 | Skill | SDK 入口 | 权限 | 资源锁 | Timeout |
 | --- | --- | --- | --- | --- |
 | `robot.get_state` | `ctx.robot.get_state()` | `robot.state.read` | 无 | `10s` |
@@ -24,3 +32,10 @@ System skills 是 Runtime 真正执行的 capability contract。Agent App 通常
 | `perception.verify_held_color_block` | `ctx.kernel.skill.call(...)` | `perception.verify.color_block_held` | `camera`, `color_block_detector` | `30s` |
 | `manipulation.pick_color_block` | `ctx.kernel.skill.call(...)` | `manipulation.pick.color_block` | `arm`, `gripper`, `camera`, `manipulation_backend` | `60s` |
 | `manipulation.place_color_block` | `ctx.kernel.skill.call(...)` | `manipulation.place.color_block` | `arm`, `gripper`, `manipulation_backend` | `60s` |
+
+## 约束
+
+- Agent App 不能直接调用 system skill 的 ROS2 service/action。
+- 机器人动作不能改造成 generic tool。
+- 所有真实设备动作必须保留 permission、resource lock、safety constraints、timeout 和 audit。
+- App 私有逻辑请放在 app skill，例如 `color_block_grasper_agent/skills/find_best_block`。

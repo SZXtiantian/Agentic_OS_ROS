@@ -18,7 +18,7 @@ python -m pip install -e ".[dev]"
 
 ## Build ROS2 Bridges
 
-ROS2 bridges are AgenticOS-owned HAL/adapters and must live under `agentic_ws/ros2_bridge_src`.
+ROS2 bridges are Agentic OS-owned HAL/adapters and must live under `agentic_ws/ros2_bridge_src`.
 
 ```bash
 source /opt/ros/humble/setup.bash

@@ -2,6 +2,8 @@
 
 `ctx.kernel` 是进阶 syscall facade，适合需要 context、memory、storage、tool、skill、access 等 Runtime/Kernel 能力的应用。普通机器人动作优先使用 `ctx.robot.*`。
 
+如果要按 Runtime 源码目录理解这些能力，请看 [Kernel Modules](../../kernel-modules/README.md)。
+
 所有 Kernel SDK 调用返回：
 
 ```python

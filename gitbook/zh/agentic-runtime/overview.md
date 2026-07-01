@@ -8,7 +8,7 @@ User
   -> Agentic SDK
   -> Agentic Runtime / Kernel
   -> Robot Capability Layer
-  -> AgenticOS Hardware Adapter / ROS2 Bridge
+  -> Agentic OS Hardware Adapter / ROS2 Bridge
   -> ROS2
   -> Robot Hardware
 ```

@@ -18,7 +18,7 @@ python -m pip install -e ".[dev]"
 
 ## ROS2 Bridge 构建
 
-ROS2 bridge 是 AgenticOS-owned HAL/adapter，只允许放在 `agentic_ws/ros2_bridge_src`。
+ROS2 bridge 是 Agentic OS-owned HAL/adapter，只允许放在 `agentic_ws/ros2_bridge_src`。
 
 ```bash
 source /opt/ros/humble/setup.bash

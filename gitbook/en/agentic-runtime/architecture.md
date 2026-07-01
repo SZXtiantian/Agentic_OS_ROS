@@ -19,4 +19,4 @@ Only ROS2 bridge packages may import `rclpy`, and they must live under:
 /home/ubuntu/agentic_ws/ros2_bridge_src/*
 ```
 
-These bridges are AgenticOS-owned HAL/adapters, not Agent App workspaces.
+These bridges are Agentic OS-owned HAL/adapters, not Agent App workspaces.

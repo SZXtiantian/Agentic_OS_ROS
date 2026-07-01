@@ -64,7 +64,28 @@
   * [llm](zh/sdk/kernel-api/llm.md)
   * [access](zh/sdk/kernel-api/access.md)
 
+### Kernel Modules
+* [Kernel Modules 概览](zh/kernel-modules/README.md)
+  * [access](zh/kernel-modules/access.md)
+  * [agent](zh/kernel-modules/agent.md)
+  * [capability](zh/kernel-modules/capability.md)
+  * [context](zh/kernel-modules/context.md)
+  * [device_arbitration](zh/kernel-modules/device_arbitration.md)
+  * [hooks](zh/kernel-modules/hooks.md)
+  * [human](zh/kernel-modules/human.md)
+  * [llm_core](zh/kernel-modules/llm_core.md)
+  * [memory](zh/kernel-modules/memory.md)
+  * [model_library](zh/kernel-modules/model_library.md)
+  * [perception](zh/kernel-modules/perception.md)
+  * [scheduler](zh/kernel-modules/scheduler.md)
+  * [skill_library](zh/kernel-modules/skill_library.md)
+  * [storage](zh/kernel-modules/storage.md)
+  * [system_call](zh/kernel-modules/system_call.md)
+  * [tool](zh/kernel-modules/tool.md)
+  * [world_model](zh/kernel-modules/world_model.md)
+
 ### Reference
+* [Skills: system 和 app](zh/reference/skills.md)
 * [System Skills](zh/reference/system-skills.md)
 * [错误码](zh/reference/errors.md)
 
@@ -135,7 +156,28 @@
   * [llm](en/sdk/kernel-api/llm.md)
   * [access](en/sdk/kernel-api/access.md)
 
+### Kernel Modules
+* [Kernel Modules Overview](en/kernel-modules/README.md)
+  * [access](en/kernel-modules/access.md)
+  * [agent](en/kernel-modules/agent.md)
+  * [capability](en/kernel-modules/capability.md)
+  * [context](en/kernel-modules/context.md)
+  * [device_arbitration](en/kernel-modules/device_arbitration.md)
+  * [hooks](en/kernel-modules/hooks.md)
+  * [human](en/kernel-modules/human.md)
+  * [llm_core](en/kernel-modules/llm_core.md)
+  * [memory](en/kernel-modules/memory.md)
+  * [model_library](en/kernel-modules/model_library.md)
+  * [perception](en/kernel-modules/perception.md)
+  * [scheduler](en/kernel-modules/scheduler.md)
+  * [skill_library](en/kernel-modules/skill_library.md)
+  * [storage](en/kernel-modules/storage.md)
+  * [system_call](en/kernel-modules/system_call.md)
+  * [tool](en/kernel-modules/tool.md)
+  * [world_model](en/kernel-modules/world_model.md)
+
 ### Reference
+* [Skills: system and app](en/reference/skills.md)
 * [System Skills](en/reference/system-skills.md)
 * [Error Codes](en/reference/errors.md)
 
