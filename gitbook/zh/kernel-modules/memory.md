@@ -9,7 +9,7 @@ Source: `agentic_runtime_src/agentic_os/kernel/memory`
 高层 SDK：
 
 ```python
-await ctx.memory.remember("last_target", "green block")
+await ctx.memory.remember("last_target", "red block")
 value = await ctx.memory.recall("last_target")
 ```
 

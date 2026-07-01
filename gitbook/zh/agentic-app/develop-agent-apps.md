@@ -1,6 +1,6 @@
 # 如何开发 Agent App
 
-这一节完整演示如何从零开发一个 Agent App。我们要开发的 Agent 叫 **彩色积木抓取 Agent**：用户用自然语言说“把绿色积木抓起来并放到工作区托盘”，Agent 负责理解任务、确认风险、调用视觉识别、控制机械臂和夹爪完成抓取，再验证积木确实被夹住，最后放到指定位置并保存执行记录。
+这一节完整演示如何从零开发一个 Agent App。我们要开发的 Agent 叫 **彩色积木抓取 Agent**：用户用自然语言说“把红色积木抓起来并放到工作区托盘”，Agent 负责理解任务、确认风险、调用视觉识别、控制机械臂和夹爪完成抓取，再验证积木确实被夹住，最后放到指定位置并保存执行记录。
 
 这个 Agent 不是 ROS2 节点，不直接订阅相机 topic，不直接调用 MoveIt，也不自己发布 `/cmd_vel`。它只做任务编排：所有真实机器人动作都通过 Runtime 的 SDK 和 system skills 进入权限检查、资源锁、安全守卫和审计日志。
 
@@ -9,7 +9,7 @@
 用户给 App 一句话：
 
 ```text
-Pick the green block and place it at the workspace tray.
+Pick the red block and place it at the workspace tray.
 ```
 
 App 预期完成的事情：
@@ -74,13 +74,13 @@ agentic_apps/color_block_grasper_agent/
 输入：
 
 ```text
-用户自然语言任务，例如“抓取绿色积木并放到托盘”
+用户自然语言任务，例如“抓取红色积木并放到托盘”
 ```
 
 允许的颜色：
 
 ```text
-red, green, blue, yellow
+以 App manifest 和 system skill contract 中的颜色 allowlist 为准；本教程固定使用 red。
 ```
 
 允许的目标：
@@ -238,7 +238,7 @@ system prompt 要求 LLM 只返回 JSON，例如：
 {
   "schema_version": "1.0",
   "planner_mode": "llm",
-  "target_color": "green",
+  "target_color": "red",
   "place_target": "workspace_tray",
   "requires_manipulation": true,
   "needs_confirmation": true,
@@ -253,14 +253,14 @@ system prompt 要求 LLM 只返回 JSON，例如：
     "place_color_block"
   ],
   "risk_class": "controlled_manipulation",
-  "user_summary": "Pick the green block and place it at the workspace tray."
+  "user_summary": "Pick the red block and place it at the workspace tray."
 }
 ```
 
 然后用确定性代码校验：
 
 ```python
-ALLOWED_COLORS = {"red", "green", "blue", "yellow"}
+ALLOWED_COLORS = {"red"}  # 本教程固定演示 red；生产环境按 manifest/skill contract 扩展
 PLAN_STEPS = [
     "prepare_arm_pose",
     "center_color_block",
@@ -297,7 +297,7 @@ def validate_plan(plan: dict) -> dict:
     return {"success": True}
 ```
 
-关键点：LLM 可以决定“用户想抓绿色积木”，但不能决定“跳过确认”或“直接移动机械臂”。这些必须由代码和 Runtime 安全策略控制。
+关键点：LLM 可以决定“用户想抓红色积木”，但不能决定“跳过确认”或“直接移动机械臂”。这些必须由代码和 Runtime 安全策略控制。
 
 ## 第五步：把计划转换成任务对象
 
@@ -384,7 +384,7 @@ confirmation = await ctx.kernel.skill.call(
 
 只有回答 `CONFIRM` 才继续。未确认时返回 `COLOR_BLOCK_CONFIRMATION_REQUIRED`。
 
-真实运行开始前，App 通常会先拍一张 precheck 画面，用来证明相机、工作区和目标物体状态都可追溯。下面这张图里可以看到绿色、红色、蓝色三个积木都在工作台上，后续任务选择红色积木作为目标。
+真实运行开始前，App 通常会先拍一张 precheck 画面，用来证明相机、工作区和目标物体状态都可追溯。下面这张图里可以看到三块不同颜色的积木都在工作台上，后续任务选择红色积木作为目标。
 
 ![运行前相机画面](../assets/color-block-grasper/00_precheck_camera_view.png)
 
@@ -421,13 +421,13 @@ async def call_skill(ctx, steps, name: str, skill_name: str, args: dict) -> dict
 当 App 调用：
 
 ```python
-await ctx.kernel.skill.call("perception.detect_color_block", {"color": "green"})
+await ctx.kernel.skill.call("perception.detect_color_block", {"color": "red"})
 ```
 
 Runtime 不会把调用直接交给机器人。它会先走一遍系统执行链路：
 
 1. 从 skill registry 找到对应的 system skill contract。
-2. 用 `input_schema` 校验参数，例如 `color` 必须是 `red`、`green`、`blue`、`yellow`。
+2. 用 `input_schema` 校验参数，例如 `color` 必须属于 system skill contract 的颜色 allowlist；本教程传入 `red`。
 3. 用 App manifest 做 permission check，例如必须有 `perception.detect.color_block`。
 4. 对高风险或资源相关能力做 access/intervention check。
 5. 调 safety guard，例如机械臂动作要确认急停、最大时长、工作空间约束。
@@ -499,7 +499,7 @@ center = await call_skill(
 
 ![红色积木视觉对中调试图](../assets/color-block-grasper/01_center_red_block_debug.png)
 
-_视觉对中证据：红圈是 OpenCV 分割出的红色候选块，绿色十字是目标中心点。`CENTERED` 表示候选中心已经进入 profile 配置的容差范围。_
+_视觉对中证据：红圈是 OpenCV 分割出的红色候选块，十字标记是目标中心点。`CENTERED` 表示候选中心已经进入 profile 配置的容差范围。_
 
 `perception.center_color_block` 对应 bridge service：
 
@@ -574,7 +574,7 @@ detection = await call_skill(
 {
   "success": true,
   "detection": {
-    "color": "green",
+    "color": "red",
     "confidence": 0.92,
     "center_px": {"x": 318, "y": 221},
     "camera_position_m": {"x": 0.32, "y": 0.04, "z": 0.02}

@@ -22,7 +22,7 @@ entrypoint: main:run
 Runtime 启动 App 时会注入 `AgentContext`，然后调用 `main.py` 里的 `run(ctx, **kwargs)`。用户侧需要提供自然语言任务，例如：
 
 ```python
-result = await run(ctx, task_text="Pick the green block and place it at the workspace tray.")
+result = await run(ctx, task_text="Pick the red block and place it at the workspace tray.")
 ```
 
 也可以使用 `message` 或 `text` 字段。三者都没有时，App 会返回结构化错误：
@@ -59,7 +59,7 @@ task_text
 
 LLM plan 必须包含固定字段：`schema_version`、`planner_mode`、`target_color`、`place_target`、`requires_manipulation`、`needs_confirmation`、`steps`、`risk_class`、`user_summary`。
 
-`target_color` 只能是 `red`、`green`、`blue`、`yellow`。`steps` 必须严格等于 App 规定的确定性序列：
+`target_color` 必须来自 App manifest 和 system skill contract 声明的颜色 allowlist；本教程统一使用 `red`。`steps` 必须严格等于 App 规定的确定性序列：
 
 ```text
 prepare_arm_pose
