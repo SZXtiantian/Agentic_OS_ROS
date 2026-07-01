@@ -1,6 +1,12 @@
 # 如何开发 Agent App
 
-这一节完整演示如何从零开发一个 Agent App。我们要开发的 Agent 叫 **彩色积木抓取 Agent**：用户用自然语言说“夹起红色积木”，Agent 负责理解任务、确认风险、调用视觉识别、控制机械臂和夹爪完成抓取，再验证积木确实被夹住，最后根据计划保持夹持或放到指定位置并保存执行记录。
+<video controls muted playsinline preload="metadata" width="100%" src="../assets/color-block-grasper/demo-lift-red-block.mp4">
+  Demo video: 夹起红色方块
+</video>
+
+_Demo：真实机器人执行“夹起红色方块”的效果。_
+
+这一节完整演示如何从零开发一个 Agent App。我们要开发的 Agent 叫 **彩色积木抓取 Agent**：用户用自然语言说“夹起红色方块”，Agent 负责理解任务、确认风险、调用视觉识别、控制机械臂和夹爪完成抓取，再验证积木确实被夹住，最后根据计划保持夹持或放到指定位置并保存执行记录。
 
 这个 Agent 不是 ROS2 节点，不直接订阅相机 topic，不直接调用 MoveIt，也不自己发布 `/cmd_vel`。它只做任务编排：所有真实机器人动作都通过 Runtime 的 SDK 和 system skills 进入权限检查、资源锁、安全守卫和审计日志。
 
@@ -9,7 +15,7 @@
 用户给 App 一句话：
 
 ```text
-夹起红色积木
+夹起红色方块
 ```
 
 App 预期完成的事情：
@@ -74,7 +80,7 @@ agentic_apps/color_block_grasper_agent/
 输入：
 
 ```text
-用户自然语言任务，例如“夹起红色积木”
+用户自然语言任务，例如“夹起红色方块”
 ```
 
 允许的颜色：
@@ -253,7 +259,7 @@ system prompt 要求 LLM 只返回 JSON，例如：
     "place_color_block"
   ],
   "risk_class": "controlled_manipulation",
-  "user_summary": "夹起红色积木。"
+  "user_summary": "夹起红色方块。"
 }
 ```
 
