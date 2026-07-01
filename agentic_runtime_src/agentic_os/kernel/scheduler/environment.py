@@ -5,12 +5,25 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator, ValidationError
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
 
 from agentic_os.kernel.system_call.models import monotonic_id
 
 from .errors import SchedulerError
 from .models import now_ns, stable_hash_payload
+
+
+UNVERIFIED_FACT_DEPENDENCY_PREFIXES = (
+    "dummy",
+    "fake",
+    "llm",
+    "mock",
+    "planner",
+    "scheduler_planner",
+    "simulated",
+    "stub",
+    "task_graph_planner",
+)
 
 
 @dataclass
@@ -91,14 +104,16 @@ class EnvironmentFact:
         return at_ns - self.timestamp_ns >= self.ttl_ns
 
     def source_is_verified(self) -> bool:
-        return bool(
+        if not (
             self.source_node_id
             and self.source_capability
             and self.source_syscall_id
             and self.source_audit_id
             and self.source_result_hash
             and self.real_dependency
-        )
+        ):
+            return False
+        return not _looks_like_planning_source(self.real_dependency) and not _looks_like_planning_source(self.source_capability)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -162,7 +177,7 @@ class EnvironmentStore:
                 return False, {
                     "ttl_ok": False,
                     "confidence_ok": expired_fact.confidence >= min_confidence,
-                    "schema_ok": not schema_id or expired_fact.schema_id == schema_id,
+                    "schema_ok": self._schema_valid_for_reuse(expired_fact, schema_id),
                     "world_epoch_ok": expired_fact.world_epoch == self.world_epoch,
                     "source_real_ok": expired_fact.source_is_verified(),
                     "reject_reason": "SCHEDULER_REUSE_TTL_OK_FAILED",
@@ -173,7 +188,7 @@ class EnvironmentStore:
         flags: dict[str, bool | str] = {
             "ttl_ok": not fact.is_expired(at_ns if at_ns is not None else now_ns()),
             "confidence_ok": fact.confidence >= min_confidence,
-            "schema_ok": not schema_id or fact.schema_id == schema_id,
+            "schema_ok": self._schema_valid_for_reuse(fact, schema_id),
             "world_epoch_ok": fact.world_epoch == self.world_epoch,
             "source_real_ok": fact.source_is_verified(),
             "reject_reason": "",
@@ -205,7 +220,7 @@ class EnvironmentStore:
         self._validate_fact_record_schema(fact)
         if not 0.0 <= fact.confidence <= 1.0:
             raise SchedulerError("SCHEDULER_FACT_CONFIDENCE_LOW", metadata={"fact_key": fact.key, "confidence": fact.confidence})
-        schema = self._schemas.get(fact.schema_id)
+        schema = self._schema_for(fact.schema_id, fact_key=fact.key)
         if schema:
             try:
                 Draft202012Validator(schema).validate(fact.value)
@@ -221,3 +236,44 @@ class EnvironmentStore:
             Draft202012Validator(schema).validate(fact.to_dict())
         except (OSError, json.JSONDecodeError, ValidationError) as exc:
             raise SchedulerError("SCHEDULER_FACT_SCHEMA_INVALID", str(exc), {"fact_key": fact.key}) from exc
+
+    def _schema_for(self, schema_id: str, *, fact_key: str) -> dict[str, Any] | None:
+        if not schema_id:
+            return None
+        schema = self._schemas.get(schema_id)
+        if schema is not None:
+            return schema
+        schema_path = self.schema_root / schema_id
+        if not schema_path.is_file():
+            raise SchedulerError(
+                "SCHEDULER_FACT_SCHEMA_INVALID",
+                "environment fact schema is not registered",
+                {"fact_key": fact_key, "schema_id": schema_id},
+            )
+        try:
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            Draft202012Validator.check_schema(schema)
+        except (OSError, json.JSONDecodeError, SchemaError, ValidationError) as exc:
+            raise SchedulerError("SCHEDULER_FACT_SCHEMA_INVALID", str(exc), {"fact_key": fact_key, "schema_id": schema_id}) from exc
+        self._schemas[schema_id] = schema
+        return schema
+
+    def _schema_valid_for_reuse(self, fact: EnvironmentFact, schema_id: str) -> bool:
+        if not schema_id:
+            return True
+        if fact.schema_id != schema_id:
+            return False
+        try:
+            schema = self._schema_for(schema_id, fact_key=fact.key)
+            if schema:
+                Draft202012Validator(schema).validate(fact.value)
+        except (SchedulerError, ValidationError):
+            return False
+        return True
+
+
+def _looks_like_planning_source(value: str) -> bool:
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if not normalized:
+        return False
+    return any(normalized == prefix or normalized.startswith(f"{prefix}.") or normalized.startswith(f"{prefix}_") for prefix in UNVERIFIED_FACT_DEPENDENCY_PREFIXES)

@@ -4,7 +4,7 @@ from agentic_runtime.config import RuntimeConfig, find_repo_root
 def test_config_loads_repo_paths():
     config = RuntimeConfig.load()
     assert config.audit_log_path.name == "audit.jsonl"
-    assert config.skill_root.exists()
+    assert config.skill_provider_root.exists()
     assert config.app_root.exists()
 
 
@@ -19,9 +19,10 @@ def test_default_runtime_config_is_repo_relative(runtime_src, app_root):
 
     assert config.repo_root == runtime_src
     assert config.app_root == app_root
-    assert config.skill_root == runtime_src / "skills"
+    assert config.skill_provider_root == runtime_src / "system_skills"
+    assert config.skill_root == config.skill_provider_root
     assert str(config.app_root) != "/home/ubuntu/agentic_ws/src"
-    assert str(config.skill_root) != "/home/ubuntu/agentic_ws/src/agentic_runtime_src/skills"
+    assert str(config.skill_provider_root) != "/home/ubuntu/agentic_ws/src/agentic_runtime_src/system_skills"
 
 
 def test_runtime_config_loads_kernel_block():
@@ -33,4 +34,5 @@ def test_runtime_config_loads_kernel_block():
     assert config.kernel["memory"]["provider"] == "sqlite"
     assert config.kernel["tool"]["mcp_enabled"] is False
     assert not hasattr(config, "allow_mock_backends")
+    assert config.skill_provider_transport == "cli"
     assert config.ros_bridge_mode == "cli"

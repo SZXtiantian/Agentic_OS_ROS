@@ -101,11 +101,11 @@ camera_pitch_up_25
 - 不直接创建任意 servo pulse 动作。
 - 不让 Agent App 计算关节角。
 - 先生成 `CAMERA_POSE_BACKEND_MISSING` 或 `ARM_ACTION_BACKEND_MISSING`。
-- 后续可以通过人工示教/厂商工具生成动作组，再由 AgenticOS bridge profile 引用。
+- 后续可以通过人工示教/厂商工具生成动作组，再由 AgenticOS robot profile 引用。
 
 ## 5. Bridge Profile 设计
 
-在 `/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml` 的 `arm.allowed_named_actions` 扩展：
+在 `/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml` 的 `arm.allowed_named_actions` 扩展：
 
 ```yaml
 arm:
@@ -501,14 +501,14 @@ AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 \
 - verifier detects duplicate images as `PHOTO_DIFFERENCE_TOO_SMALL`。
 - verifier accepts intentionally different fixture images。
 - no-rclpy / no direct ROS guard still passes。
-- bridge profile missing action group returns structured backend missing error。
+- robot profile missing action group returns structured backend missing error。
 - real robot acceptance read-only default does not move arm。
 
 ## 14. 实现顺序
 
 1. 真实 ROS graph 和 action group discovery。
 2. 确定可用 camera pose named actions。
-3. 更新 bridge profile allowlist。
+3. 更新 robot profile allowlist。
 4. 更新 `app.yaml` 和 policy allowlist。
 5. 更新 `photo_plan.schema.json`。
 6. 更新 prompt 和 planner rule fallback。
@@ -528,7 +528,7 @@ AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 \
 
 - changed files。
 - 新增 camera pose allowlist。
-- 真实 bridge profile 中每个 named pose 的 backend availability。
+- 真实 robot profile 中每个 named pose 的 backend availability。
 - commands run。
 - test results。
 - real robot multi-angle photos paths。

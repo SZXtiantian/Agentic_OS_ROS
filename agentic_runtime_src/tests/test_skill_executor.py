@@ -35,7 +35,7 @@ FULL_PERMS = [
 
 def make_executor(tmp_path, *, access_manager=True):
     config = RuntimeConfig.load(Path(__file__).resolve().parents[1] / "configs" / "runtime.yaml")
-    registry = SkillRegistry(config.skill_root).load()
+    registry = SkillRegistry(config.skill_provider_root, app_root=config.app_root).load()
     bridge_calls = []
 
     async def missing_ros2(command, timeout_s):
@@ -504,5 +504,36 @@ def test_forbidden_zone_requires_real_safety_backend_before_navigation(tmp_path)
         assert bridge_calls
         assert bridge_calls[0]["command"][3] == "/agentic/safety/check"
         assert all("/agentic/robot/navigate_to_place" not in call["command"] for call in bridge_calls)
+
+    asyncio.run(run())
+
+
+def test_app_skill_executes_only_after_current_app_skills_loaded(tmp_path):
+    async def run():
+        executor, _, _, _ = make_executor(tmp_path)
+        config = RuntimeConfig.load(Path(__file__).resolve().parents[1] / "configs" / "runtime.yaml")
+        app = app_with_permissions(FULL_PERMS)
+        app.name = "color_block_grasper_agent"
+
+        missing = await executor.execute(
+            app,
+            "app.find_best_block",
+            {"candidates": [{"confidence": 0.1}, {"confidence": 0.9}]},
+            "sess",
+        )
+        assert missing.success is False
+        assert missing.error_code == "SKILL_NOT_FOUND"
+        assert "app skill not found" in missing.reason
+
+        executor.registry.load_app_skills("color_block_grasper_agent", config.app_root / "color_block_grasper_agent")
+        result = await executor.execute(
+            app,
+            "app.find_best_block",
+            {"candidates": [{"confidence": 0.1}, {"confidence": 0.9}]},
+            "sess",
+        )
+
+        assert result.success is True
+        assert result.data["selected"]["confidence"] == 0.9
 
     asyncio.run(run())

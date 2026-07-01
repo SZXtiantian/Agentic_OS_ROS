@@ -44,6 +44,7 @@ class SchedulerDebugExporter:
                 "message": "",
                 "scheduler_policy": scheduler.policy,
                 "global_revision": scheduler.graph_store.revision,
+                "graph_revision": scheduler.graph_store.revision,
                 "graphs": {graph_id: _safe_graph_dict(graph) for graph_id, graph in sorted(scheduler.graph_store.global_dag.graphs.items())},
                 "nodes_by_status": graph_counts,
                 "ready_queue": scheduler.ready_queue.snapshot(),
@@ -85,6 +86,7 @@ class SchedulerDebugExporter:
             graphs = scheduler.graph_store.global_dag.graphs
             selected = [graphs[task_graph_id]] if task_graph_id else list(graphs.values())
             lines = ["digraph AgenticScheduler {", '  rankdir="LR";']
+            lines.append(f'  label="AgenticScheduler graph_revision={int(scheduler.graph_store.revision)}";')
             for graph in selected:
                 lines.append(f'  subgraph "cluster_{_dot(graph.task_graph_id)}" {{')
                 lines.append(f'    label="{_dot(graph.task_graph_id)}";')
@@ -227,6 +229,7 @@ def _failure_snapshot(scheduler, exc: Exception, *, audit_id: str = "") -> dict[
         "message": "debug snapshot export failed",
         "scheduler_policy": _safe_scheduler_policy(scheduler),
         "global_revision": _safe_global_revision(scheduler),
+        "graph_revision": _safe_global_revision(scheduler),
         "graphs": {},
         "nodes_by_status": {},
         "ready_queue": [],

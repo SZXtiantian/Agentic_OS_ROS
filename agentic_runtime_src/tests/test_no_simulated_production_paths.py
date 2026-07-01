@@ -20,7 +20,7 @@ DISALLOWED_PRODUCTION_PATTERNS = {
     "simulated backend class": re.compile(r"class\s+\w*(?:Mock|Fake|Stub|Dummy)\w*(?:Provider|Backend|Client|Bridge|Manager)\b"),
     "simulated backend symbol": re.compile(r"\b(?:Mock|Fake|Stub|Dummy)\w*(?:Provider|Backend|Client|Bridge|Manager)\b"),
     "simulated backend config": re.compile(r"\b(?:backend|type)\s*[:=]\s*['\"]?(?:mock|fake|stub|dummy)['\"]?", re.IGNORECASE),
-    "simulated ros bridge mode": re.compile(r"\bros_bridge_mode\s*:\s*mock\b", re.IGNORECASE),
+    "simulated skill provider transport": re.compile(r"\bskill_provider_transport\s*:\s*mock\b", re.IGNORECASE),
     "mock backend toggle": re.compile(r"\ballow_mock_backends\b"),
     "mock perception evidence": re.compile(r"\bperception_backend_status\b.*\bMOCK\b"),
     "simulated success text": re.compile(r"\b(?:mock|fake|stub|dummy)[_\s-]*(?:success|camera|bridge|provider|backend)\b", re.IGNORECASE),
@@ -81,6 +81,6 @@ def test_ros_bridge_factory_has_no_simulated_mode_parameter_and_config_rejects_i
         create_ros_bridge_client(config, mock=True)
 
     config_path = tmp_path / "runtime.yaml"
-    config_path.write_text("runtime:\n  ros_bridge_mode: mock\n", encoding="utf-8")
+    config_path.write_text("runtime:\n  skill_provider_transport: mock\n", encoding="utf-8")
     with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
         RuntimeConfig.load(config_path)

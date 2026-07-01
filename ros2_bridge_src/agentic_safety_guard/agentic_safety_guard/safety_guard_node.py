@@ -12,7 +12,7 @@ from rclpy.node import Node
 from .config_paths import default_config_path
 
 
-DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
+DEFAULT_PROFILE = Path("/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml")
 
 
 class SafetyGuardNode(Node):

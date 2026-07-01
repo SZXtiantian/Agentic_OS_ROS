@@ -136,6 +136,12 @@ class TaskGraphPlanner:
                 user_goal_id=user_goal_id,
                 admission=self.admission,
             )
+            for admission_result in (
+                self.admission.validate_no_low_level_robot_commands(graph),
+                self.admission.validate_fact_provenance(graph),
+            ):
+                if not admission_result.success:
+                    raise ValueError(f"{admission_result.error_code}: {admission_result.message}")
         except (SchedulerError, ValueError, TypeError) as exc:
             self.audit.emit(
                 "scheduler.llm.real_call_failed",
@@ -279,7 +285,7 @@ def _complete_authoritative_graph_envelope(
         completed[key] = value
     completed["status"] = "created"
     graph_id = str(completed.get("task_graph_id") or "")
-    nodes = _canonical_nodes_payload(completed.get("nodes"))
+    nodes = _canonical_nodes_payload(_node_collection_payload(completed))
     if nodes is not None:
         completed["nodes"] = nodes
     if completed.get("edges") is None:
@@ -290,17 +296,167 @@ def _complete_authoritative_graph_envelope(
         for node_key, node_payload in nodes.items():
             if not isinstance(node_payload, dict):
                 continue
-            node_payload["node_id"] = str(node_key)
-            if graph_id:
-                node_payload["task_graph_id"] = graph_id
-            node_payload["agent_id"] = agent_id
-            node_payload.setdefault("agent_name", app_id)
-            node_payload["app_id"] = app_id
-            node_payload["session_id"] = session_id
-            if user_goal_id:
-                node_payload["user_goal_id"] = user_goal_id
-            node_payload["status"] = "created"
+            _complete_authoritative_node_payload(
+                node_payload,
+                node_id=str(node_key),
+                graph_id=graph_id,
+                agent_id=agent_id,
+                app_id=app_id,
+                session_id=session_id,
+                user_goal_id=user_goal_id,
+            )
     return completed
+
+
+def _node_collection_payload(payload: dict[str, Any]) -> Any:
+    for key in ("nodes", "task_nodes", "taskNodes", "tasks", "steps"):
+        value = payload.get(key)
+        if value is not None:
+            return value
+    if _looks_like_task_node_payload(payload):
+        return [payload]
+    return None
+
+
+def _looks_like_task_node_payload(payload: dict[str, Any]) -> bool:
+    return any(key in payload for key in ("capability", "skill", "skill_name", "action", "operation_type", "query_type"))
+
+
+def _complete_authoritative_node_payload(
+    node_payload: dict[str, Any],
+    *,
+    node_id: str,
+    graph_id: str,
+    agent_id: str,
+    app_id: str,
+    session_id: str,
+    user_goal_id: str = "",
+) -> None:
+    capability = _node_capability(node_payload)
+    query_type = _node_query_type(node_payload, capability=capability)
+    params = _node_params(node_payload, capability=capability)
+    node_payload["node_id"] = node_id
+    if graph_id:
+        node_payload["task_graph_id"] = graph_id
+    node_payload["agent_id"] = agent_id
+    node_payload.setdefault("agent_name", app_id)
+    node_payload["app_id"] = app_id
+    node_payload["session_id"] = session_id
+    if user_goal_id:
+        node_payload["user_goal_id"] = user_goal_id
+    node_payload["capability"] = capability
+    node_payload["operation_type"] = _node_operation_type(node_payload, capability=capability, query_type=query_type)
+    node_payload["query_type"] = query_type
+    node_payload["params"] = params
+    node_payload["metadata"] = _object_payload(node_payload.get("metadata"))
+    node_payload["status"] = "created"
+    node_payload["dependencies"] = _string_list_payload(node_payload.get("dependencies"))
+    node_payload["dependents"] = _string_list_payload(node_payload.get("dependents"))
+    node_payload["resources"] = _resource_list_payload(node_payload.get("resources"))
+    node_payload["preconditions"] = _object_list_payload(node_payload.get("preconditions"))
+    node_payload["required_permissions"] = _string_list_payload(node_payload.get("required_permissions"))
+    node_payload["safety_constraints"] = _object_payload(node_payload.get("safety_constraints"))
+    node_payload["produces_facts"] = _string_list_payload(node_payload.get("produces_facts"))
+    node_payload["consumes_facts"] = _string_list_payload(node_payload.get("consumes_facts"))
+    node_payload["resource_lease_ids"] = _string_list_payload(node_payload.get("resource_lease_ids"))
+    node_payload["audit_ids"] = _string_list_payload(node_payload.get("audit_ids"))
+
+
+def _node_capability(node_payload: dict[str, Any]) -> str:
+    for key in ("capability", "skill_name", "skill", "action", "operation"):
+        value = str(node_payload.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _node_query_type(node_payload: dict[str, Any], *, capability: str) -> str:
+    raw_value = str(node_payload.get("query_type") or node_payload.get("lane") or node_payload.get("type") or "").strip()
+    normalized = raw_value.lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "robot": "robot_capability",
+        "robot_capability": "robot_capability",
+        "capability": "robot_capability",
+        "skill_call": "skill",
+        "skill": "skill",
+        "tool": "tool",
+        "llm": "llm",
+        "memory": "memory",
+        "storage": "storage",
+        "context": "context",
+        "human": "human",
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    if capability.startswith(("robot.", "arm.", "gripper.", "manipulation.", "perception.")):
+        return "robot_capability"
+    if capability.startswith(("memory.", "ctx.", "context.")):
+        return "context" if capability.startswith(("ctx.", "context.")) else "memory"
+    if capability.startswith("storage."):
+        return "storage"
+    if capability.startswith("human."):
+        return "human"
+    if capability.startswith("llm."):
+        return "llm"
+    return "skill"
+
+
+def _node_operation_type(node_payload: dict[str, Any], *, capability: str, query_type: str) -> str:
+    explicit = str(node_payload.get("operation_type") or "").strip()
+    if explicit:
+        return explicit
+    for key in ("operation", "op"):
+        value = str(node_payload.get(key) or "").strip()
+        if value:
+            if query_type == "skill" and value == capability:
+                return "skill_call"
+            return value
+    if query_type == "skill" and capability:
+        return "skill_call"
+    return capability
+
+
+def _node_params(node_payload: dict[str, Any], *, capability: str) -> dict[str, Any]:
+    params = _object_payload(node_payload.get("params"))
+    if capability == "report.say" and "message" not in params:
+        for key in ("message", "text", "content"):
+            value = node_payload.get(key)
+            if isinstance(value, str) and value.strip():
+                params["message"] = value
+                break
+    return params
+
+
+def _object_payload(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _object_list_payload(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _resource_list_payload(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    resources: list[dict[str, Any]] = []
+    for item in value:
+        if isinstance(item, dict):
+            resources.append(dict(item))
+        elif isinstance(item, str) and item.strip() and item.strip().lower() not in {"none", "n/a", "null"}:
+            resources.append({"resource_id": item.strip()})
+    return resources
+
+
+def _string_list_payload(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, list | tuple | set):
+        return [str(item) for item in value if str(item)]
+    return []
 
 
 def _authoritative_graph_id(*, goal: str, agent_id: str, app_id: str, session_id: str, user_goal_id: str = "") -> str:

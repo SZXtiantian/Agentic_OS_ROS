@@ -8,7 +8,7 @@ from agentic_msgs.srv import GetRobotState
 from rclpy.node import Node
 
 
-DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
+DEFAULT_PROFILE = Path("/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml")
 DIRECT_ACTION_GROUP_BACKENDS = {"servo_action_group", "action_group_controller", "vendor_action_group_file"}
 
 
@@ -28,7 +28,7 @@ class StateBridgeNode(Node):
     def _load_profile(self) -> dict[str, Any]:
         path = Path(str(self.get_parameter("bridge_profile_file").value)).expanduser()
         if not path.exists():
-            self._profile_error = f"bridge profile not found: {path}"
+            self._profile_error = f"robot profile not found: {path}"
             self.get_logger().warning(self._profile_error)
             return {}
         with path.open("r", encoding="utf-8") as f:

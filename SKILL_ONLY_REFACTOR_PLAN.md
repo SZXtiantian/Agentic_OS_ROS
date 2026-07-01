@@ -61,20 +61,59 @@ Runtime 解析规则：
 SKILL.md
 ```
 
+这里先给出明确的定义：
+
+```text
+Skill = 一个可调用能力包。
+SKILL.md = 这个能力的说明书 + 机器可读契约。
+```
+
+也就是说，`SKILL.md` 不是纯自然语言文档，也不是纯配置文件。它必须同时服务两类读者：
+
+```text
+开发者和 Agent 读取说明书部分，用来理解这个能力怎么用、怎么改、有什么边界。
+Runtime 读取机器可读契约部分，用来校验、授权、加锁、安全检查、审计和分发执行。
+```
+
 不使用新的 `skill.yaml`。
 
 原因很简单：这里的目标是让开发者更容易上手和 DIY。Skill 不是纯机器配置，它同时包含：
 
 - 这个能力是干什么的
-- 输入是什么
-- 输出是什么
+- 什么时候应该用
+- 输入参数怎么写
+- 输出结果怎么看
 - 安全边界是什么
-- 如何调用
+- 如何调用这个能力
+- 怎么修改或替换实现
 - 具体怎么实现
 
 如果用 YAML，开发者通常还要再写一份说明文档。用 `SKILL.md` 可以把“人看的说明”和“机器读取的契约”放在一个文件里。
 
-机器可读部分不靠自然语言猜。`SKILL.md` 里必须有一个严格 JSON 元数据块：
+`SKILL.md` 的结构分成两部分：
+
+```text
+能力说明书：
+- 功能说明
+- 使用场景
+- 输入参数说明
+- 输出结果说明
+- 调用示例
+- 安全注意事项
+- DIY/修改指南
+
+机器可读契约：
+- name
+- scope: system / app
+- access
+- implementation
+- input_schema
+- output_schema
+- timeout
+- observability
+```
+
+机器可读契约不靠自然语言猜。`SKILL.md` 里必须有一个严格 JSON 元数据块：
 
 ````markdown
 # perception.detect_color_block
@@ -120,10 +159,11 @@ await ctx.kernel.skill.call("perception.detect_color_block", {"color": "red"})
 
 这个方案比 YAML 更适合开发者，同时仍然保持机器可验证：
 
-- Markdown 负责说明和示例。
-- JSON 元数据块负责严格解析和校验。
+- Markdown 正文负责能力说明书。
+- `json agentic-skill` 代码块负责机器可读契约。
 - Runtime 用 Markdown parser 找到 `agentic-skill` 代码块，再用 JSON parser 解析。
-- 不从普通说明文字里猜字段。
+- Runtime 只相信 JSON 契约，不从普通说明文字里猜字段。
+- 自然语言说明可以帮助开发者和 Agent 理解，但不能改变 Runtime 执行行为。
 
 ## 保留什么
 
@@ -716,6 +756,8 @@ agentic_runtime_src/agentic_runtime/app_manager/app_manager.py
 - 从 `agentic_apps/<app>/skills/` 加载 app skill。
 - `SKILL.md` 缺少 `json agentic-skill` 块时报结构化错误。
 - `SKILL.md` 里的 JSON 元数据非法时报结构化错误。
+- Runtime 只解析 `json agentic-skill` 契约块，不从 Markdown 正文推断执行字段。
+- 修改 Markdown 正文说明不应该改变 skill 的 Runtime 契约。
 - 新 skill 不允许使用 `skill.yaml`。
 - 迁移期间旧能力定义文件仍能临时加载。
 - 拒绝 app skill 路径逃逸。
@@ -763,5 +805,5 @@ colcon build --symlink-install
 可以把下面这段直接发给 Codex 执行：
 
 ```text
-/goal 在 /home/ubuntu/Agentic_OS_ROS_publish 实现 SKILL_ONLY_REFACTOR_PLAN.md 里的纯 Skill 重构。保留 Runtime 的权限检查、资源锁、安全检查、审计日志、结构化错误码，以及 Agent App 不能直接碰 ROS2 的边界。新增 system_skills 一 skill 一目录布局，每个 skill 使用 SKILL.md，不使用新的 skill.yaml；SKILL.md 内必须包含 json agentic-skill 元数据块。新增 app skills，App skill 名字使用 app.*，从 agentic_apps/<app>/skills/*/SKILL.md 自动扫描并限制在当前 App/session 可见。新增 skill_runtime 执行器，按 implementation.type 分发，不再按 skill 名字硬编码路由。完成配置、脚本、文档、测试更新，并在兼容测试通过后移除退役的用户可见中间层术语和旧 YAML skill 格式。不要修改 /opt/ros、ROS2/Nav2/MoveIt 上游源码、机器人厂商驱动源码、/home/ubuntu/ros2_ws/src。运行 PYTHONPATH=agentic_runtime_src pytest -q agentic_runtime_src/tests agentic_apps/color_block_grasper_agent/tests 和 scripts/run_tests.sh，最后报告修改文件、执行命令、测试结果、剩余风险、下一步。
+/goal 在 /home/ubuntu/Agentic_OS_ROS_publish 实现 SKILL_ONLY_REFACTOR_PLAN.md 里的纯 Skill 重构。保留 Runtime 的权限检查、资源锁、安全检查、审计日志、结构化错误码，以及 Agent App 不能直接碰 ROS2 的边界。新增 system_skills 一 skill 一目录布局；每个 skill 是一个可调用能力包，每个 SKILL.md 都是能力说明书 + 机器可读契约。SKILL.md 内必须包含 json agentic-skill 元数据块，Runtime 只解析这个契约块，不从 Markdown 正文推断执行字段；不使用新的 skill.yaml。新增 app skills，App skill 名字使用 app.*，从 agentic_apps/<app>/skills/*/SKILL.md 自动扫描并限制在当前 App/session 可见。新增 skill_runtime 执行器，按 implementation.type 分发，不再按 skill 名字硬编码路由。完成配置、脚本、文档、测试更新，并在兼容测试通过后移除退役的用户可见中间层术语和旧 YAML skill 格式。不要修改 /opt/ros、ROS2/Nav2/MoveIt 上游源码、机器人厂商驱动源码、/home/ubuntu/ros2_ws/src。运行 PYTHONPATH=agentic_runtime_src pytest -q agentic_runtime_src/tests agentic_apps/color_block_grasper_agent/tests 和 scripts/run_tests.sh，最后报告修改文件、执行命令、测试结果、剩余风险、下一步。
 ```

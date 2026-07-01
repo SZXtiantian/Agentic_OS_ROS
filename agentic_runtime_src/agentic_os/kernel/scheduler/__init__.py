@@ -2,7 +2,7 @@
 
 from .base import BaseKernelScheduler
 from .admission import AdmissionController
-from .audit import SchedulerAudit
+from .audit import REQUIRED_SCHEDULER_AUDIT_EVENTS, SchedulerAudit
 from .critical_path import compute_critical_path_rank, topological_sort, validate_acyclic
 from .dispatch import CapabilityDispatchAdapter, DispatchLaneMapper
 from .environment import EnvironmentFact, EnvironmentStore
@@ -62,6 +62,7 @@ __all__ = [
     "PriorityKey",
     "PriorityScorer",
     "QueryType",
+    "REQUIRED_SCHEDULER_AUDIT_EVENTS",
     "ReadyQueue",
     "ResourceArbiter",
     "ResourceLease",

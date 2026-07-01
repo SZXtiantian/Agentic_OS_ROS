@@ -1125,7 +1125,10 @@ def _clamp(value: int, lower: int, upper: int) -> int:
 
 def _fusion_reasoning_system_prompt() -> str:
     return (
-        "You are the AgenticOS scheduler fusion explainer. Return only JSON matching fusion_reasoning.schema.json. "
+        "You are the AgenticOS scheduler fusion explainer. Return exactly one JSON object matching fusion_reasoning.schema.json. "
+        "The top-level keys must be fusion_plan_id, decision_supported, risk_summary, and required_audit_events. "
+        "decision_supported must be a JSON boolean, and required_audit_events must be a JSON array of strings. "
+        "Do not wrap the answer inside required_output, schema, response, reasoning, or markdown. "
         "Do not invent facts, capabilities, robot poses, object poses, or successful actions. "
         "Explain whether the deterministic fusion evidence supports the already-computed plan; do not issue robot commands."
     )
@@ -1147,10 +1150,10 @@ def _fusion_reasoning_prompt(plan: FusionPlan, *, incoming_graph: TaskGraph, glo
         "resource_impact": plan.resource_impact,
         "safety_impact": plan.safety_impact,
         "fusion_score_components": dict(plan.audit_metadata.get("fusion_score_components", {})),
-        "required_output": {
+        "return_top_level_json_object": {
             "fusion_plan_id": plan.fusion_plan_id,
-            "decision_supported": "boolean",
-            "risk_summary": "brief text; no private prompt or secret values",
+            "decision_supported": bool(plan.accepted),
+            "risk_summary": f"deterministic fusion evidence supports={bool(plan.accepted)}; reason={plan.reason or plan.reject_reason}",
             "required_audit_events": list(plan.required_audit_events),
         },
     }
@@ -1177,8 +1180,11 @@ def _normalize_fusion_reasoning_payload(payload: dict[str, Any], plan: FusionPla
         decision = _find_bool_by_key(
             normalized,
             {
+                "accepted",
+                "decision",
                 "supports_existing_plan",
                 "supports_plan",
+                "supported_decision",
                 "supported",
                 "is_supported",
                 "plan_supported",
@@ -1210,10 +1216,23 @@ def _normalize_fusion_reasoning_payload(payload: dict[str, Any], plan: FusionPla
     if risk_summary:
         normalized["risk_summary"] = str(risk_summary)
 
-    if not normalized.get("fusion_plan_id"):
-        normalized["fusion_plan_id"] = plan.fusion_plan_id
-    if "required_audit_events" not in normalized:
-        normalized["required_audit_events"] = list(plan.required_audit_events)
+    fusion_plan_id = normalized.get("fusion_plan_id")
+    normalized["fusion_plan_id"] = (
+        fusion_plan_id.strip() if isinstance(fusion_plan_id, str) and fusion_plan_id.strip() else plan.fusion_plan_id
+    )
+
+    audit_events = _coerce_string_list(normalized.get("required_audit_events"))
+    if audit_events is None:
+        audit_events = _find_string_list_by_key(
+            normalized,
+            {
+                "required_audit_events",
+                "audit_events",
+                "events",
+                "required_events",
+            },
+        )
+    normalized["required_audit_events"] = audit_events if audit_events is not None else list(plan.required_audit_events)
     allowed = {"fusion_plan_id", "decision_supported", "risk_summary", "required_audit_events"}
     return {key: normalized[key] for key in allowed if key in normalized}
 
@@ -1223,9 +1242,9 @@ def _coerce_bool(value: Any) -> bool | None:
         return value
     if isinstance(value, str):
         lowered = value.strip().lower()
-        if lowered == "true":
+        if lowered in {"true", "yes", "supported", "accepted", "support", "supports", "valid"}:
             return True
-        if lowered == "false":
+        if lowered in {"false", "no", "unsupported", "rejected", "reject", "rejects", "invalid"}:
             return False
     return None
 
@@ -1268,6 +1287,42 @@ def _find_text_by_key(payload: Any, keys: set[str], *, depth: int = 0) -> str:
             if found:
                 return found
     return ""
+
+
+def _coerce_string_list(value: Any) -> list[str] | None:
+    if isinstance(value, str):
+        stripped = value.strip()
+        return [stripped] if stripped else None
+    if isinstance(value, list):
+        items = [str(item).strip() for item in value if str(item).strip()]
+        return items if items else None
+    if isinstance(value, dict):
+        for key in ("required_audit_events", "audit_events", "events", "required_events"):
+            coerced = _coerce_string_list(value.get(key))
+            if coerced is not None:
+                return coerced
+    return None
+
+
+def _find_string_list_by_key(payload: Any, keys: set[str], *, depth: int = 0) -> list[str] | None:
+    if depth > 8:
+        return None
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if str(key) in keys:
+                coerced = _coerce_string_list(value)
+                if coerced is not None:
+                    return coerced
+        for value in payload.values():
+            found = _find_string_list_by_key(value, keys, depth=depth + 1)
+            if found is not None:
+                return found
+    elif isinstance(payload, list):
+        for value in payload:
+            found = _find_string_list_by_key(value, keys, depth=depth + 1)
+            if found is not None:
+                return found
+    return None
 
 
 def _find_evidence_keys(payload: Any, *, depth: int = 0) -> list[str]:

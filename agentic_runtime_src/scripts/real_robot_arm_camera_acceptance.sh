@@ -3,7 +3,7 @@ set -euo pipefail
 
 RUNTIME_SRC="/home/ubuntu/agentic_ws/src/agentic_runtime_src"
 AGENTIC_HOME="${AGENTIC_HOME:-/opt/agentic}"
-PROFILE="${BRIDGE_PROFILE_FILE:-$AGENTIC_HOME/etc/bridge_profiles/rosorin_arm_camera.yaml}"
+PROFILE="${ROBOT_PROFILE_FILE:-$AGENTIC_HOME/etc/robot_profiles/rosorin_arm_camera.yaml}"
 TARGET="${AGENTIC_ACCEPTANCE_TARGET:-workspace}"
 ALLOW_ARM="${AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION:-0}"
 BRIDGE_PID=""
@@ -56,8 +56,8 @@ source_ros() {
   if [[ -f /home/ubuntu/third_party/orbbec_ws/install/setup.bash ]]; then
     source /home/ubuntu/third_party/orbbec_ws/install/setup.bash
   fi
-  if [[ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]]; then
-    source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+  if [[ -f /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash ]]; then
+    source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash
   fi
   set -u
 }
@@ -295,7 +295,7 @@ main() {
     json_event "failed" "PROFILE_MISSING" "$PROFILE"
   }
   run_soft "$AGENTIC_HOME/bin/agenticctl" status --real
-  run_required "$RUNTIME_SRC/scripts/build_robot_bridge.sh"
+  run_required "$RUNTIME_SRC/scripts/build_system_skill_nodes.sh"
   probe_ros_graph
   run_soft python "$RUNTIME_SRC/scripts/check_forbidden_imports.py"
   run_soft python "$RUNTIME_SRC/scripts/check_filesystem_layout.py"

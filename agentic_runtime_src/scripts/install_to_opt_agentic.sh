@@ -18,14 +18,14 @@ mkdir -p \
   "$TARGET/bin" \
   "$TARGET/etc" \
   "$TARGET/etc/secrets" \
-  "$TARGET/etc/bridge_profiles" \
+  "$TARGET/etc/robot_profiles" \
   "$TARGET/lib/python3" \
   "$TARGET/sdk/python" \
   "$TARGET/sdk/cpp" \
   "$TARGET/agentic_os" \
   "$TARGET/agentic_os/hardware" \
   "$TARGET/bridges/ros2" \
-  "$TARGET/skills" \
+  "$TARGET/system_skills" \
   "$TARGET/var/log" \
   "$TARGET/var/audit" \
   "$TARGET/var/evidence" \
@@ -40,6 +40,7 @@ mkdir -p \
   "$TARGET/tests"
 
 rmdir "$TARGET/hardware" 2>/dev/null || true
+rm -rf "$TARGET/skills"
 
 RSYNC_EXCLUDES=(
   --exclude '__pycache__/'
@@ -48,7 +49,7 @@ RSYNC_EXCLUDES=(
 
 rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$SRC_ROOT/docs/" "$TARGET/docs/"
 rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$SRC_ROOT/tests/" "$TARGET/tests/"
-rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$SRC_ROOT/skills/" "$TARGET/skills/"
+rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$SRC_ROOT/system_skills/" "$TARGET/system_skills/"
 rsync -a --delete --delete-excluded \
   "${RSYNC_EXCLUDES[@]}" \
   --exclude 'agentic_os/' \
@@ -66,9 +67,9 @@ cp "$SRC_ROOT/configs/safety.yaml" "$TARGET/etc/safety.yaml"
 cp "$SRC_ROOT/configs/models.yaml" "$TARGET/etc/models.yaml"
 cp "$SRC_ROOT/configs/capabilities.yaml" "$TARGET/etc/capabilities.yaml"
 cp "$SRC_ROOT/configs/places.yaml" "$TARGET/etc/places.yaml"
-if [ -d "$SRC_ROOT/configs/bridge_profiles" ]; then
+if [ -d "$SRC_ROOT/configs/robot_profiles" ]; then
   rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" \
-    "$SRC_ROOT/configs/bridge_profiles/" "$TARGET/etc/bridge_profiles/"
+    "$SRC_ROOT/configs/robot_profiles/" "$TARGET/etc/robot_profiles/"
 fi
 
 cat > "$TARGET/README.md" <<'EOF'
@@ -81,8 +82,8 @@ Top-level ownership:
 - `bin/`: command wrappers only.
 - `lib/python3/agentic_runtime/`: executable Python runtime.
 - `agentic_os/`: AgenticOS kernel source, ABI maps, and architecture taxonomy.
-- `etc/`: configuration, bridge profiles, and local secrets.
-- `skills/`: installed skill and capability manifests.
+- `etc/`: configuration, robot profiles, and local secrets.
+- `system_skills/`: installed system skills using SKILL.md contracts.
 - `bridges/`: AgenticOS-owned hardware or middleware adapters.
 - `sdk/`: exported SDK artifacts.
 - `tests/`: installed conformance tests.
@@ -108,7 +109,7 @@ cat > "$TARGET/setup.bash" <<'EOF'
 export AGENTIC_HOME=/opt/agentic
 export AGENTIC_ETC=$AGENTIC_HOME/etc
 export AGENTIC_VAR=$AGENTIC_HOME/var
-export AGENTIC_SKILLS=$AGENTIC_HOME/skills
+export AGENTIC_SKILL_PROVIDER_ROOT=$AGENTIC_HOME/system_skills
 export AGENTIC_DOCS=$AGENTIC_HOME/docs
 
 export PATH=$AGENTIC_HOME/bin:$PATH
@@ -125,9 +126,9 @@ if [ -f /home/ubuntu/ros2_ws/install/setup.bash ]; then
   source /home/ubuntu/ros2_ws/install/setup.bash
   set -u
 fi
-if [ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]; then
+if [ -f /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash ]; then
   set +u
-  source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+  source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash
   set -u
 fi
 if [ -f /home/ubuntu/agentic_ws/install/setup.bash ]; then

@@ -60,7 +60,7 @@
 - CLI 不再暴露 `--mock`。
 - RuntimeServer/AppInvoker/Session/task schema 不再接受 `mock` 字段。
 - 生产模块不 import/export simulated client。
-- 配置 schema 不接受 `ros_bridge_mode: mock`、`backend: mock`。
+- 配置 schema 不接受 `skill_provider_transport: mock`、`backend: mock`。
 - 相关历史说明可以移入 archive 文档，但不能作为当前运行方式出现。
 
 如需保留历史迁移错误码，可以保留 `SIMULATED_BACKEND_DISABLED` 作为兼容错误码，但不得作为新的公开操作入口。

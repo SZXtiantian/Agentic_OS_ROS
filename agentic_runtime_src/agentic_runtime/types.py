@@ -71,13 +71,29 @@ class SkillManifest:
     retry_policy: dict[str, Any]
     backend: dict[str, Any]
     observability: dict[str, Any]
+    scope: str = "system"
+    access: dict[str, Any] = field(default_factory=lambda: {"required": False})
+    implementation: dict[str, Any] = field(default_factory=dict)
+    source_path: str = ""
+    markdown: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.implementation and self.backend:
+            self.implementation = dict(self.backend)
+        if not self.backend and self.implementation:
+            self.backend = dict(self.implementation)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "SkillManifest":
+        implementation = dict(data.get("implementation") or data.get("backend") or {"type": "unconfigured"})
+        backend = dict(data.get("backend") or implementation)
         return cls(
             name=str(data["name"]),
             version=str(data["version"]),
             description=str(data.get("description", "")),
+            scope=str(data.get("scope", "system")),
+            access=dict(data.get("access", {"required": False})),
+            implementation=implementation,
             input_schema=dict(data["input_schema"]),
             output_schema=dict(data["output_schema"]),
             permission_requirements=list(data["permission_requirements"]),
@@ -85,8 +101,10 @@ class SkillManifest:
             safety_constraints=dict(data.get("safety_constraints", {})),
             timeout_s=int(data.get("timeout_s", 60)),
             retry_policy=dict(data.get("retry_policy", {"max_attempts": 0, "retry_on": []})),
-            backend=dict(data.get("backend", {"type": "unconfigured"})),
+            backend=backend,
             observability=dict(data.get("observability", {"audit": True})),
+            source_path=str(data.get("source_path", "")),
+            markdown=str(data.get("markdown", "")),
         )
 
 

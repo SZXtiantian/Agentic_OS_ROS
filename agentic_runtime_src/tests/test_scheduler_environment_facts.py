@@ -66,6 +66,48 @@ def test_environment_fact_rejects_unverified_source():
         store.put(fact)
 
 
+def test_environment_fact_rejects_llm_dependency_as_real_source():
+    store = EnvironmentStore()
+    fact = EnvironmentFact.create(
+        key="planner_summary",
+        value={"summary": "done"},
+        source_node_id="planner",
+        source_capability="llm.plan",
+        source_syscall_id="ksc_real_llm",
+        source_audit_id="audit_real_llm",
+        source_result={"summary": "done"},
+        ttl_ns=10_000_000_000,
+        confidence=0.9,
+        world_epoch=store.world_epoch,
+        schema_id="",
+        real_dependency="llm_provider",
+    )
+
+    with pytest.raises(SchedulerError, match="SCHEDULER_FACT_SOURCE_UNVERIFIED"):
+        store.put(fact)
+
+
+def test_environment_fact_rejects_mock_dependency_as_real_source():
+    store = EnvironmentStore()
+    fact = EnvironmentFact.create(
+        key="cup_pose",
+        value={"x": 1.0},
+        source_node_id="detect",
+        source_capability="perception.detect_cup",
+        source_syscall_id="ksc_mock",
+        source_audit_id="audit_mock",
+        source_result={"cup_pose": {"x": 1.0}},
+        ttl_ns=10_000_000_000,
+        confidence=0.9,
+        world_epoch=store.world_epoch,
+        schema_id="",
+        real_dependency="mock_backend",
+    )
+
+    with pytest.raises(SchedulerError, match="SCHEDULER_FACT_SOURCE_UNVERIFIED"):
+        store.put(fact)
+
+
 def test_precondition_rejects_unverified_fact_loaded_into_store():
     store = EnvironmentStore()
     fact = EnvironmentFact.from_dict(
@@ -148,6 +190,59 @@ def test_environment_fact_value_schema_is_validated():
 
     with pytest.raises(SchedulerError, match="SCHEDULER_FACT_SCHEMA_INVALID"):
         store.put(fact)
+
+
+def test_environment_fact_rejects_unknown_declared_schema_id():
+    store = EnvironmentStore()
+    fact = EnvironmentFact.create(
+        key="cup_pose",
+        value={"x": 1.0},
+        source_node_id="inspect",
+        source_capability="perception.detect_cup",
+        source_syscall_id="ksc_real",
+        source_audit_id="audit_real",
+        source_result={"cup_pose": {"x": 1.0}},
+        ttl_ns=10_000_000_000,
+        confidence=0.92,
+        world_epoch=store.world_epoch,
+        schema_id="missing_pose.schema.json",
+        real_dependency="ros_bridge",
+    )
+
+    with pytest.raises(SchedulerError) as error:
+        store.put(fact)
+
+    assert error.value.error_code == "SCHEDULER_FACT_SCHEMA_INVALID"
+    assert error.value.metadata["schema_id"] == "missing_pose.schema.json"
+
+
+def test_environment_fact_reuse_revalidates_value_schema():
+    store = EnvironmentStore()
+    fact = EnvironmentFact.from_dict(
+        {
+            "fact_id": "fact_bad_pose",
+            "key": "cup_pose",
+            "value": {"x": "not-a-number"},
+            "source_node_id": "inspect",
+            "source_capability": "perception.detect_cup",
+            "source_syscall_id": "ksc_real",
+            "source_audit_id": "audit_real",
+            "source_result_hash": "hash",
+            "timestamp_ns": now_ns(),
+            "ttl_ns": 10_000_000_000,
+            "confidence": 0.92,
+            "world_epoch": store.world_epoch,
+            "schema_id": "cup_pose.schema.json",
+            "real_dependency": "ros_bridge",
+        }
+    )
+    store._facts_by_key[fact.key] = fact
+
+    accepted, flags = store.validate_reuse("cup_pose", min_confidence=0.8, schema_id="cup_pose.schema.json")
+
+    assert accepted is False
+    assert flags["schema_ok"] is False
+    assert flags["reject_reason"] == "SCHEDULER_REUSE_SCHEMA_OK_FAILED"
 
 
 def test_precondition_matches_schema_returns_structured_schema_error():
@@ -463,6 +558,42 @@ def test_scheduler_fails_fact_creation_when_real_dependency_evidence_is_missing(
         KernelQueueStore(),
         {},
         kernel_service=ResultKernelService({"cup_pose": {"x": 1.0}, "confidence": 0.91, "audit_id": "audit_real"}),
+    )
+    scheduler.submit_graph(_fact_producer_graph())
+
+    decision = scheduler.tick(max_dispatch=1)[0]
+    node = scheduler.graph_store.get_node("detect")
+
+    assert decision["success"] is False
+    assert decision["error_code"] == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
+    assert node.status == "failed"
+    assert node.error_code == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
+    assert scheduler.environment_store.get("cup_pose") is None
+
+
+def test_scheduler_fails_fact_creation_when_dependency_evidence_is_llm():
+    scheduler = EnvironmentAwareDAGScheduler(
+        KernelQueueStore(),
+        {},
+        kernel_service=ResultKernelService({"cup_pose": {"x": 1.0}, "confidence": 0.91, "backend": "llm_provider", "audit_id": "audit_real"}),
+    )
+    scheduler.submit_graph(_fact_producer_graph())
+
+    decision = scheduler.tick(max_dispatch=1)[0]
+    node = scheduler.graph_store.get_node("detect")
+
+    assert decision["success"] is False
+    assert decision["error_code"] == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
+    assert node.status == "failed"
+    assert node.error_code == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
+    assert scheduler.environment_store.get("cup_pose") is None
+
+
+def test_scheduler_fails_fact_creation_when_dependency_evidence_is_mock():
+    scheduler = EnvironmentAwareDAGScheduler(
+        KernelQueueStore(),
+        {},
+        kernel_service=ResultKernelService({"cup_pose": {"x": 1.0}, "confidence": 0.91, "backend": "mock_backend", "audit_id": "audit_real"}),
     )
     scheduler.submit_graph(_fact_producer_graph())
 

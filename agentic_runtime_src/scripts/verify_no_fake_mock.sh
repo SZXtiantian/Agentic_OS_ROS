@@ -18,6 +18,7 @@ PRODUCTION_ROOTS = [
     ROOT / "agentic_runtime",
     ROOT / "configs",
     ROOT / "scripts",
+    ROOT / "system_skills",
     ROOT.parent / "agentic_apps",
     ROOT.parent / "ros2_bridge_src",
     Path("/home/ubuntu/agentic_ws/ros2_bridge_src"),

@@ -49,7 +49,7 @@ ALLOWED_TOP_LEVEL_DIRS = {
     "etc",
     "lib",
     "sdk",
-    "skills",
+    "system_skills",
     "tests",
     "var",
 }
@@ -154,10 +154,10 @@ def _fake_install_root(root: Path, runtime_src: Path) -> None:
         "bin",
         "bridges/ros2",
         "docs",
-        "etc/bridge_profiles",
+        "etc/robot_profiles",
         "lib/python3/agentic_runtime",
         "sdk",
-        "skills",
+        "system_skills",
         "tests",
         "var",
     ]:

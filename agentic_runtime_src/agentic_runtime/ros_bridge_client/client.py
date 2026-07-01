@@ -3,7 +3,7 @@ from __future__ import annotations
 from agentic_runtime.config import RuntimeConfig
 from agentic_runtime.provider_contracts import ros_bridge_contract
 
-from .cli_client import Ros2CliBridgeClient
+from agentic_runtime.skill_runtime.ros2_client import Ros2SkillRuntimeClient
 
 
 class RosBridgeModeUnsupportedError(RuntimeError):
@@ -16,6 +16,15 @@ class RosBridgeModeUnsupportedError(RuntimeError):
 
 
 def create_ros_bridge_client(config: RuntimeConfig):
-    if config.ros_bridge_mode == "cli":
-        return Ros2CliBridgeClient()
-    raise RosBridgeModeUnsupportedError(config.ros_bridge_mode)
+    transport = _configured_transport(config)
+    if transport == "cli":
+        return Ros2SkillRuntimeClient()
+    raise RosBridgeModeUnsupportedError(transport)
+
+
+def _configured_transport(config: RuntimeConfig) -> str:
+    provider_transport = str(getattr(config, "skill_provider_transport", "cli") or "cli")
+    legacy_transport = str(getattr(config, "ros_bridge_mode", provider_transport) or provider_transport)
+    if provider_transport != "cli":
+        return provider_transport
+    return legacy_transport

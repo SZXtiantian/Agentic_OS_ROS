@@ -17,7 +17,7 @@ def generate_launch_description():
             DeclareLaunchArgument("nav2_action_name", default_value="/navigate_to_pose"),
             DeclareLaunchArgument(
                 "bridge_profile_file",
-                default_value="/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml",
+                default_value="/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml",
             ),
             Node(
                 package="agentic_capability_bridge",

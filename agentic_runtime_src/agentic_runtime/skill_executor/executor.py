@@ -17,7 +17,7 @@ from agentic_runtime.permission_manager import PermissionManager
 from agentic_runtime.skill_registry import SkillRegistry
 from agentic_runtime.skill_registry.schema_validator import validate_input
 from agentic_runtime.syscall import SkillSyscall, SyscallStatus
-from agentic_runtime.types import AppManifest, SkillCall, SkillResult
+from agentic_runtime.types import AppManifest, SkillCall, SkillManifest, SkillResult
 
 from .cancellation import CancellationManager
 from .dispatcher import SkillDispatcher
@@ -83,19 +83,41 @@ class SkillExecutor:
                         recoverable=False,
                         suggested_recovery=["resume_agent", "start_new_session"],
                     )
-        skill = self.registry.get_skill(skill_name)
-        call = SkillCall(skill.name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill.name, args, app.name, session_id)
-        if skill.name == "human.ask" and call.call_id and not args.get("correlation_id"):
-            args["correlation_id"] = call.call_id
-        syscall = SkillSyscall.create(app.name, session_id, skill.name, args)
-        self._record_syscall(syscall)
-        self._set_current_skill(session_id, skill.name)
         started = time.monotonic()
         permission_result = "not_checked"
         safety_result = "not_required"
         resource_result = "not_required"
+        try:
+            skill = self.registry.get_skill(skill_name, app_id=app.name)
+        except KeyError as exc:
+            call = SkillCall(skill_name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill_name, args, app.name, session_id)
+            result = SkillResult(
+                success=False,
+                error_code="SKILL_NOT_FOUND",
+                reason=str(exc),
+                recoverable=False,
+                suggested_recovery=["check_skill_registry"],
+            )
+            result.audit_id = self._audit(
+                call,
+                permission_result,
+                safety_result,
+                resource_result,
+                "unconfigured",
+                "rejected",
+                result.error_code,
+                started,
+                result.to_dict(),
+            )
+            return result
+        call = SkillCall(skill.name, args, app.name, session_id, call_id=call_id) if call_id else SkillCall(skill.name, args, app.name, session_id)
+        if bool(skill.implementation.get("correlation_id_from_call", False)) and call.call_id and not args.get("correlation_id"):
+            args["correlation_id"] = call.call_id
+        syscall = SkillSyscall.create(app.name, session_id, skill.name, args)
+        self._record_syscall(syscall)
+        self._set_current_skill(session_id, skill.name)
         acquired: list[tuple[str, str]] = []
-        backend_name = str(skill.backend.get("type", "unconfigured"))
+        backend_name = str(skill.implementation.get("audit_backend") or skill.implementation.get("type", "unconfigured"))
 
         try:
             validate_input(skill.input_schema, args)
@@ -103,7 +125,7 @@ class SkillExecutor:
             permission_result = "allowed"
             syscall.permission_result = permission_result
 
-            if self._requires_access_check(skill.name):
+            if self._requires_access_check(skill):
                 if self.access_manager is None:
                     raise PermissionDeniedError(
                         "kernel access manager is required for robot and human-facing capability execution",
@@ -113,8 +135,8 @@ class SkillExecutor:
                     AccessRequest(
                         subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),
                         action="execute",
-                        resource=AccessResource(self._access_resource_type(skill.name), skill.name),
-                        irreversible=self._requires_intervention(skill.name),
+                        resource=AccessResource(self._access_resource_type(skill), skill.name),
+                        irreversible=self._requires_intervention(skill),
                         reason=f"runtime skill execution: {skill.name}",
                     )
                 )
@@ -124,11 +146,11 @@ class SkillExecutor:
                         code=access_decision.error_code or "PERMISSION_DENIED",
                     )
 
-            if skill.name == "robot.stop":
+            if bool(skill.implementation.get("cancels_session", False)):
                 self.cancellation_manager.cancel_session(session_id)
 
             if self._requires_safety(skill.safety_constraints):
-                safety_response = await self.dispatcher.bridge_client.check_safety(skill.name, args, app.name)
+                safety_response = await self.dispatcher.check_safety(skill, args, app.name)
                 self._emit_event(
                     "robot.safety_checked",
                     app_id=app.name,
@@ -173,10 +195,10 @@ class SkillExecutor:
             self._record_syscall(syscall)
             raw = await run_with_timeout(
                 self.dispatcher.dispatch(
-                    skill.name,
-                    args,
-                    app.name,
-                    session_id,
+                    skill=skill,
+                    args=args,
+                    app_id=app.name,
+                    session_id=session_id,
                     cancel_event=cancel_event,
                     call_id=call.call_id,
                 ),
@@ -324,7 +346,7 @@ class SkillExecutor:
             skill = self.registry.get_skill(skill_name)
             self.permission_manager.check(app, skill)
             permission_result = "allowed"
-            if self._requires_access_check(skill.name):
+            if self._requires_access_check(skill):
                 if self.access_manager is None:
                     raise PermissionDeniedError(
                         "kernel access manager is required for robot checkpoint capability",
@@ -334,8 +356,8 @@ class SkillExecutor:
                     AccessRequest(
                         subject=AccessSubject(app_id=app.name, agent_name=app.name, permissions=tuple(app.permissions)),
                         action="execute",
-                        resource=AccessResource(self._access_resource_type(skill.name), skill.name),
-                        irreversible=False,
+                        resource=AccessResource(self._access_resource_type(skill), skill.name),
+                        irreversible=self._requires_intervention(skill),
                         reason=f"runtime checkpoint request: {skill.name}",
                     )
                 )
@@ -345,7 +367,7 @@ class SkillExecutor:
                         code=access_decision.error_code or "PERMISSION_DENIED",
                     )
             raw = await self.dispatcher.checkpoint_capability(
-                skill.name,
+                skill,
                 params,
                 app.name,
                 session_id,
@@ -418,47 +440,14 @@ class SkillExecutor:
             or constraints.get("gripper_allowlist")
         )
 
-    def _requires_access_check(self, skill_name: str) -> bool:
-        return skill_name in {
-            "robot.navigate_to",
-            "robot.stop",
-            "robot.inspect_area",
-            "arm.move_named",
-            "gripper.set",
-            "perception.observe",
-            "perception.capture_photo",
-            "perception.center_color_block",
-            "perception.detect_color_block",
-            "perception.verify_held_color_block",
-            "manipulation.pick_color_block",
-            "manipulation.place_color_block",
-            "human.ask",
-        }
+    def _requires_access_check(self, skill: SkillManifest) -> bool:
+        return bool(skill.access.get("required", False))
 
-    def _access_resource_type(self, skill_name: str) -> str:
-        if skill_name == "human.ask":
-            return "human"
-        if skill_name in {
-            "robot.inspect_area",
-            "perception.observe",
-            "perception.capture_photo",
-            "perception.center_color_block",
-            "perception.detect_color_block",
-            "perception.verify_held_color_block",
-        }:
-            return "robot_sensor"
-        return "robot_motion"
+    def _access_resource_type(self, skill: SkillManifest) -> str:
+        return str(skill.access.get("resource_type") or "skill")
 
-    def _requires_intervention(self, skill_name: str) -> bool:
-        return skill_name in {
-            "robot.navigate_to",
-            "robot.inspect_area",
-            "arm.move_named",
-            "gripper.set",
-            "manipulation.pick_color_block",
-            "manipulation.place_color_block",
-            "human.ask",
-        }
+    def _requires_intervention(self, skill: SkillManifest) -> bool:
+        return bool(skill.access.get("irreversible", False))
 
     def _result_from_backend(self, raw: dict[str, Any]) -> SkillResult:
         if not isinstance(raw, dict):

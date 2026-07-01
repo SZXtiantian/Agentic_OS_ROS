@@ -7,7 +7,7 @@ from runtime_test_helpers import create_test_runtime_server
 
 
 def test_kernel_capability_registry_loads_task_level_capabilities(runtime_src):
-    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "system_skills")
 
     navigate = registry.get("robot.navigate_to")
     inspect = registry.get("robot.inspect_area")

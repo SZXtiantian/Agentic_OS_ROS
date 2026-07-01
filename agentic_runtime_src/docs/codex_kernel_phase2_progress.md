@@ -430,7 +430,7 @@
   - Implemented LSFS mount, create file, create directory, write, retrieve, rollback, share, and status over `StorageManager`.
   - Added overwrite version names and rollback support.
   - Added retrieve snippets, scores, and metadata.
-  - Expanded unsafe path protection to `task_logs`, `config(s)`, and bridge profile paths.
+  - Expanded unsafe path protection to `task_logs`, `config(s)`, and robot profile paths.
 - Target tests:
   - `python -m pytest tests/test_kernel_storage_syscalls.py tests/test_storage_manager.py -q` -> `16 passed`.
 - Safety boundary check:
@@ -460,7 +460,7 @@
   - Added decision IDs to `AccessDecision`.
   - Added dynamic allow/deny/require-intervention evaluation while preserving hard static denies.
   - Added `ConsoleInterventionProvider` and `FileQueueInterventionProvider`.
-  - Expanded high-risk operations to storage rollback/share/overwrite, access privilege change, tool admin/install, bridge profile changes, and real-hardware robot motion.
+  - Expanded high-risk operations to storage rollback/share/overwrite, access privilege change, tool admin/install, robot profile changes, and real-hardware robot motion.
 - Target tests:
   - `python -m pytest tests/test_access_manager.py tests/test_permission_manager.py -q` -> `15 passed`.
   - `python -m pytest tests/test_access_manager.py tests/test_kernel_storage_syscalls.py tests/test_kernel_tool_dynamic_loading.py -q` -> `28 passed`.

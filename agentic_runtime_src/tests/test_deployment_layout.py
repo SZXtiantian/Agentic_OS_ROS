@@ -8,7 +8,7 @@ def install_root(tmp_path: Path) -> Path:
         return Path(configured).expanduser()
     root = tmp_path / "staging_opt_agentic"
     (root / "bridges" / "ros2").mkdir(parents=True, exist_ok=True)
-    (root / "etc" / "bridge_profiles").mkdir(parents=True, exist_ok=True)
+    (root / "etc" / "robot_profiles").mkdir(parents=True, exist_ok=True)
     return root
 
 
@@ -23,7 +23,7 @@ def test_deployment_layout_exists(tmp_path, repo_root, runtime_src, app_root):
     assert (repo_root / "ros2_bridge_src" / "agentic_msgs").exists()
     assert (repo_root / "ros2_bridge_src" / "agentic_capability_bridge").exists()
     assert (root / "bridges" / "ros2").is_dir()
-    assert (root / "etc" / "bridge_profiles").is_dir()
+    assert (root / "etc" / "robot_profiles").is_dir()
 
 
 def test_real_robot_acceptance_reports_bringup_and_usb_diagnostics(runtime_src):
@@ -115,7 +115,7 @@ def test_agentic_entrypoint_supports_environment_and_natural_language_shell(runt
     installer = (runtime_src / "scripts" / "install_to_opt_agentic.sh").read_text(encoding="utf-8")
 
     assert "source /opt/ros/humble/setup.bash" in installer
-    assert "source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash" in installer
+    assert "source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash" in installer
     assert 'if [ "${1:-}" = "enter" ]' in installer
     assert 'if [ "${1:-}" = "chat" ]' in installer
     assert "python -m agentic_runtime.nl_gateway" in installer

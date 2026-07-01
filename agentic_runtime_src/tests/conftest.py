@@ -11,7 +11,7 @@ AGENTIC_HOME = REPO_ROOT / ".agentic_home"
 
 os.environ.setdefault("AGENTIC_RUNTIME_SRC", str(RUNTIME_SRC))
 os.environ.setdefault("AGENTIC_APP_ROOT", str(APP_ROOT))
-os.environ.setdefault("AGENTIC_SKILLS", str(RUNTIME_SRC / "skills"))
+os.environ.setdefault("AGENTIC_SKILL_PROVIDER_ROOT", str(RUNTIME_SRC / "system_skills"))
 os.environ.setdefault("AGENTIC_HOME", str(AGENTIC_HOME))
 os.environ.setdefault("AGENTIC_VAR", str(AGENTIC_HOME / "var"))
 os.environ.setdefault("AGENTIC_ETC", str(AGENTIC_HOME / "etc"))

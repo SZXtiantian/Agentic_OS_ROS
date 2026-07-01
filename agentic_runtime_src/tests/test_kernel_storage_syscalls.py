@@ -357,6 +357,6 @@ def test_sto_rejects_bridge_profile_path(tmp_path):
                 "agent_a",
                 "storage",
                 "sto_write",
-                {"path": "bridge_profiles/robot.yaml", "content": "bad"},
+                {"path": "robot_profiles/robot.yaml", "content": "bad"},
             )
         )

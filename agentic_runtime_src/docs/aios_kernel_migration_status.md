@@ -13,7 +13,7 @@ AgenticOS-owned hardware adapter paths:
 ```text
 /opt/agentic/agentic_os/hardware
 /opt/agentic/bridges/ros2
-/opt/agentic/etc/bridge_profiles
+/opt/agentic/etc/robot_profiles
 ```
 
 Workspace boundaries:
@@ -60,7 +60,7 @@ failure into structured errors instead of accepted rule fallback.
 Goal command:
 
 ```text
-/goal Build the Agentic OS kernel for ROS2 by migrating the existing AIOS kernel modules from /home/ubuntu/AIOS into /opt/agentic, the real AgenticOS system root. Treat /home/ubuntu/agentic_ws as the Agentic App workspace. Treat the ROS2 bridge as the AgenticOS-owned hardware / middleware adapter layer, analogous to a traditional OS HAL / driver layer; /home/ubuntu/agentic_ws/ros2_bridge_src is only the current ROS2/colcon bridge package source/build location. Follow /home/ubuntu/AIOS_TO_AGENTIC_OS_KERNEL_MIGRATION_TECHNICAL_PLAN.md as the execution plan. Implement ROS-safe counterparts for AIOS runtime service, syscall lifecycle, scheduler, memory provider, storage manager, tool manager, context manager, config refresh, app factory, session/status tracking, audit correlation, CLI commands, bridge profiles, adapter lifecycle, and bridge status/install concepts. Keep inspection_agent as the first representative app and make it run through the new /opt/agentic kernel/session path in mock mode. Preserve all architecture boundaries: no rclpy in /opt/agentic/lib/python3/agentic_runtime, SDK, or Agent Apps; only /home/ubuntu/agentic_ws/ros2_bridge_src bridge packages may import rclpy; robot movement must always pass permission checks, safety checks, resource locks, and audit logs. Work in small tested increments, validate the installed /opt/agentic commands, run static guard and pytest after each behavioral change, update docs and demo commands, and continue until the kernel architecture is complete. Real Nav2 wiring is a later phase unless the kernel migration is already complete, but the bridge/HAL layer belongs to the kernel architecture now.
+/goal Build the Agentic OS kernel for ROS2 by migrating the existing AIOS kernel modules from /home/ubuntu/AIOS into /opt/agentic, the real AgenticOS system root. Treat /home/ubuntu/agentic_ws as the Agentic App workspace. Treat the ROS2 bridge as the AgenticOS-owned hardware / middleware adapter layer, analogous to a traditional OS HAL / driver layer; /home/ubuntu/agentic_ws/ros2_bridge_src is only the current ROS2/colcon bridge package source/build location. Follow /home/ubuntu/AIOS_TO_AGENTIC_OS_KERNEL_MIGRATION_TECHNICAL_PLAN.md as the execution plan. Implement ROS-safe counterparts for AIOS runtime service, syscall lifecycle, scheduler, memory provider, storage manager, tool manager, context manager, config refresh, app factory, session/status tracking, audit correlation, CLI commands, robot profiles, adapter lifecycle, and bridge status/install concepts. Keep inspection_agent as the first representative app and make it run through the new /opt/agentic kernel/session path in mock mode. Preserve all architecture boundaries: no rclpy in /opt/agentic/lib/python3/agentic_runtime, SDK, or Agent Apps; only /home/ubuntu/agentic_ws/ros2_bridge_src bridge packages may import rclpy; robot movement must always pass permission checks, safety checks, resource locks, and audit logs. Work in small tested increments, validate the installed /opt/agentic commands, run static guard and pytest after each behavioral change, update docs and demo commands, and continue until the kernel architecture is complete. Real Nav2 wiring is a later phase unless the kernel migration is already complete, but the bridge/HAL layer belongs to the kernel architecture now.
 ```
 
 Completed implementation:
@@ -129,7 +129,7 @@ status=completed
 Remaining deferred work:
 
 - Replace mock bridge transport with real non-rclpy runtime-to-bridge transport.
-- Generate concrete ROS2 bridge profiles per robot.
+- Generate concrete ROS2 robot profiles per robot.
 - Build and install ROS2 bridge packages from `/home/ubuntu/agentic_ws/ros2_bridge_src`.
 - Wire Nav2 actions inside bridge packages only, keeping Runtime, SDK, and Apps free of `rclpy`.
 - Add real robot safety integration tests after hardware or simulation profile selection.

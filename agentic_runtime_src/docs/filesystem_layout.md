@@ -19,7 +19,7 @@ Inside it, every top-level directory must have exactly one ownership meaning:
   lib/          importable executable runtime libraries
   agentic_os/   AgenticOS kernel source, ABI maps, architecture module taxonomy
   etc/          system configuration and local secrets
-  skills/       system skill / capability manifests
+  system_skills/ system SKILL.md capability contracts
   bridges/      installed hardware or middleware adapter ownership
   sdk/          exported SDK artifacts for external developers
   tests/        installed conformance tests
@@ -180,7 +180,7 @@ safety.yaml
 places.yaml
 capabilities.yaml
 models.yaml
-bridge_profiles/
+robot_profiles/
 secrets/
 ```
 
@@ -188,14 +188,14 @@ Rules:
 
 - `secrets/` is local-machine only.
 - Do not copy secrets into docs, manifests, audit logs, or source code.
-- `bridge_profiles/` describes concrete robot/middleware adapter mappings.
+- `robot_profiles/` describes concrete robot/middleware adapter mappings.
 
-### `/opt/agentic/skills`
+### `/opt/agentic/system_skills`
 
-Contains installed skill/capability manifests.
+Contains installed system skill contracts.
 
 These are the capability-level ABI visible to Agent Apps through the SDK. They
-are configuration/manifest files, not Python runtime code.
+are `SKILL.md` files with `agentic-skill` metadata, not Python runtime code.
 
 ### `/opt/agentic/bridges`
 

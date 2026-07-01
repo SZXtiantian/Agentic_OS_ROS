@@ -54,10 +54,10 @@ The installer currently copies the full `agentic_runtime/` source tree into
   Installed hardware / middleware adapter ownership.
 
 /opt/agentic/etc
-  System config, bridge profiles, and local secrets.
+  System config, robot profiles, and local secrets.
 
-/opt/agentic/skills
-  Installed skill / capability manifests.
+/opt/agentic/system_skills
+  Installed system skill contracts.
 
 /opt/agentic/sdk
   Exported SDK artifacts for app developers.
@@ -95,7 +95,7 @@ so it:
 - installs architecture contracts from source `agentic_os/` into `/opt/agentic/agentic_os`;
 - preserves `/opt/agentic/etc/secrets` unless explicitly requested;
 - preserves `/opt/agentic/var` runtime state unless explicitly requested;
-- creates `/opt/agentic/agentic_os/hardware`, `/opt/agentic/bridges/ros2`, and `/opt/agentic/etc/bridge_profiles`.
+- creates `/opt/agentic/agentic_os/hardware`, `/opt/agentic/bridges/ros2`, and `/opt/agentic/etc/robot_profiles`.
 
 3. Remove installed duplicate runtime architecture tree:
 
@@ -143,7 +143,7 @@ Filesystem checks:
 test ! -e /opt/agentic/lib/python3/agentic_runtime/agentic_os
 test -d /opt/agentic/agentic_os
 test -d /opt/agentic/bridges/ros2
-test -d /opt/agentic/etc/bridge_profiles
+test -d /opt/agentic/etc/robot_profiles
 ```
 
 ## Done Means

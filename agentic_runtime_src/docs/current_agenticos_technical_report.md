@@ -16,7 +16,7 @@
 - Runtime 和 Agent App 不 import `rclpy`。
 - 只有 `/home/ubuntu/agentic_ws/ros2_bridge_src/*` 下的 bridge packages 接触 ROS2。
 - 已有权限检查、资源锁、安全检查、审计日志、session 记录、SQLite memory、skill manifest。
-- 已有真实机器人 camera + manipulator bridge profile。
+- 已有真实机器人 camera + manipulator robot profile。
 - 已发现真实相机 topic `/depth_cam/rgb0/image_raw` 和机械臂 `/servo_controller`。
 - 已实现 `camera_arm_inspection_agent`，可以通过 AgenticOS 读取真实相机 metadata，并在环境变量允许时调用 allowlist 中的机械臂动作。
 - 已实现 `robot_photographer_agent` 的 AIOS-compatible App package、plan-first executor、schema/policy tests、四姿态多角度拍摄计划和照片差异验证。
@@ -29,7 +29,7 @@
 - 真实 LLM 验收仍需要本机 `/opt/agentic/etc/secrets/yunwu.env` 或环境变量提供 API key，且不能把 secret 写入源码、文档或日志。
 - 自然语言入口以 `/opt/agentic/bin/agentic` 为主，`agentic photo` 保留为兼容/调试入口。
 - `perception.capture_photo` 已作为正式能力进入 Runtime/SDK/bridge/client 路径；真实执行仍依赖 bridge services 正常启动。
-- 真实 bridge services 需要启动 `/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh` 后才会出现在 ROS graph。
+- 真实 bridge services 需要启动 `/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh` 后才会出现在 ROS graph。
 
 ## 2. AgenticOS 的定位
 
@@ -78,7 +78,7 @@ User
 /opt/agentic/lib/python3/agentic_runtime
 /opt/agentic/agentic_os
 /opt/agentic/etc
-/opt/agentic/skills
+/opt/agentic/system_skills
 /opt/agentic/docs
 /opt/agentic/tests
 /opt/agentic/var
@@ -89,8 +89,8 @@ User
 - `bin/`：薄 CLI wrapper，例如 `agentic`、`agenticctl`、`agentic-run`、`agentic-app`、`agenticd`。
 - `lib/python3/agentic_runtime/`：可执行 Runtime / SDK / CLI / service wrapper。
 - `agentic_os/`：AgenticOS kernel source、ABI map、architecture taxonomy。
-- `etc/`：系统配置、权限、安全、模型、bridge profile。
-- `skills/`：capability / skill manifest。
+- `etc/`：系统配置、权限、安全、模型、robot profile。
+- `system_skills/`：system `SKILL.md` capability contract。
 - `docs/`：安装层文档。
 - `tests/`：安装层 conformance tests。
 - `var/`：可变运行状态，包括 audit、session、memory、evidence、storage、context。
@@ -275,7 +275,7 @@ bridge source：
 build 命令：
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_system_skill_nodes.sh
 ```
 
 最近 build 结果：
@@ -370,10 +370,10 @@ manipulation_bridge_node.py
 
 ## 7. 真实机器人接入现状
 
-真实机器人 bridge profile：
+真实机器人 robot profile：
 
 ```text
-/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml
+/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml
 ```
 
 关键配置：
@@ -728,7 +728,7 @@ resource_locks:
 - 真实机器人 bridge 可以通过脚本启动：
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh
 ```
 
 ROS graph 查询时观察到真实硬件相关 topic：
@@ -767,7 +767,7 @@ Agentic OS foundation-complete checks passed.
 命令：
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_system_skill_nodes.sh
 ```
 
 结果：
@@ -803,7 +803,7 @@ agenticctl status
 `/opt/agentic/etc/agentic.yaml` 当前：
 
 ```yaml
-ros_bridge_mode: cli
+skill_provider_transport: cli
 ```
 
 缺少 ROS2、bridge service 或 robot/Nav2 后端时，Runtime 必须返回稳定错误码（例如 `ROS_BRIDGE_UNAVAILABLE`），不能用模拟成功路径替代真实执行。
@@ -880,7 +880,7 @@ camera_up
 
 优先级 3：真实 bridge lifecycle 管理。
 
-把 `/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh` 纳入更明确的 AgenticOS bridge lifecycle：启动、状态、日志、停止、profile 检查。
+把 `/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh` 纳入更明确的 AgenticOS bridge lifecycle：启动、状态、日志、停止、profile 检查。
 
 优先级 4：模型 provider。
 
@@ -920,7 +920,7 @@ agentic sessions --limit 5
 agentic audit --limit 5
 ros2 topic list
 ros2 service list
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_system_skill_nodes.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_tests.sh
 ```
 

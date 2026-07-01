@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from agentic_os.kernel.hooks import InMemoryKernelEventSink, KernelQueueName, KernelQueueStore
 from agentic_os.kernel.llm_core import LLMAdapter, LLMConfig
@@ -194,18 +195,23 @@ def test_scheduler_batches_llm_syscalls_in_window():
     executor = SyscallExecutor(queue_store=store, default_timeout_s=1.0)
     results = []
 
+    threads = [
+        threading.Thread(
+            target=lambda i=index: results.append(
+                executor.execute_request("agent_a", LLMQuery(operation_type="chat", params={"i": i}), timeout_s=1.0)
+            )
+        )
+        for index in range(3)
+    ]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + 1.0
+    while store.qsize(KernelQueueName.LLM) < 3 and time.monotonic() < deadline:
+        time.sleep(0.001)
+    assert store.qsize(KernelQueueName.LLM) == 3
+
     scheduler.start()
     try:
-        threads = [
-            threading.Thread(
-                target=lambda i=index: results.append(
-                    executor.execute_request("agent_a", LLMQuery(operation_type="chat", params={"i": i}), timeout_s=1.0)
-                )
-            )
-            for index in range(3)
-        ]
-        for thread in threads:
-            thread.start()
         for thread in threads:
             thread.join(timeout=1.0)
     finally:

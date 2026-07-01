@@ -17,7 +17,12 @@ from agentic_os.kernel.scheduler import (
     TypedEdge,
 )
 from agentic_os.kernel.scheduler.environment import EnvironmentFact, EnvironmentStore
-from agentic_os.kernel.scheduler.fusion import FusionPlan, _normalize_fusion_reasoning_payload
+from agentic_os.kernel.scheduler.fusion import (
+    FusionPlan,
+    _fusion_reasoning_prompt,
+    _fusion_reasoning_system_prompt,
+    _normalize_fusion_reasoning_payload,
+)
 from agentic_os.kernel.scheduler.global_dag import GlobalGoalDAG
 from agentic_os.kernel.scheduler.models import CoverageRequirement, TaskNodeStatus
 from agentic_os.kernel.scheduler.opportunity import OpportunityIndex
@@ -144,6 +149,75 @@ def test_fusion_reasoning_normalizes_real_llm_alias_fields_to_schema():
         "risk_summary": "fusion evidence details provided: coverage_preservation,fact_reuse",
         "required_audit_events": ["scheduler.fusion.accepted"],
     }
+
+    string_event_normalized = _normalize_fusion_reasoning_payload(
+        {
+            "accepted": True,
+            "summary": "accepted with one required audit event",
+            "required_audit_events": "scheduler.fusion.accepted",
+        },
+        plan,
+    )
+    assert string_event_normalized == {
+        "fusion_plan_id": "fusion_alias",
+        "decision_supported": True,
+        "risk_summary": "accepted with one required audit event",
+        "required_audit_events": ["scheduler.fusion.accepted"],
+    }
+
+    nested_event_normalized = _normalize_fusion_reasoning_payload(
+        {
+            "reasoning": {
+                "plan_id": "fusion_alias",
+                "supported_decision": True,
+                "risk_summary": "nested response still matches the schema",
+                "audit_events": {"events": ["scheduler.fusion.accepted"]},
+            }
+        },
+        plan,
+    )
+    assert nested_event_normalized == {
+        "fusion_plan_id": "fusion_alias",
+        "decision_supported": True,
+        "risk_summary": "nested response still matches the schema",
+        "required_audit_events": ["scheduler.fusion.accepted"],
+    }
+
+    text_bool_normalized = _normalize_fusion_reasoning_payload(
+        {
+            "decision": "supported",
+            "summary": "accepted as supported by deterministic evidence",
+        },
+        plan,
+    )
+    assert text_bool_normalized["decision_supported"] is True
+
+
+def test_fusion_reasoning_prompt_uses_schema_valid_top_level_example():
+    plan = FusionPlan(
+        fusion_plan_id="fusion_prompt",
+        incoming_graph_id="g_prompt",
+        base_global_dag_revision=0,
+        accepted=True,
+        reason="fact_reuse_available",
+        required_audit_events=["scheduler.fusion.accepted"],
+    )
+    graph = TaskGraph.create(
+        task_graph_id="g_prompt",
+        user_goal_id="goal_prompt",
+        root_goal="reuse context",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={},
+    )
+    prompt = _fusion_reasoning_prompt(plan, incoming_graph=graph, global_dag=GlobalGoalDAG())
+    system_prompt = _fusion_reasoning_system_prompt()
+
+    assert '"decision_supported": true' in prompt
+    assert '"decision_supported": "boolean"' not in prompt
+    assert "return_top_level_json_object" in prompt
+    assert "Do not wrap the answer inside required_output" in system_prompt
 
 
 def _global_dag_with_opportunity_window(
@@ -817,6 +891,179 @@ def test_scheduler_submit_graph_triggers_real_llm_fusion_explanation_for_accepte
         event.get("event_type") == "scheduler.llm.real_call_completed"
         and event.get("metadata", {}).get("operation_type") == "scheduler_explain_fusion_plan"
         for event in sink.recent(limit=80)
+    )
+
+
+def test_scheduler_submit_graph_rejects_accepted_fusion_when_real_llm_explanation_fails():
+    sink = InMemoryKernelEventSink()
+    service = RecordingFusionLLMKernelService(success=False, error_code="LLM_PROVIDER_UNCONFIGURED")
+    scheduler = EnvironmentAwareDAGScheduler(KernelQueueStore(event_sink=sink), {}, kernel_service=service, event_sink=sink)
+    producer = TaskNode.create(
+        node_id="context_source",
+        task_graph_id="context_graph",
+        user_goal_id="goal_context",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+        produces_facts=["verified_context"],
+    )
+    producer_graph = TaskGraph.create(
+        task_graph_id="context_graph",
+        user_goal_id="goal_context",
+        root_goal="existing context",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={producer.node_id: producer},
+    )
+    assert scheduler.submit_graph(producer_graph).success is True
+    scheduler.environment_store.put(
+        EnvironmentFact.create(
+            key="verified_context",
+            value={"ok": True},
+            source_node_id=producer.node_id,
+            source_capability=producer.capability,
+            source_syscall_id="ksc_real_context",
+            source_audit_id="audit_real_context",
+            source_result={"verified_context": {"ok": True}},
+            ttl_ns=30_000_000_000,
+            confidence=0.99,
+            world_epoch=scheduler.environment_store.world_epoch,
+            schema_id="",
+            real_dependency="real_context_provider",
+        )
+    )
+    consumer = TaskNode.create(
+        node_id="context_consumer",
+        task_graph_id="consumer_graph",
+        user_goal_id="goal_consumer",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+        consumes_facts=["verified_context"],
+    )
+    consumer_graph = TaskGraph.create(
+        task_graph_id="consumer_graph",
+        user_goal_id="goal_consumer",
+        root_goal="reuse context",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={consumer.node_id: consumer},
+    )
+
+    response = scheduler.submit_graph(consumer_graph)
+    events = sink.recent(limit=100)
+
+    assert response.success is False
+    assert response.error_code == "SCHEDULER_LLM_REAL_PROVIDER_REQUIRED"
+    assert response.metadata["upstream_error_code"] == "LLM_PROVIDER_UNCONFIGURED"
+    assert "consumer_graph" not in scheduler.graph_store.global_dag.graphs
+    assert any(
+        event.get("event_type") == "scheduler.llm.real_call_failed"
+        and event.get("metadata", {}).get("operation_type") == "scheduler_explain_fusion_plan"
+        for event in events
+    )
+    assert any(
+        event.get("event_type") == "scheduler.graph.rejected"
+        and event.get("metadata", {}).get("error_code") == "SCHEDULER_LLM_REAL_PROVIDER_REQUIRED"
+        and event.get("metadata", {}).get("upstream_error_code") == "LLM_PROVIDER_UNCONFIGURED"
+        for event in events
+    )
+
+
+def test_scheduler_submit_graph_rejects_accepted_fusion_when_llm_reasoning_plan_id_mismatches():
+    sink = InMemoryKernelEventSink()
+    service = RecordingFusionLLMKernelService(
+        {
+            "fusion_plan_id": "different_fusion_plan",
+            "decision_supported": True,
+            "risk_summary": "claims to support a different fusion plan",
+            "required_audit_events": ["scheduler.fusion.accepted"],
+        }
+    )
+    scheduler = EnvironmentAwareDAGScheduler(KernelQueueStore(event_sink=sink), {}, kernel_service=service, event_sink=sink)
+    producer = TaskNode.create(
+        node_id="context_source",
+        task_graph_id="context_graph",
+        user_goal_id="goal_context",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+        produces_facts=["verified_context"],
+    )
+    producer_graph = TaskGraph.create(
+        task_graph_id="context_graph",
+        user_goal_id="goal_context",
+        root_goal="existing context",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={producer.node_id: producer},
+    )
+    assert scheduler.submit_graph(producer_graph).success is True
+    scheduler.environment_store.put(
+        EnvironmentFact.create(
+            key="verified_context",
+            value={"ok": True},
+            source_node_id=producer.node_id,
+            source_capability=producer.capability,
+            source_syscall_id="ksc_real_context",
+            source_audit_id="audit_real_context",
+            source_result={"verified_context": {"ok": True}},
+            ttl_ns=30_000_000_000,
+            confidence=0.99,
+            world_epoch=scheduler.environment_store.world_epoch,
+            schema_id="",
+            real_dependency="real_context_provider",
+        )
+    )
+    consumer = TaskNode.create(
+        node_id="context_consumer",
+        task_graph_id="consumer_graph",
+        user_goal_id="goal_consumer",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+        consumes_facts=["verified_context"],
+    )
+    consumer_graph = TaskGraph.create(
+        task_graph_id="consumer_graph",
+        user_goal_id="goal_consumer",
+        root_goal="reuse context",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={consumer.node_id: consumer},
+    )
+
+    response = scheduler.submit_graph(consumer_graph)
+    events = sink.recent(limit=100)
+
+    assert response.success is False
+    assert response.error_code == "SCHEDULER_LLM_OUTPUT_SCHEMA_INVALID"
+    assert "consumer_graph" not in scheduler.graph_store.global_dag.graphs
+    assert any(
+        event.get("event_type") == "scheduler.llm.real_call_failed"
+        and event.get("metadata", {}).get("error_code") == "SCHEDULER_LLM_OUTPUT_SCHEMA_INVALID"
+        for event in events
+    )
+    assert any(
+        event.get("event_type") == "scheduler.graph.rejected"
+        and event.get("metadata", {}).get("error_code") == "SCHEDULER_LLM_OUTPUT_SCHEMA_INVALID"
+        for event in events
     )
 
 

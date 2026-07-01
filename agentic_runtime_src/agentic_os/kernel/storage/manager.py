@@ -22,6 +22,7 @@ class StorageManager:
         "config",
         "configs",
         "bridge_profiles",
+        "robot_profiles",
         "bridges",
         "ros2_ws",
         "ros2_bridge_src",

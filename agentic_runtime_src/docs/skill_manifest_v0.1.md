@@ -1,67 +1,62 @@
-# Skill Manifest v0.1
+# Skill Contract v0.1
 
-Skill manifests live under `agentic_runtime/skills/*.yaml`.
+All callable capabilities are skills.
 
-Skill manifests will declare high-level robot capabilities, required permissions, resource locks, safety policy references, and audit behavior.
+System skills live in:
 
-## Required Fields
-
-```yaml
-name: string
-version: string
-description: string
-
-input_schema:
-  type: object
-  required: []
-  properties: {}
-
-output_schema:
-  type: object
-  required: []
-  properties: {}
-
-permission_requirements: string[]
-
-resource_requirements:
-  locks: string[]
-
-safety_constraints:
-  require_known_place: bool
-  require_localized: bool
-  require_estop_released: bool
-  forbidden_zone_check: bool
-  allow_cancel: bool
-  max_duration_s: int
-
-timeout_s: int
-
-retry_policy:
-  max_attempts: int
-  retry_on: string[]
-
-backend:
-  type: ros2_action | ros2_service | ros2_topic | runtime_internal
-  bridge: string
-  ros2_action_name: string
-  ros2_action_type: string
-
-observability:
-  audit: bool
-  record_feedback: bool
-  record_result: bool
+```text
+agentic_runtime_src/system_skills/<skill_name>/SKILL.md
 ```
 
-## Foundation Skills
+App skills live in:
 
-- `robot.get_state`
-- `world.resolve_place`
-- `robot.navigate_to`
-- `robot.inspect_area`
-- `robot.stop`
-- `memory.remember`
-- `memory.recall`
-- `human.ask`
-- `report.say`
+```text
+agentic_apps/<app_id>/skills/<skill_dir>/SKILL.md
+```
 
-Every skill call writes an audit record, including permission failures, safety rejections, resource lock failures, timeouts, cancellations, and backend failures.
+Runtime reads only the fenced `json agentic-skill` block inside `SKILL.md`. Markdown prose is documentation for people and agents; it cannot change execution behavior.
+
+```json agentic-skill
+{
+  "schema_version": 1,
+  "name": "perception.detect_color_block",
+  "scope": "system",
+  "access": {
+    "required": true,
+    "resource_type": "robot_sensor",
+    "irreversible": false
+  },
+  "implementation": {
+    "type": "ros2_service",
+    "service": "/agentic/perception/detect_color_block",
+    "service_type": "agentic_msgs/srv/DetectColorBlock"
+  },
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {
+    "type": "object"
+  }
+}
+```
+
+Required metadata fields:
+
+- `schema_version`
+- `name`
+- `scope`
+- `access`
+- `implementation`
+- `input_schema`
+- `output_schema`
+
+Supported implementation types:
+
+- `python`
+- `ros2_service`
+- `ros2_action`
+- `runtime_internal`
+
+System skills are globally visible. App skills must be named `app.*`, are loaded from the current App directory, and cannot override system skills.
+
+Every dangerous robot skill still passes through Runtime schema validation, permission checks, access checks, resource locks, safety checks, timeout/cancellation handling, syscall records, and audit logs before its implementation runs.

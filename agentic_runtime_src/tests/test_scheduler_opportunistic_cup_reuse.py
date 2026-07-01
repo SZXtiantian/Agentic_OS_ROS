@@ -108,7 +108,7 @@ def test_cup_reuse_does_not_skip_real_pick_verify_deliver_nodes():
 
 
 def test_missing_real_cup_capability_is_stable_unavailable(runtime_src):
-    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "system_skills")
     scheduler = EnvironmentAwareDAGScheduler(
         KernelQueueStore(),
         {},

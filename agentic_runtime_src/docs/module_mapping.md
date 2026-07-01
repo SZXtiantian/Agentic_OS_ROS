@@ -64,7 +64,7 @@ Capability Registry / HAL Table
 
 系统 skill 库
   -> /opt/agentic/agentic_os/kernel/skill_library
-  -> /opt/agentic/skills
+  -> /opt/agentic/system_skills
 
 Memory Management
   -> /opt/agentic/agentic_os/kernel/memory

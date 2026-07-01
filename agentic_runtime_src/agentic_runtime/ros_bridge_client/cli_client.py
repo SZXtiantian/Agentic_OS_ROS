@@ -919,7 +919,7 @@ def _parse_ros_repr(text: str) -> dict[str, Any]:
         if match:
             result[key] = match.group(1)
             continue
-        match = re.search(rf"\b{key}\s*[:=]\s*([^\n,)]+)", text)
+        match = re.search(rf"\b{key}\s*[:=]\s*([^'\"\n,)]+)", text)
         if match:
             result[key] = match.group(1).strip()
     for key in ["objects", "anomalies", "completed_coverage"]:

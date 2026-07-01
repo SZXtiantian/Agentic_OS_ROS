@@ -5,7 +5,7 @@ PLACE="${1:-厨房}"
 
 set +u
 source /opt/ros/humble/setup.bash
-source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash
 source /opt/agentic/setup.bash >/dev/null
 set -u
 

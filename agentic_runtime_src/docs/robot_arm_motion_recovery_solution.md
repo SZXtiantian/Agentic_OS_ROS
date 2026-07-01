@@ -482,7 +482,7 @@ camera_up.d6a
 init.d6a
 ```
 
-这些名字只能作为后端候选，不直接暴露给 Agent App。验证通过后，再由 AgenticOS bridge profile 映射成业务 named pose：
+这些名字只能作为后端候选，不直接暴露给 Agent App。验证通过后，再由 AgenticOS robot profile 映射成业务 named pose：
 
 ```text
 init / horizontal        -> camera_center 或 arm_home，需实测决定
@@ -876,8 +876,8 @@ source /home/ubuntu/ros2_ws/install/setup.bash
 
 ### 9.6 AgenticOS 回接阶段
 
-1. 只有通过真实运动和图像验证的动作组，才能加入 bridge profile。
-2. bridge profile 用业务 named pose 暴露，不暴露原始动作组名。
+1. 只有通过真实运动和图像验证的动作组，才能加入 robot profile。
+2. robot profile 用业务 named pose 暴露，不暴露原始动作组名。
 3. 更新 Robot Photographer policy/schema allowlist。
 4. 运行 `real_robot_multi_angle_photo_acceptance.sh`。
 5. 用 `AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1 agentic photo --real --allow-arm-motion --yes "拍一组多角度照片并验证差异"` 做最终验收。

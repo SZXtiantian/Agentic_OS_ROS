@@ -25,7 +25,7 @@ except Exception:  # pragma: no cover - depends on robot ROS overlay
     ActionGroupController = None
 
 
-DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
+DEFAULT_PROFILE = Path("/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml")
 DIRECT_ACTION_GROUP_BACKENDS = {"servo_action_group", "action_group_controller", "vendor_action_group_file"}
 
 
@@ -87,7 +87,7 @@ class ManipulationBridgeNode(Node):
     def _load_profile(self) -> dict[str, Any]:
         path = Path(str(self.get_parameter("bridge_profile_file").value)).expanduser()
         if not path.exists():
-            self.get_logger().warning(f"bridge profile not found: {path}")
+            self.get_logger().warning(f"robot profile not found: {path}")
             return {}
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}

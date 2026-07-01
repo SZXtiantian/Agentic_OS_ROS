@@ -85,7 +85,29 @@ PYTHONPATH=. pytest -q
 [`agentic_runtime_src/docs/scheduler_environment_aware_dag.md`](agentic_runtime_src/docs/scheduler_environment_aware_dag.md)。
 真实 scheduler LLM 和 capability 验证脚本需要显式开启；在真实 provider、
 bridge 和 capability backend 尚未配置时，会返回
-`UNVERIFIED_REAL_DEPENDENCY`。
+`UNVERIFIED_REAL_DEPENDENCY`。如果 scheduler capability bridge 缺失，会以
+稳定的 `ROS_SERVICE_UNAVAILABLE` 或 `ROS_ACTION_UNAVAILABLE` 报告；capability
+验证脚本会在 `NEXT_ACTION` 中给出所需接口、可见 ROS graph 数量和查询命令，
+例如 `required=/agentic/robot/get_state`、`visible_services=0` 和
+`command=ros2 service list`，并提示
+`start_command=ros2 run agentic_capability_bridge state_bridge_node`。对这个只读
+state service，它还会报告 bridge 可执行文件探测结果，例如
+`bridge_executable=agentic_capability_bridge/state_bridge_node:available`
+和 `executable_command=ros2 pkg executables agentic_capability_bridge`。默认情况下
+验证脚本不会启动 ROS 节点；设置 `AGENTIC_VERIFY_START_READONLY_STATE_BRIDGE=1`
+时，才会在本次检查期间临时启动真实只读 `state_bridge_node`。backend unavailable
+结果还会包含精简的 `ros_graph=` 证据，显示 live node/topic/service/action 数量以及
+已配置 camera/arm/gripper topic 的可见性，并从所选 robot profile 输出
+`profile_dependencies=`，展示候选 camera launch 文件、arm topics/services 和
+action-group 文件存在比例，包括 `camera_backend=`、`arm_backend=`、
+`gripper_backend=`、`camera_launch_files_present=` 和 `next_backend_steps=`
+动作标签；`backend_step_hints=` 会把这些标签映射成非自动执行的 operator
+指引，例如使用只读 state-bridge opt-in、启动 profile 中的 camera launch，或执行
+需要人工确认的真实 arm/servo 启动。验证脚本不会自动执行这些后端启动动作。ROS discovery 重试窗口由
+`AGENTIC_VERIFY_ROS_DISCOVERY_ATTEMPTS` 和
+`AGENTIC_VERIFY_ROS_DISCOVERY_RETRY_DELAY_S` 控制。当前通用水杯
+检测、抓取、持有验证和递送 backend 仍是真实 capability 缺口；在这些真实 bridge/HAL
+路径存在前，scheduler 水杯复用必须保持 unavailable。
 
 ---
 

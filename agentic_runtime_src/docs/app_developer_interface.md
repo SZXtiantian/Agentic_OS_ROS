@@ -153,7 +153,7 @@ result = await ctx.robot.navigate_to("厨房", timeout_s=120)
 | --- | --- |
 | `AGENTIC_RUNTIME_SRC` | Runtime 源码根目录。 |
 | `AGENTIC_APP_ROOT` | Agent App 根目录，默认类似 `agentic_apps`。 |
-| `AGENTIC_SKILLS` | skill manifest 根目录，默认 `agentic_runtime_src/skills`。 |
+| `AGENTIC_SKILL_PROVIDER_ROOT` | system skills 根目录，默认 `agentic_runtime_src/system_skills`。 |
 | `AGENTIC_HOME` | 安装后的系统根，默认 `/opt/agentic`。 |
 | `AGENTIC_VAR` | audit、memory、session、report 等运行时状态根目录。 |
 | `AGENTIC_SESSION_ROOT` | session/syscall 存储目录。 |
@@ -194,27 +194,48 @@ runtime_limits: {}
 
 当前没有独立的 app manifest JSON Schema 文件作为运行时强校验；运行时通过 `AppManifest.from_dict()`、`AppValidator` 和测试检查关键字段。额外字段可被特定应用读取，但不属于通用 stable interface。
 
-### 3.2 Skill manifest
+### 3.2 Skill contract
 
-每个公开 capability 都有 `agentic_runtime_src/skills/*.yaml`。关键字段：
+每个公开 capability 都有 `agentic_runtime_src/system_skills/*/SKILL.md`。Runtime 只解析 `json agentic-skill` 代码块：
 
-```yaml
-name: robot.navigate_to
-permission_requirements:
-  - robot.move
-resource_requirements:
-  locks:
-    - base
-safety_constraints:
-  require_known_place: true
-  require_localized: true
-  require_estop_released: true
-  forbidden_zone_check: true
-timeout_s: 120
-backend:
-  type: ros2_action
-observability:
-  audit: true
+```json agentic-skill
+{
+  "schema_version": 1,
+  "name": "robot.navigate_to",
+  "scope": "system",
+  "access": {
+    "required": true,
+    "resource_type": "robot_motion",
+    "irreversible": true
+  },
+  "implementation": {
+    "type": "ros2_action"
+  },
+  "input_schema": {
+    "type": "object"
+  },
+  "output_schema": {
+    "type": "object"
+  },
+  "permission_requirements": [
+    "robot.move"
+  ],
+  "resource_requirements": {
+    "locks": [
+      "base"
+    ]
+  },
+  "safety_constraints": {
+    "require_known_place": true,
+    "require_localized": true,
+    "require_estop_released": true,
+    "forbidden_zone_check": true
+  },
+  "timeout_s": 120,
+  "observability": {
+    "audit": true
+  }
+}
 ```
 
 调用顺序是：
@@ -253,7 +274,7 @@ observability:
 | `human.ask` | 向人询问或确认。 |
 | `report.say` | 向用户报告消息。 |
 
-Current note: `manipulation.pick_color_block.yaml` 和 `manipulation_place_color_block.yaml` 当前要求 `manipulation.pick.color_block` 与 `manipulation.place.color_block`；这两个权限在 `configs/permissions.yaml` 的描述表中尚未补充，但示例应用会按 skill manifest 声明它们。应用开发者应以 skill manifest 的 `permission_requirements` 为执行准入准则。
+Current note: `manipulation.pick_color_block` 和 `manipulation.place_color_block` 当前要求 `manipulation.pick.color_block` 与 `manipulation.place.color_block`；这两个权限在 `configs/permissions.yaml` 的描述表中尚未补充，但示例应用会按 `SKILL.md` contract 声明它们。应用开发者应以 skill contract 的 `permission_requirements` 为执行准入准则。
 
 ## 4. SDK 能力总览
 

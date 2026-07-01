@@ -85,7 +85,35 @@ The environment-aware scheduler is documented in
 [`agentic_runtime_src/docs/scheduler_environment_aware_dag.md`](agentic_runtime_src/docs/scheduler_environment_aware_dag.md).
 Real scheduler LLM and capability verification scripts are opt-in and return
 `UNVERIFIED_REAL_DEPENDENCY` until real providers, bridges, and capability
-backends are configured.
+backends are configured. A missing scheduler capability bridge is reported as a
+stable `ROS_SERVICE_UNAVAILABLE` or `ROS_ACTION_UNAVAILABLE`; the capability
+verifier includes the required interface, visible ROS graph count, and command
+in `NEXT_ACTION`, such as `required=/agentic/robot/get_state`,
+`visible_services=0`, `command=ros2 service list`, and
+`start_command=ros2 run agentic_capability_bridge state_bridge_node`. For that
+read-only state service it also reports the bridge executable probe, for
+example `bridge_executable=agentic_capability_bridge/state_bridge_node:available`
+and `executable_command=ros2 pkg executables agentic_capability_bridge`. By
+default the verifier does not start ROS nodes; set
+`AGENTIC_VERIFY_START_READONLY_STATE_BRIDGE=1` to temporarily start the real
+read-only `state_bridge_node` for the duration of the check. Backend-unavailable
+results include compact `ros_graph=` evidence with live node/topic/service/action
+counts and configured camera/arm/gripper topic visibility, plus
+`profile_dependencies=` from the selected robot profile so operators can see
+candidate camera launch files, arm topics/services, and action-group file
+presence, including `camera_backend=`, `arm_backend=`,
+`gripper_backend=`, `camera_launch_files_present=`, and `next_backend_steps=`
+action labels. `backend_step_hints=` maps those labels to non-executing operator
+guidance, such as using the read-only state-bridge opt-in, starting the profile
+camera launch, or performing operator-gated real arm/servo startup. The verifier
+does not run those backend actions automatically.
+The ROS discovery retry
+window is controlled by
+`AGENTIC_VERIFY_ROS_DISCOVERY_ATTEMPTS` and
+`AGENTIC_VERIFY_ROS_DISCOVERY_RETRY_DELAY_S`. Current
+generic cup detection, pickup, held-verification, and delivery backends remain
+real capability gaps; scheduler cup reuse must stay unavailable until those
+real bridge/HAL paths exist.
 
 ---
 

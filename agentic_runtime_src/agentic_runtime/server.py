@@ -66,7 +66,7 @@ class RuntimeServer:
         config = RuntimeConfig.load(config_path)
         event_sink = InMemoryKernelEventSink()
         access_manager = cls._create_access_manager(event_sink)
-        registry = SkillRegistry(config.skill_root).load()
+        registry = SkillRegistry(config.skill_provider_root, app_root=config.app_root).load()
         audit_logger = AuditLogger(config.audit_log_path)
         memory_manager = create_memory_manager(
             config.memory_provider,

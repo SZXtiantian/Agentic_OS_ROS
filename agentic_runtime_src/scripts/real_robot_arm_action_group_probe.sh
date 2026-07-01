@@ -8,7 +8,7 @@ fi
 
 LOG_DIR="${AGENTIC_ARM_ACTION_GROUP_PROBE_LOG_DIR:-/tmp/agentic_action_group_probe_$(date +%Y%m%d_%H%M%S)}"
 REPORT_PATH="${AGENTIC_ARM_ACTION_GROUP_PROBE_REPORT:-$LOG_DIR/action_group_probe.json}"
-PROFILE="${BRIDGE_PROFILE_FILE:-/tmp/agentic_arm_action_group_probe_profile.yaml}"
+PROFILE="${ROBOT_PROFILE_FILE:-/tmp/agentic_arm_action_group_probe_profile.yaml}"
 RECOVERY_ACTION="${AGENTIC_ARM_ACTION_GROUP_PROBE_RECOVERY:-probe_init}"
 MOTION_DELTA_MIN="${AGENTIC_ARM_ACTION_GROUP_PROBE_MIN_DELTA:-20}"
 
@@ -17,8 +17,8 @@ source /opt/ros/humble/setup.bash
 if [[ -f /home/ubuntu/ros2_ws/install/setup.bash ]]; then
   source /home/ubuntu/ros2_ws/install/setup.bash
 fi
-if [[ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]]; then
-  source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+if [[ -f /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash ]]; then
+  source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash
 fi
 set -u
 

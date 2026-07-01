@@ -17,7 +17,7 @@ class ConfigManager:
             warnings.append("active robot motion detected; safety weakening is not applied")
         try:
             self.config = RuntimeConfig.load()
-            self.registry = SkillRegistry(self.config.skill_root).load()
+            self.registry = SkillRegistry(self.config.skill_provider_root, app_root=self.config.app_root).load()
         except Exception as exc:
             return ConfigRefreshResult(False, error_code="CONFIG_REFRESH_FAILED", reason=str(exc))
         return ConfigRefreshResult(True, reloaded=["runtime", "skills", "places", "safety", "permissions"], warnings=warnings)

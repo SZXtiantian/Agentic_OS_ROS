@@ -611,7 +611,7 @@ pytest robot_photographer_agent/tests:
 installed-side pytest:
   17 passed in 3.50s
 
-scripts/build_robot_bridge.sh:
+scripts/build_system_skill_nodes.sh:
   Summary: 5 packages finished [12.3s]
 
 /opt/agentic/bin/agentic photo --mock --allow-arm-motion --yes --json "拍一组多角度照片并验证差异":

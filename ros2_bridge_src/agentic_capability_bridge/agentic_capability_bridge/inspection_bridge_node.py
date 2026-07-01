@@ -17,7 +17,7 @@ from sensor_msgs.msg import CameraInfo, Image
 from servo_controller_msgs.msg import ServoPosition, ServosPosition
 
 
-DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
+DEFAULT_PROFILE = Path("/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml")
 
 
 class InspectionBridgeNode(Node):
@@ -102,7 +102,7 @@ class InspectionBridgeNode(Node):
     def _load_profile(self) -> dict[str, Any]:
         path = Path(str(self.get_parameter("bridge_profile_file").value)).expanduser()
         if not path.exists():
-            self.get_logger().warning(f"bridge profile not found: {path}")
+            self.get_logger().warning(f"robot profile not found: {path}")
             return {}
         with path.open("r", encoding="utf-8") as f:
             return yaml.safe_load(f) or {}

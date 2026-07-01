@@ -17,7 +17,12 @@ from agentic_runtime.dispatcher import DispatcherAgent
 from agentic_runtime.server import RuntimeServer
 
 
-BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_bridge.sh"))
+BRIDGE_SCRIPT = Path(
+    os.environ.get(
+        "AGENTIC_ROBOT_SKILLS_SCRIPT",
+        os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_skills.sh"),
+    )
+)
 BRIDGE_LOG = Path("/tmp/agentic_nl_gateway_bridge.log")
 REQUIRED_BRIDGE_SERVICES = {
     "/agentic/robot/get_state",

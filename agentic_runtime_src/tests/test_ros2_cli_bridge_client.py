@@ -208,6 +208,33 @@ def test_ros2_cli_bridge_client_parses_ros_service_nested_state():
     asyncio.run(run())
 
 
+def test_ros2_cli_bridge_client_preserves_bridge_error_from_ros_service_response():
+    async def runner(command, timeout_s):
+        del command, timeout_s
+        return (
+            "response:\n"
+            "agentic_msgs.srv.GetRobotState_Response(success=False, "
+            "error_code='ROS_BRIDGE_UNAVAILABLE', "
+            "reason='no real camera, arm, or gripper bridge backend is visible in the ROS graph', "
+            "state=agentic_msgs.msg.RobotState(robot_id='real_robot', mode='real_bridge', "
+            "battery_state='unknown', battery_percent=0.0, is_localized=False, is_moving=False, "
+            "estop_pressed=False, current_place='', active_task_id='', state_json='{}'))"
+        )
+
+    async def run():
+        client = Ros2CliBridgeClient(runner=runner)
+        state = await client.get_robot_state()
+        status = client.status()
+        assert state["success"] is False
+        assert state["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert "no real camera" in state["reason"]
+        assert status["last_success"] is False
+        assert status["last_error"]["error_code"] == "ROS_BRIDGE_UNAVAILABLE"
+        assert status["last_error"]["operation"] == "get_robot_state"
+
+    asyncio.run(run())
+
+
 def test_bridge_factory_can_select_cli_without_rclpy(tmp_path):
     config = RuntimeConfig.load()
     config = replace(config, ros_bridge_mode="cli", repo_root=tmp_path)

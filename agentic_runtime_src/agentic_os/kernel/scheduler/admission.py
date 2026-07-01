@@ -43,6 +43,7 @@ DIRECT_ROBOT_INTERFACE_NAMES = {
 PROTECTED_CAPABILITY_PREFIXES = ("robot.", "arm.", "gripper.", "manipulation.", "perception.")
 READ_ONLY_CAPABILITY_SUFFIXES = (".get_state", ".state", ".status")
 RESOURCE_OPTIONAL_CAPABILITIES = {"robot.stop", "robot.get_state", "arm.get_state"}
+PHYSICAL_WORLD_FACT_KEYS = {"cup_pose", "object_pose", "robot_pose", "held_object", "held_object_pose"}
 
 
 @dataclass
@@ -76,6 +77,9 @@ class AdmissionController:
         command_result = self.validate_no_low_level_robot_commands(graph)
         if not command_result.success:
             return command_result
+        fact_result = self.validate_fact_provenance(graph)
+        if not fact_result.success:
+            return fact_result
         for node in graph.nodes.values():
             node.status = TaskNodeStatus.ADMITTED
         return AdmissionResult(True)
@@ -210,6 +214,28 @@ class AdmissionController:
                     "SCHEDULER_ADMISSION_REJECTED",
                     "low-level robot command marker rejected",
                     {"marker": marker, "task_graph_id": graph.task_graph_id},
+                )
+        return AdmissionResult(True)
+
+    def validate_fact_provenance(self, graph: TaskGraph) -> AdmissionResult:
+        for node in graph.nodes.values():
+            if node.query_type != QueryType.LLM:
+                continue
+            produced_fact_keys = _node_produced_fact_keys(node)
+            physical_fact_keys = sorted(fact_key for fact_key in produced_fact_keys if _is_physical_world_fact_key(fact_key))
+            if physical_fact_keys:
+                return AdmissionResult(
+                    False,
+                    "SCHEDULER_FACT_SOURCE_UNVERIFIED",
+                    "LLM nodes cannot produce physical environment facts",
+                    {"task_graph_id": graph.task_graph_id, "node_id": node.node_id, "fact_keys": physical_fact_keys},
+                )
+            if node.metadata.get("produces_fact_specs"):
+                return AdmissionResult(
+                    False,
+                    "SCHEDULER_FACT_SOURCE_UNVERIFIED",
+                    "LLM nodes cannot declare environment fact extraction specs",
+                    {"task_graph_id": graph.task_graph_id, "node_id": node.node_id},
                 )
         return AdmissionResult(True)
 
@@ -382,6 +408,23 @@ def _requires_resource_lock(capability: str) -> bool:
     if normalized in RESOURCE_OPTIONAL_CAPABILITIES:
         return False
     return not normalized.endswith(READ_ONLY_CAPABILITY_SUFFIXES)
+
+
+def _node_produced_fact_keys(node: TaskNode) -> set[str]:
+    fact_keys = {str(fact_key) for fact_key in list(node.produces_facts or []) if str(fact_key)}
+    specs = node.metadata.get("produces_fact_specs")
+    if isinstance(specs, list):
+        for spec in specs:
+            if isinstance(spec, dict):
+                fact_key = str(spec.get("fact_key") or spec.get("key") or "")
+                if fact_key:
+                    fact_keys.add(fact_key)
+    return fact_keys
+
+
+def _is_physical_world_fact_key(fact_key: str) -> bool:
+    normalized = str(fact_key or "").strip().lower()
+    return normalized in PHYSICAL_WORLD_FACT_KEYS or normalized.endswith("_pose")
 
 
 def _contract_missing(node: TaskNode, field: str, message: str) -> AdmissionResult:

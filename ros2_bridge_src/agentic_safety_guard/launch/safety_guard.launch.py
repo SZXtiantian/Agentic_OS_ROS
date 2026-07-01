@@ -10,7 +10,7 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "bridge_profile_file",
-                default_value="/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml",
+                default_value="/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml",
             ),
             Node(
                 package="agentic_safety_guard",

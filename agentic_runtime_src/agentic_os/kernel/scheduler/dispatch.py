@@ -73,7 +73,21 @@ class CapabilityDispatchAdapter:
         try:
             query = self._query_from_node(node, leases=leases, scheduler_revision=scheduler_revision)
         except ValueError as exc:
-            return DispatchResult(False, error_code=str(exc) or "SCHEDULER_LANE_UNSUPPORTED")
+            error_code = str(exc) or "SCHEDULER_LANE_UNSUPPORTED"
+            self.audit.emit(
+                "scheduler.node.failed",
+                success=False,
+                error_code=error_code,
+                agent_id=node.agent_id,
+                app_id=node.app_id,
+                session_id=node.session_id,
+                task_graph_id=node.task_graph_id,
+                node_id=node.node_id,
+                goal_id=node.user_goal_id,
+                scheduler_revision=scheduler_revision,
+                query_type=node.query_type,
+            )
+            return DispatchResult(False, error_code=error_code, metadata={"query_type": node.query_type})
         if node.query_type == QueryType.LLM:
             self.audit.emit(
                 "scheduler.llm.real_call_started",

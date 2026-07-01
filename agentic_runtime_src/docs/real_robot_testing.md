@@ -41,7 +41,7 @@ The robot should also be localized and safe to accept Nav2 goals.
 ## Build
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_system_skill_nodes.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/install_to_opt_agentic.sh
 ```
 
@@ -53,14 +53,14 @@ files.
 Terminal 2: start AgenticOS bridge/HAL nodes:
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh
 ```
 
 Optional environment variables:
 
 ```bash
 ROBOT_ID=rosorin NAV2_ACTION_NAME=/navigate_to_pose \
-  /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh
+  /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh
 ```
 
 ## Run Inspection App
@@ -89,7 +89,7 @@ instead of falling back to `--mock`.
 Terminal 1: start or verify the AgenticOS bridge services:
 
 ```bash
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh
 ros2 service list | grep -E '^/agentic/(perception/capture_photo|safety/check|robot/get_state)'
 ```
 
@@ -171,6 +171,6 @@ For robot movement, audit records must show:
 
 ## Real Robot Migration Rule
 
-Changing robots should require updating bridge profiles, `places.yaml`, safety
+Changing robots should require updating robot profiles, `places.yaml`, safety
 limits, and robot bringup. It should not require changing Agent Apps, SDK,
 Runtime, or Kernel APIs.

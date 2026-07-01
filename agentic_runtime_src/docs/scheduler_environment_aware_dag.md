@@ -241,6 +241,42 @@ scripts/verify_no_fake_mock.sh
 The scheduler LLM and capability scripts return
 `UNVERIFIED_REAL_DEPENDENCY` with exit code `2` when real dependencies are not
 configured. That is an explicit dependency state, not a pass result.
+The capability verifier sources the ROS2 setup and the Agentic bridge overlay
+from `AGENTIC_ROS2_SETUP` and `AGENTIC_ROS2_BRIDGE_SETUP` when those variables
+are set, defaulting to `/opt/ros/humble/setup.bash` and
+`/home/ubuntu/agentic_ws/install/setup.bash`. By default it still does not
+start or fake a bridge. If the selected capability service/action is absent
+from the live ROS graph, it returns `ROS_SERVICE_UNAVAILABLE` or
+`ROS_ACTION_UNAVAILABLE` before dispatch. Set
+`AGENTIC_VERIFY_START_READONLY_STATE_BRIDGE=1` only to temporarily start the
+real read-only state bridge during this verifier run. The preflight uses a
+short ROS discovery retry window controlled by
+`AGENTIC_VERIFY_ROS_DISCOVERY_ATTEMPTS` and
+`AGENTIC_VERIFY_ROS_DISCOVERY_RETRY_DELAY_S`. That preflight
+`NEXT_ACTION` includes the required interface name, the number of visible ROS
+services/actions, and the exact ROS graph query command, for example
+`required=/agentic/robot/get_state`, `visible_services=0`, and
+`command=ros2 service list`. For the read-only state bridge service, it also
+prints
+`start_command=ros2 run agentic_capability_bridge state_bridge_node`,
+`bridge_executable=agentic_capability_bridge/state_bridge_node:available`, and
+`executable_command=ros2 pkg executables agentic_capability_bridge`, plus
+`auto_start_readonly_state_bridge=` when the opt-in start path is used. A
+running state bridge without real camera/arm/gripper backend evidence must report
+`ROS_BRIDGE_UNAVAILABLE`, with a short bridge reason in `NEXT_ACTION` from the
+matching AuditLogger record and a `bridge_missing=` summary when the bridge
+returned structured readiness details. It also adds a compact `ros_graph=`
+summary with live ROS node/topic/service/action counts and configured
+camera/arm/gripper candidate visibility so operators can distinguish a stopped
+hardware graph from a profile mismatch. `profile_dependencies=` is derived
+from `AGENTIC_VERIFY_BRIDGE_PROFILE_FILE` and summarizes configured camera
+launch candidates, `camera_launch_files_present=`, arm topic/service
+candidates, action-group file presence, and compact `camera_backend=`,
+`arm_backend=`, and `gripper_backend=` status labels. `next_backend_steps=`
+contains action labels such as `start_camera_launch` without executing those
+hardware backend actions. `backend_step_hints=` translates the labels into
+non-executing operator guidance, including profile camera launch selection and
+operator-gated arm/servo startup.
 When `verify_real_scheduler_llm.sh` does pass, its fusion-reuse setup has also
 produced the reused context fact through a scheduler-dispatched real
 `ContextQuery` syscall with a real AuditLogger record, not by direct fact

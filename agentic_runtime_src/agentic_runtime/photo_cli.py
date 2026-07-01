@@ -17,7 +17,12 @@ from agentic_runtime.server import RuntimeServer
 
 _RUNTIME_SRC = find_repo_root()
 APP_DIR = Path(os.environ.get("AGENTIC_APP_ROOT", _RUNTIME_SRC.parent / "agentic_apps")) / "robot_photographer_agent"
-BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", _RUNTIME_SRC / "scripts" / "run_robot_bridge.sh"))
+BRIDGE_SCRIPT = Path(
+    os.environ.get(
+        "AGENTIC_ROBOT_SKILLS_SCRIPT",
+        os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", _RUNTIME_SRC / "scripts" / "run_robot_skills.sh"),
+    )
+)
 BRIDGE_LOG = Path("/tmp/agentic_photo_bridge.log")
 REQUIRED_BRIDGE_SERVICES = {
     "/agentic/robot/get_state",

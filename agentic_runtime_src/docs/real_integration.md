@@ -88,6 +88,55 @@ This submits a real TaskGraph to the environment-aware scheduler and dispatches
 a capability TaskNode through `CapabilityDispatchAdapter` and the existing
 KernelService/runtime capability path. Missing bridge or capability backends
 report `UNVERIFIED_REAL_DEPENDENCY` with exit code `2`.
+The script sources `/opt/ros/humble/setup.bash` and
+`/home/ubuntu/agentic_ws/install/setup.bash` when present so the ROS2 CLI can
+resolve the real `agentic_msgs` interfaces and bridge packages. Override those
+paths with `AGENTIC_ROS2_SETUP` and `AGENTIC_ROS2_BRIDGE_SETUP` if the bridge
+overlay lives elsewhere. By default this does not start a bridge or emulate
+robot state: if `/agentic/robot/get_state` or the selected capability action is
+absent from the live ROS graph, the script returns `ROS_SERVICE_UNAVAILABLE` or
+`ROS_ACTION_UNAVAILABLE` before dispatch. Set
+`AGENTIC_VERIFY_START_READONLY_STATE_BRIDGE=1` only when you want the verifier
+to temporarily start the real read-only `state_bridge_node` for the duration of
+the check; the process is cleaned up when the script exits. That preflight
+uses a short ROS discovery retry window controlled by
+`AGENTIC_VERIFY_ROS_DISCOVERY_ATTEMPTS` and
+`AGENTIC_VERIFY_ROS_DISCOVERY_RETRY_DELAY_S`. `NEXT_ACTION` includes the
+required interface name, the number of visible ROS services/actions, and the
+exact ROS graph query command, for example
+`required=/agentic/robot/get_state`, `visible_services=0`, and
+`command=ros2 service list`. For the read-only state bridge service, it also
+prints `start_command=ros2 run agentic_capability_bridge state_bridge_node`,
+the bridge executable probe such as
+`bridge_executable=agentic_capability_bridge/state_bridge_node:available`, and
+`executable_command=ros2 pkg executables agentic_capability_bridge`. When the
+opt-in auto-start path is used, `NEXT_ACTION` includes
+`auto_start_readonly_state_bridge=` and the verifier log path.
+When the interface is present, the script still runs the scheduler dispatch
+path; if the state bridge is present but no real camera/arm/gripper backend is
+visible the result remains
+`ROS_BRIDGE_UNAVAILABLE`. In that dispatched case, `NEXT_ACTION` includes the
+short bridge reason from the matching AuditLogger record so the missing real
+backend evidence is visible without inspecting raw logs. When the bridge
+returns structured readiness details, `NEXT_ACTION` also includes
+`bridge_missing=` entries such as missing camera topics, arm backend topic, or
+gripper topic. The verifier also appends a compact `ros_graph=` summary for
+backend-unavailable results, including live node/topic/service/action counts,
+whether `state_bridge_node` is visible, and whether the configured camera,
+arm, and gripper candidate topics are present. It also appends
+`profile_dependencies=` from `AGENTIC_VERIFY_BRIDGE_PROFILE_FILE` so the next
+operator action can be based on the configured camera launch candidates,
+arm topic/service candidates, and action-group file presence rather than
+guesswork. The profile summary includes `camera_launch_files_present=` so a
+missing launch artifact is distinguishable from an installed-but-stopped camera
+backend. It also classifies `camera_backend=`, `arm_backend=`, and
+`gripper_backend=` so an installed-but-stopped backend is distinguishable from
+missing profile artifacts. `next_backend_steps=` gives compact action labels
+such as `start_camera_launch` and `start_arm_servo_controller`; the verifier
+does not execute those backend start actions automatically. `backend_step_hints=`
+maps those labels to non-executing operator guidance, including the read-only
+state-bridge opt-in, the first configured camera launch file, and
+operator-gated real arm/servo startup.
 A PASS also requires traceability evidence: the
 `scheduler.node.dispatched` event must include the real KernelSyscall ID and
 resource lease IDs, `KernelService.recent_syscalls()` must contain the matching

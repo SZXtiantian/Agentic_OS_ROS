@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cup_pose.schema.json",
+  "type": "object",
+  "required": ["x"],
+  "properties": {
+    "x": { "type": "number" },
+    "y": { "type": "number" },
+    "z": { "type": "number" },
+    "frame_id": { "type": "string" },
+    "workspace_zone": { "type": "string" }
+  },
+  "additionalProperties": true
+}

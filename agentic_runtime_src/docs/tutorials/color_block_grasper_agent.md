@@ -85,13 +85,13 @@ LLM error such as `LLMCHAT_UNAVAILABLE`, `LLM_PROVIDER_UNCONFIGURED`, or
 
 The runtime skill manifests are:
 
-- `agentic_runtime_src/skills/perception_detect_color_block.yaml`
-- `agentic_runtime_src/skills/perception_center_color_block.yaml`
-- `agentic_runtime_src/skills/perception_verify_held_color_block.yaml`
-- `agentic_runtime_src/skills/arm_get_state.yaml`
-- `agentic_runtime_src/skills/arm_move_named.yaml`
-- `agentic_runtime_src/skills/manipulation_pick_color_block.yaml`
-- `agentic_runtime_src/skills/manipulation_place_color_block.yaml`
+- `agentic_runtime_src/system_skills/perception.detect_color_block/SKILL.md`
+- `agentic_runtime_src/system_skills/perception.center_color_block/SKILL.md`
+- `agentic_runtime_src/system_skills/perception.verify_held_color_block/SKILL.md`
+- `agentic_runtime_src/system_skills/arm.get_state/SKILL.md`
+- `agentic_runtime_src/system_skills/arm.move_named/SKILL.md`
+- `agentic_runtime_src/system_skills/manipulation.pick_color_block/SKILL.md`
+- `agentic_runtime_src/system_skills/manipulation.place_color_block/SKILL.md`
 
 They map to Agentic bridge contracts:
 

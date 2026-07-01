@@ -155,8 +155,8 @@ robot ROS graph discovered on the machine.
 
 1. Start robot camera and arm bringup outside AgenticOS.
 2. Verify camera topics and safe arm/servo/kinematics interfaces manually.
-3. Define a robot bridge profile, for example:
-   `/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml`.
+3. Define a robot robot profile, for example:
+   `/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml`.
 4. Add AgenticOS camera and manipulation contracts under `agentic_msgs`.
 5. Add bridge nodes under `/home/ubuntu/agentic_ws/ros2_bridge_src`.
 6. Add Runtime/SDK high-level APIs without importing `rclpy`.

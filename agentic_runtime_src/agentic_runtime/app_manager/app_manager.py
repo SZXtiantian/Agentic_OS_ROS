@@ -25,6 +25,9 @@ class AppManager:
     async def run_app(self, app_id: str, **kwargs: Any) -> dict[str, Any]:
         app_dir = self.app_root / app_id
         manifest = self.load_manifest(app_id)
+        registry = getattr(self.executor, "registry", None)
+        if registry is not None and hasattr(registry, "load_app_skills"):
+            registry.load_app_skills(app_id, app_dir)
         module_name, function_name = manifest.entrypoint.split(":", 1)
         module_path = app_dir / f"{module_name}.py"
         spec = importlib.util.spec_from_file_location(f"{app_id}.{module_name}", module_path)

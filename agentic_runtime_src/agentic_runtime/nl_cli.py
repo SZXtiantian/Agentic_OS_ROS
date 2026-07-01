@@ -31,11 +31,16 @@ Examples:
 Arm motion is disabled unless you start chat with --allow-arm-motion or set
 AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION=1.
 
-For real robot commands, this CLI starts the AgenticOS ROS bridge automatically
-when the bridge services are not already running.
+For real robot commands, this CLI starts the AgenticOS robot skills automatically
+when the required skill services are not already running.
 """
 
-BRIDGE_SCRIPT = Path(os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_bridge.sh"))
+BRIDGE_SCRIPT = Path(
+    os.environ.get(
+        "AGENTIC_ROBOT_SKILLS_SCRIPT",
+        os.environ.get("AGENTIC_ROBOT_BRIDGE_SCRIPT", find_repo_root() / "scripts" / "run_robot_skills.sh"),
+    )
+)
 BRIDGE_LOG = Path("/tmp/agentic_chat_bridge.log")
 REQUIRED_BRIDGE_SERVICES = {
     "/agentic/robot/get_state",

@@ -1,10 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import json
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
+
+
+AGENTIC_SKILL_BLOCK_RE = re.compile(
+    r"^```json[ \t]+agentic-skill[^\n]*\n(?P<body>.*?)^```[ \t]*$",
+    re.MULTILINE | re.DOTALL,
+)
 
 
 class CapabilityKind:
@@ -48,7 +56,7 @@ class CapabilitySpec:
 
     @classmethod
     def from_skill_manifest(cls, data: dict[str, Any]) -> "CapabilitySpec":
-        backend = dict(data.get("backend") or {})
+        backend = dict(data.get("backend") or data.get("implementation") or {})
         kind = _kind_from_backend(data.get("name", ""), backend)
         ros2 = _ros2_from_backend(kind, backend)
         return cls(
@@ -115,6 +123,9 @@ class CapabilityRegistry:
 
     def load_skill_manifests(self, root: str | Path) -> "CapabilityRegistry":
         skill_root = Path(root)
+        for path in sorted(skill_root.glob("*/SKILL.md")):
+            data = _load_agentic_skill_markdown(path)
+            self.register_skill_manifest(data)
         for path in sorted(skill_root.glob("*.yaml")):
             data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
             self.register_skill_manifest(data)
@@ -158,6 +169,19 @@ def _kind_from_backend(name: str, backend: dict[str, Any]) -> str:
     if backend_type in {"mock", "fake", "stub", "dummy"}:
         return CapabilityKind.SIMULATED_DISABLED
     return backend_type or CapabilityKind.RUNTIME_INTERNAL
+
+
+def _load_agentic_skill_markdown(path: Path) -> dict[str, Any]:
+    markdown = path.read_text(encoding="utf-8")
+    match = AGENTIC_SKILL_BLOCK_RE.search(markdown)
+    if match is None:
+        raise ValueError(f"CAPABILITY_CONTRACT_INVALID: {path}: missing json agentic-skill metadata block")
+    data = json.loads(match.group("body"))
+    if not isinstance(data, dict):
+        raise ValueError(f"CAPABILITY_CONTRACT_INVALID: {path}: metadata must be an object")
+    data = dict(data)
+    data.setdefault("backend", dict(data.get("implementation") or {}))
+    return data
 
 
 def _ros2_from_backend(kind: str, backend: dict[str, Any]) -> Ros2InterfaceSpec | None:

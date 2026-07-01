@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 
-DEFAULT_PROFILE = Path("/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml")
+DEFAULT_PROFILE = Path("/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml")
 FORBIDDEN_BACKEND_TOKENS = (
     "left_down",
     "right_down",

@@ -3,8 +3,8 @@ runtime:
   memory_db_path: var/memory/memory.sqlite3
   default_skill_timeout_s: 60
   app_root: ../agentic_apps
-  skill_root: skills
-  ros_bridge_mode: cli
+  skill_provider_root: system_skills
+  skill_provider_transport: cli
   daemon_host: 127.0.0.1
   daemon_port: 8765
   session_root: var/sessions
@@ -14,7 +14,7 @@ runtime:
   memory_provider: sqlite
   tool_root: var/tools
   bridge_root: var/bridges/ros2
-  bridge_profile_root: etc/bridge_profiles
+  robot_profile_root: configs/robot_profiles
   enable_daemon_api: true
 kernel:
   scheduler_policy: fifo

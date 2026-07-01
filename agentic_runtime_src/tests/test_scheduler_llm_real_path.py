@@ -120,6 +120,41 @@ def test_planner_validates_raw_resource_schema_before_model_coercion():
     assert not any(event["event_type"] == "scheduler.llm.real_call_completed" for event in events)
 
 
+def test_planner_rejects_llm_candidate_that_claims_physical_fact_output():
+    sink = InMemoryKernelEventSink()
+    payload = _planner_payload()
+    payload["nodes"]["report"]["query_type"] = QueryType.LLM
+    payload["nodes"]["report"]["capability"] = "llm.plan"
+    payload["nodes"]["report"]["operation_type"] = "chat"
+    payload["nodes"]["report"]["produces_facts"] = ["cup_pose"]
+    kernel_service = SchemaDriftPlanningKernelService(payload)
+    planner = TaskGraphPlanner(
+        kernel_service=kernel_service,
+        admission=AdmissionController(),
+        audit=SchedulerAudit(event_sink=sink),
+    )
+
+    with pytest.raises(SchedulerError) as error:
+        planner.generate_task_graph(
+            "create a safe report graph",
+            agent_id="agent",
+            app_id="app",
+            session_id="sess",
+            user_goal_id="goal_expected",
+        )
+
+    events = sink.recent(limit=20)
+    assert error.value.error_code == "SCHEDULER_LLM_OUTPUT_SCHEMA_INVALID"
+    assert "SCHEDULER_FACT_SOURCE_UNVERIFIED" in error.value.message
+    assert any(
+        event["event_type"] == "scheduler.llm.real_call_failed"
+        and event["metadata"]["error_code"] == "SCHEDULER_LLM_OUTPUT_SCHEMA_INVALID"
+        and event["metadata"]["syscall_id"] == "ksc_schema_drift_plan"
+        for event in events
+    )
+    assert not any(event["event_type"] == "scheduler.llm.real_call_completed" for event in events)
+
+
 def test_planner_extracts_task_graph_wrapped_real_llm_json_candidate():
     candidate = _planner_payload()
 
@@ -213,6 +248,80 @@ def test_planner_canonicalizes_real_llm_nodes_list_and_edge_aliases():
     assert completed["edges"][0]["source_id"] == "report"
     assert completed["edges"][0]["target_id"] == "report"
     assert completed["edges"][0]["edge_type"] == "precedence"
+
+
+def test_planner_canonicalizes_real_llm_task_aliases_and_node_field_aliases():
+    payload = {
+        "tasks": [
+            {
+                "id": "report",
+                "skill": "report.say",
+                "query_type": "SKILL",
+                "message": "scheduler verification complete",
+                "resources": ["status_panel"],
+                "required_permissions": "report.write",
+            }
+        ],
+        "edges": [],
+    }
+
+    completed = _complete_authoritative_graph_envelope(
+        payload,
+        goal="create a safe report graph",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        user_goal_id="goal_expected",
+    )
+
+    node = completed["nodes"]["report"]
+    assert node["node_id"] == "report"
+    assert node["task_graph_id"] == completed["task_graph_id"]
+    assert node["user_goal_id"] == "goal_expected"
+    assert node["agent_id"] == "agent"
+    assert node["agent_name"] == "app"
+    assert node["app_id"] == "app"
+    assert node["session_id"] == "sess"
+    assert node["capability"] == "report.say"
+    assert node["operation_type"] == "skill_call"
+    assert node["query_type"] == "skill"
+    assert node["status"] == "created"
+    assert node["params"] == {"message": "scheduler verification complete"}
+    assert node["metadata"] == {}
+    assert node["dependencies"] == []
+    assert node["dependents"] == []
+    assert node["resources"] == [{"resource_id": "status_panel"}]
+    assert node["required_permissions"] == ["report.write"]
+    assert node["safety_constraints"] == {}
+    assert node["produces_facts"] == []
+    assert node["consumes_facts"] == []
+    assert node["resource_lease_ids"] == []
+    assert node["audit_ids"] == []
+
+
+def test_planner_canonicalizes_single_top_level_node_payload_from_real_llm():
+    payload = {
+        "id": "report",
+        "action": "report.say",
+        "type": "skill_call",
+        "text": "scheduler verification complete",
+    }
+
+    completed = _complete_authoritative_graph_envelope(
+        payload,
+        goal="create a safe report graph",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        user_goal_id="goal_expected",
+    )
+
+    assert sorted(completed["nodes"]) == ["report"]
+    node = completed["nodes"]["report"]
+    assert node["capability"] == "report.say"
+    assert node["operation_type"] == "skill_call"
+    assert node["query_type"] == "skill"
+    assert node["params"] == {"message": "scheduler verification complete"}
 
 
 def test_submit_goal_returns_stable_llm_error_when_planning_execute_request_raises_without_leaking_prompt():

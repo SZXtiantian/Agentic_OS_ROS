@@ -1220,10 +1220,10 @@ PHOTO_DIFFERENCE_TOO_SMALL
 - bridge 拥有动作执行权时的 stop 后端：
   - `ActionGroupController.stop_action_group`
 
-bridge profile：
+robot profile：
 
 ```text
-/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml
+/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml
 ```
 
 ## 17. 面向用户的能力
@@ -1421,7 +1421,7 @@ photo = await ctx.perception.capture_photo(
 skill manifest：
 
 ```text
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/skills/perception_capture_photo.yaml
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/system_skills/perception.capture_photo/SKILL.md
 ```
 
 要求：
@@ -1479,7 +1479,7 @@ bridge 可以 import：
 
 bridge 必须：
 
-1. 从 `/opt/agentic/etc/bridge_profiles/rosorin_arm_camera.yaml` 读取 camera 配置。
+1. 从 `/opt/agentic/etc/robot_profiles/rosorin_arm_camera.yaml` 读取 camera 配置。
 2. 订阅 `/depth_cam/rgb0/image_raw`。
 3. 保留 latest fresh frame。
 4. 收到 `CapturePhoto` 请求时检查 freshness。
@@ -1928,7 +1928,7 @@ min_pair_difference_score >= 0.08
 
 ```bash
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_tests.sh
-/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_robot_bridge.sh
+/home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/build_system_skill_nodes.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/real_robot_arm_camera_acceptance.sh
 /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/real_robot_multi_angle_photo_acceptance.sh
 AGENTIC_LLM_ENABLED=1 AGENTIC_LLM_REQUIRE=1 /opt/agentic/bin/agentic --mock --json --require-llm "前后对比拍照"

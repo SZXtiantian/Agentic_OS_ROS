@@ -49,11 +49,11 @@ def test_runtime_server_create_has_no_simulated_mode_parameter():
 
 def test_runtime_config_rejects_simulated_values(tmp_path):
     path = tmp_path / "runtime.yaml"
-    path.write_text("runtime:\n  ros_bridge_mode: mock\n", encoding="utf-8")
+    path.write_text("runtime:\n  skill_provider_transport: mock\n", encoding="utf-8")
     with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
         RuntimeConfig.load(path)
 
-    path.write_text("runtime:\n  ros_bridge_mode: cli\nkernel:\n  llm:\n    configs:\n      - name: x\n        backend: mock\n", encoding="utf-8")
+    path.write_text("runtime:\n  skill_provider_transport: cli\nkernel:\n  llm:\n    configs:\n      - name: x\n        backend: mock\n", encoding="utf-8")
     with pytest.raises(ValueError, match="CONFIG_VALUE_UNSUPPORTED"):
         RuntimeConfig.load(path)
 

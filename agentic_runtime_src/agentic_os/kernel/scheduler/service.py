@@ -87,6 +87,7 @@ class EnvironmentAwareDAGScheduler(FIFOKernelScheduler):
             {
                 "policy": self.policy,
                 "global_revision": self.graph_store.revision,
+                "graph_revision": self.graph_store.revision,
                 "ready": counts.get(TaskNodeStatus.READY, 0),
                 "running": counts.get(TaskNodeStatus.RUNNING, 0),
                 "blocked": counts.get(TaskNodeStatus.BLOCKED, 0),
@@ -149,12 +150,33 @@ class EnvironmentAwareDAGScheduler(FIFOKernelScheduler):
         admitted_graph = graph
         if plan.accepted:
             if self.kernel_service is not None:
-                self.fusion_engine.explain_plan_with_real_llm(
+                reasoning_result = self.fusion_engine.explain_plan_with_real_llm(
                     plan,
                     incoming_graph=graph,
                     global_dag=self.graph_store.global_dag,
                     agent_name=graph.app_id,
                 )
+                if not reasoning_result.success:
+                    self.audit.emit(
+                        "scheduler.graph.rejected",
+                        success=False,
+                        error_code=reasoning_result.error_code,
+                        task_graph_id=graph.task_graph_id,
+                        agent_id=graph.agent_id,
+                        app_id=graph.app_id,
+                        session_id=graph.session_id,
+                        fusion_plan_id=plan.fusion_plan_id,
+                        upstream_error_code=reasoning_result.metadata.get("upstream_error_code", ""),
+                    )
+                    return KernelResponse.error(
+                        reasoning_result.error_code,
+                        metadata={
+                            "task_graph_id": graph.task_graph_id,
+                            "fusion_plan_id": plan.fusion_plan_id,
+                            "fusion_plan": plan.to_dict(),
+                            **reasoning_result.metadata,
+                        },
+                    )
             commit = self.fusion_engine.commit_fusion(self.graph_store, graph, plan)
             if not commit.success:
                 self.audit.emit(

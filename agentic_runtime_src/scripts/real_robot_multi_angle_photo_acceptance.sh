@@ -4,7 +4,7 @@ set -euo pipefail
 RUNTIME_SRC="/home/ubuntu/agentic_ws/src/agentic_runtime_src"
 APP_DIR="/home/ubuntu/agentic_ws/src/robot_photographer_agent"
 AGENTIC_HOME="${AGENTIC_HOME:-/opt/agentic}"
-PROFILE="${BRIDGE_PROFILE_FILE:-$AGENTIC_HOME/etc/bridge_profiles/rosorin_arm_camera.yaml}"
+PROFILE="${ROBOT_PROFILE_FILE:-$AGENTIC_HOME/etc/robot_profiles/rosorin_arm_camera.yaml}"
 ALLOW_ARM="${AGENTIC_REAL_ROBOT_ALLOW_ARM_MOTION:-0}"
 STATUS=0
 ARM_HEALTH_OK=0
@@ -34,8 +34,8 @@ source_ros() {
   if [[ -f /home/ubuntu/ros2_ws/install/setup.bash ]]; then
     source /home/ubuntu/ros2_ws/install/setup.bash
   fi
-  if [[ -f /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash ]]; then
-    source /home/ubuntu/agentic_ws/install/ros2_bridge/setup.bash
+  if [[ -f /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash ]]; then
+    source /home/ubuntu/agentic_ws/install/system_skill_nodes/setup.bash
   fi
   set -u
 }
@@ -110,7 +110,7 @@ import time
 
 patterns = (
     "ros2 launch agentic_capability_bridge robot_test.launch.py",
-    "/home/ubuntu/agentic_ws/install/ros2_bridge/agentic_",
+    "/home/ubuntu/agentic_ws/install/system_skill_nodes/agentic_",
 )
 current = os.getpid()
 pids = []
@@ -154,7 +154,7 @@ ensure_bridge() {
     return
   fi
   log "starting AgenticOS bridge"
-  /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_bridge.sh >/tmp/agentic_multi_angle_bridge.log 2>&1 &
+  /home/ubuntu/agentic_ws/src/agentic_runtime_src/scripts/run_robot_skills.sh >/tmp/agentic_multi_angle_bridge.log 2>&1 &
   for _ in {1..80}; do
     if timeout 5 ros2 service list -t 2>/dev/null | grep -q '^/agentic/perception/capture_photo '; then
       json_event "ok" "BRIDGE_STARTED" "$!"
@@ -172,7 +172,7 @@ main() {
   test -f "$PROFILE"
 
   soft "$AGENTIC_HOME/bin/agenticctl" status --real
-  soft "$RUNTIME_SRC/scripts/build_robot_bridge.sh"
+  soft "$RUNTIME_SRC/scripts/build_system_skill_nodes.sh"
   restart_agentic_bridge
   soft python "$RUNTIME_SRC/scripts/check_forbidden_imports.py"
   soft python "$RUNTIME_SRC/scripts/check_camera_pose_action_groups.py" "$PROFILE"

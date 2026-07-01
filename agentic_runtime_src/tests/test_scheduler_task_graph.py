@@ -1,11 +1,34 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
+
+from jsonschema import Draft202012Validator
 
 from agentic_os.kernel.capability import CapabilityRegistry
 from agentic_os.kernel.hooks import KernelQueueStore
 from agentic_os.kernel.scheduler import EnvironmentAwareDAGScheduler, QueryType, ResourceRequest, TaskGraph, TaskGraphStatus, TaskNodeStatus, TaskGraphStore, TaskNode, TypedEdge
 from agentic_os.kernel.scheduler.admission import AdmissionController
+
+
+REQUIRED_SCHEDULER_SCHEMA_FILES = {
+    "task_graph.schema.json",
+    "task_node.schema.json",
+    "fusion_plan.schema.json",
+    "environment_fact.schema.json",
+    "debug_snapshot.schema.json",
+}
+
+
+def test_required_scheduler_json_schemas_are_present_and_metaschema_valid(runtime_src):
+    schema_root = runtime_src / "agentic_os" / "kernel" / "scheduler" / "schemas"
+
+    for schema_name in sorted(REQUIRED_SCHEDULER_SCHEMA_FILES):
+        schema_path = schema_root / schema_name
+        assert schema_path.exists(), schema_name
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+        assert schema.get("$id") == schema_name
 
 
 def test_task_graph_models_are_json_serializable_and_store_indexes():
@@ -193,6 +216,67 @@ def test_admission_validates_each_task_node_schema():
 
     assert result.success is False
     assert result.error_code == "SCHEDULER_NODE_SCHEMA_INVALID"
+
+
+def test_admission_rejects_llm_node_that_claims_physical_fact_output():
+    node = TaskNode.create(
+        node_id="llm_pose",
+        task_graph_id="g_llm_pose",
+        user_goal_id="goal_llm_pose",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="llm.plan",
+        operation_type="chat",
+        query_type=QueryType.LLM,
+        produces_facts=["cup_pose"],
+    )
+    graph = TaskGraph.create(
+        task_graph_id="g_llm_pose",
+        user_goal_id="goal_llm_pose",
+        root_goal="plan",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={"llm_pose": node},
+    )
+
+    result = AdmissionController().admit(graph)
+
+    assert result.success is False
+    assert result.error_code == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
+    assert result.metadata["fact_keys"] == ["cup_pose"]
+
+
+def test_admission_rejects_llm_environment_fact_extraction_specs():
+    node = TaskNode.create(
+        node_id="llm_fact_spec",
+        task_graph_id="g_llm_fact_spec",
+        user_goal_id="goal_llm_fact_spec",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="llm.plan",
+        operation_type="chat",
+        query_type=QueryType.LLM,
+        metadata={"produces_fact_specs": [{"fact_key": "planner_summary"}]},
+    )
+    graph = TaskGraph.create(
+        task_graph_id="g_llm_fact_spec",
+        user_goal_id="goal_llm_fact_spec",
+        root_goal="plan",
+        agent_id="agent",
+        app_id="app",
+        session_id="sess",
+        nodes={"llm_fact_spec": node},
+    )
+
+    result = AdmissionController().admit(graph)
+
+    assert result.success is False
+    assert result.error_code == "SCHEDULER_FACT_SOURCE_UNVERIFIED"
 
 
 def test_admission_validates_resource_request_schema_with_priority_ceiling():
@@ -599,7 +683,7 @@ def test_admission_allows_registered_read_only_robot_capability_without_resource
 
 
 def test_admission_validates_registered_capability_input_schema_and_enriches_contract(runtime_src):
-    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "system_skills")
     invalid = TaskNode.create(
         node_id="bad_report",
         task_graph_id="g_bad",
@@ -659,7 +743,7 @@ def test_admission_validates_registered_capability_input_schema_and_enriches_con
 
 
 def test_admission_merges_registered_permissions_and_rejects_safety_downgrade(runtime_src):
-    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "system_skills")
     node = TaskNode.create(
         node_id="nav",
         task_graph_id="g_nav_contract",
@@ -693,7 +777,7 @@ def test_admission_merges_registered_permissions_and_rejects_safety_downgrade(ru
 
 
 def test_admission_rejects_weakened_registered_resource_lock(runtime_src):
-    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "skills")
+    registry = CapabilityRegistry().load_skill_manifests(runtime_src / "system_skills")
     node = TaskNode.create(
         node_id="nav",
         task_graph_id="g_nav_resource_contract",

@@ -120,7 +120,7 @@ colcon --log-base log/ros2_bridge build \
 The Runtime no longer ships an offline ROS bridge simulator for success-path
 tests. If ROS2, bridge services, or robot/Nav2 are unavailable, runtime calls
 must fail fast with stable bridge error codes. For ROS2 testing, use the real
-bridge profile and a robot/Nav2 stack rather than a local simulation harness.
+robot profile and a robot/Nav2 stack rather than a local simulation harness.
 
 ## Nav2 Integration Notes
 

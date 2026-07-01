@@ -68,10 +68,12 @@ def test_debug_snapshot_and_dot_export_are_schema_valid_and_sanitized():
     assert snapshot["success"] is True
     assert snapshot["error_code"] == ""
     assert snapshot["scheduler_policy"] == "env_aware_priority_dag"
+    assert snapshot["graph_revision"] == snapshot["global_revision"]
     assert "secret-value" not in str(snapshot)
     assert "private user goal" not in str(snapshot)
     assert "private report text" not in str(snapshot)
     assert "digraph AgenticScheduler" in dot
+    assert f'graph_revision={snapshot["graph_revision"]}' in dot
     assert "report.say" in dot
     assert "produces=cup_pose" in dot
     assert "consumes=cup_pose" in dot
@@ -114,6 +116,62 @@ def test_dot_export_redacts_sensitive_untrusted_graph_text():
     assert "private prompt graph" not in dot
     assert "agent_token_secret" not in dot
     assert "private_memory_fact" not in dot
+
+
+def test_dot_export_can_select_single_graph_and_still_show_revision():
+    scheduler = EnvironmentAwareDAGScheduler(KernelQueueStore(), {}, event_sink=InMemoryKernelEventSink())
+    first = TaskNode.create(
+        node_id="first_node",
+        task_graph_id="first_graph",
+        user_goal_id="goal_first",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+    )
+    second = TaskNode.create(
+        node_id="second_node",
+        task_graph_id="second_graph",
+        user_goal_id="goal_second",
+        agent_id="agent",
+        agent_name="app",
+        app_id="app",
+        session_id="sess",
+        capability="report.say",
+        query_type=QueryType.SKILL,
+    )
+    scheduler.submit_graph(
+        TaskGraph.create(
+            task_graph_id="first_graph",
+            user_goal_id="goal_first",
+            root_goal="first report",
+            agent_id="agent",
+            app_id="app",
+            session_id="sess",
+            nodes={first.node_id: first},
+        )
+    )
+    scheduler.submit_graph(
+        TaskGraph.create(
+            task_graph_id="second_graph",
+            user_goal_id="goal_second",
+            root_goal="second report",
+            agent_id="agent",
+            app_id="app",
+            session_id="sess",
+            nodes={second.node_id: second},
+        )
+    )
+
+    dot = scheduler.export_dot(task_graph_id="first_graph")
+
+    assert f"graph_revision={scheduler.graph_store.revision}" in dot
+    assert "first_graph" in dot
+    assert "first_node" in dot
+    assert "second_graph" not in dot
+    assert "second_node" not in dot
 
 
 def test_debug_snapshot_summarizes_fusion_audit_metadata():

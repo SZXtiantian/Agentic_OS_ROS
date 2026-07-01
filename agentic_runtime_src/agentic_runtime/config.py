@@ -38,7 +38,10 @@ class RuntimeConfig:
     memory_db_path: Path
     default_skill_timeout_s: int
     app_root: Path
-    skill_root: Path
+    skill_provider_root: Path
+    skill_provider_transport: str = "cli"
+    robot_profile_root: Path = Path("/opt/agentic/etc/robot_profiles")
+    skill_root: Path = Path("/opt/agentic/system_skills")
     ros_bridge_mode: str = "cli"
     daemon_host: str = "127.0.0.1"
     daemon_port: int = 8765
@@ -49,7 +52,7 @@ class RuntimeConfig:
     memory_provider: str = "sqlite"
     tool_root: Path = Path("/opt/agentic/tools")
     bridge_root: Path = Path("/opt/agentic/bridges/ros2")
-    bridge_profile_root: Path = Path("/opt/agentic/etc/bridge_profiles")
+    bridge_profile_root: Path = Path("/opt/agentic/etc/robot_profiles")
     enable_daemon_api: bool = True
     kernel: dict[str, Any] = field(default_factory=dict)
 
@@ -83,9 +86,17 @@ class RuntimeConfig:
             return (base / raw).resolve()
 
         app_root_default = Path(os.environ.get("AGENTIC_APP_ROOT", repo_root.parent))
-        skill_root_default = Path(os.environ.get("AGENTIC_SKILLS", repo_root / "skills"))
+        skill_provider_root_default = Path(
+            os.environ.get(
+                "AGENTIC_SKILL_PROVIDER_ROOT",
+                repo_root / "system_skills",
+            )
+        )
         var_root = Path(os.environ.get("AGENTIC_VAR", agentic_home / "var"))
         etc_root = Path(os.environ.get("AGENTIC_ETC", agentic_home / "etc"))
+        skill_provider_root = resolve(data.get("skill_provider_root", data.get("skill_root")), skill_provider_root_default)
+        skill_provider_transport = str(data.get("skill_provider_transport", data.get("ros_bridge_mode", "cli")))
+        robot_profile_root = resolve(data.get("robot_profile_root", data.get("bridge_profile_root")), etc_root / "robot_profiles")
 
         return cls(
             repo_root=repo_root,
@@ -93,8 +104,11 @@ class RuntimeConfig:
             memory_db_path=resolve(data.get("memory_db_path"), var_root / "memory" / "memory.sqlite3"),
             default_skill_timeout_s=int(data.get("default_skill_timeout_s", 60)),
             app_root=resolve(data.get("app_root"), app_root_default),
-            skill_root=resolve(data.get("skill_root"), skill_root_default),
-            ros_bridge_mode=str(data.get("ros_bridge_mode", "cli")),
+            skill_provider_root=skill_provider_root,
+            skill_provider_transport=skill_provider_transport,
+            robot_profile_root=robot_profile_root,
+            skill_root=skill_provider_root,
+            ros_bridge_mode=skill_provider_transport,
             daemon_host=str(os.environ.get("AGENTIC_DAEMON_HOST", data.get("daemon_host", "127.0.0.1"))),
             daemon_port=int(os.environ.get("AGENTIC_DAEMON_PORT", data.get("daemon_port", 8765))),
             session_root=resolve(os.environ.get("AGENTIC_SESSION_ROOT", data.get("session_root")), var_root / "sessions"),
@@ -104,7 +118,7 @@ class RuntimeConfig:
             memory_provider=str(data.get("memory_provider", "sqlite")),
             tool_root=resolve(data.get("tool_root"), agentic_home / "tools"),
             bridge_root=resolve(data.get("bridge_root"), agentic_home / "bridges" / "ros2"),
-            bridge_profile_root=resolve(data.get("bridge_profile_root"), etc_root / "bridge_profiles"),
+            bridge_profile_root=robot_profile_root,
             enable_daemon_api=bool(data.get("enable_daemon_api", True)),
             kernel=dict(kernel_data or {}),
         )
@@ -155,11 +169,11 @@ def _first_existing(paths: list[Path | None]) -> Path | None:
 
 def _validate_real_only_config(raw_data: dict[str, Any], *, source: Path | None) -> None:
     runtime = raw_data.get("runtime", {}) if isinstance(raw_data, dict) else {}
-    mode = str(runtime.get("ros_bridge_mode", "cli")) if isinstance(runtime, dict) else "cli"
+    mode = str(runtime.get("skill_provider_transport", runtime.get("ros_bridge_mode", "cli"))) if isinstance(runtime, dict) else "cli"
     if mode in SIMULATED_CONFIG_VALUES:
-        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.ros_bridge_mode={mode!r}")
+        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.skill_provider_transport={mode!r}")
     if mode not in ROS_BRIDGE_MODES:
-        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.ros_bridge_mode={mode!r}")
+        raise ValueError(f"CONFIG_VALUE_UNSUPPORTED: {source or '<default>'}: runtime.skill_provider_transport={mode!r}")
     for path, value in _walk_config_values(raw_data):
         if path[-1:] in (("backend",), ("type",)) and isinstance(value, str) and value.lower() in SIMULATED_CONFIG_VALUES:
             dotted = ".".join(path)

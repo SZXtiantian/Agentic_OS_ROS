@@ -55,7 +55,7 @@
 - `agentic_runtime/hardware_adapter/__init__.py`: exported bridge installer and transport APIs.
 - `agentic_runtime/cli.py`: added `agentic-runtime bridge install --dry-run`.
 - `tests/test_bridge_manager.py`: added bridge installer, manager metadata, transport contract, and no-runtime-rclpy tests.
-- `tests/test_capability_registry.py`: updated bridge profile expectation from mock status to real profile lifecycle status.
+- `tests/test_capability_registry.py`: updated robot profile expectation from mock status to real profile lifecycle status.
 - `agentic_runtime/sdk/access.py`: added kernel access SDK facade and structured access-denied exception.
 - `agentic_runtime/sdk/kernel.py`: exposed `ctx.kernel.access` and kernel status through the SDK compatibility layer.
 - `agentic_runtime/sdk/__init__.py`: exported `KernelAccessDeniedError`.

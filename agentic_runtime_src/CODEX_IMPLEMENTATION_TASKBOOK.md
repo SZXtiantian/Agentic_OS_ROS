@@ -446,7 +446,7 @@ repo/
 └── scripts/
     ├── setup_env.sh
     ├── run_runtime.sh
-    ├── run_ros_bridge.sh
+    ├── build_system_skill_nodes.sh
     ├── run_demo_app.sh
     ├── check_forbidden_imports.py
     └── run_tests.sh
@@ -674,7 +674,7 @@ grep -n "/cmd_vel" docs/architecture.md
 
 #### 目标
 
-定义 Agent App 的 `app.yaml` 标准。
+定义 Agent App 的 `app.md` 标准。
 
 #### 输出文件
 
@@ -800,7 +800,7 @@ configs/safety.yaml
 configs/runtime.yaml
 ```
 
-#### `configs/places.yaml`
+#### `configs/places.md`
 
 ```yaml
 places:
@@ -832,7 +832,7 @@ places:
     allowed: false
 ```
 
-#### `configs/permissions.yaml`
+#### `configs/permissions.md`
 
 ```yaml
 permissions:
@@ -856,7 +856,7 @@ permissions:
     description: Report message to user.
 ```
 
-#### `configs/safety.yaml`
+#### `configs/safety.md`
 
 ```yaml
 safety:
@@ -871,7 +871,7 @@ safety:
     - lab_restricted_zone
 ```
 
-#### `configs/runtime.yaml`
+#### `configs/runtime.md`
 
 ```yaml
 runtime:
@@ -880,7 +880,7 @@ runtime:
   default_skill_timeout_s: 60
   allow_mock_backends: true
   app_root: ./agentic_apps
-  skill_root: ./agentic_runtime/skills
+  skill_provider_root: ./agentic_runtime/system_skills
 ```
 
 #### 验收命令
@@ -1134,7 +1134,7 @@ Runtime/safety_guard 决定是否拒绝。
 #### 实现步骤
 
 1. 创建 Python ROS2 package。
-2. 从 `configs/places.yaml` 读取地点。
+2. 从 `configs/places.md` 读取地点。
 3. 提供 `ResolvePlace` service。
 4. 增加 launch 文件。
 5. 增加最小单测或脚本测试。
@@ -1489,7 +1489,7 @@ class SchemaInvalidError(AgenticRuntimeError)
 
 #### 目标
 
-加载 `agentic_runtime/skills/*.yaml`，校验并注册 skill。
+加载 `agentic_runtime/system_skills/*/SKILL.md`，校验并注册 skill。
 
 #### 文件
 
@@ -1972,7 +1972,7 @@ room_inspection_app/
 └── README.md
 ```
 
-#### `app.yaml`
+#### `app.md`
 
 ```yaml
 name: room_inspection_app
@@ -2133,7 +2133,7 @@ async def run(ctx: AgentContext, place: str = "厨房"):
 - 不要生成底层控制指令。
 ```
 
-#### `workflows/default.yaml`
+#### `workflows/default.md`
 
 ```yaml
 name: default_room_inspection
@@ -2467,7 +2467,7 @@ ros2 run agentic_capability_bridge navigation_bridge_node --ros-args -p mock_nav
 
 Codex 在 T2.3 创建以下文件。
 
-### `agentic_runtime/skills/resolve_place.yaml`
+### `agentic_runtime/system_skills/world.resolve_place/SKILL.md`
 
 ```yaml
 name: world.resolve_place
@@ -2520,7 +2520,7 @@ observability:
   record_result: true
 ```
 
-### `agentic_runtime/skills/get_robot_state.yaml`
+### `agentic_runtime/system_skills/robot.get_state/SKILL.md`
 
 ```yaml
 name: robot.get_state
@@ -2568,7 +2568,7 @@ observability:
   record_result: true
 ```
 
-### `agentic_runtime/skills/navigate_to.yaml`
+### `agentic_runtime/system_skills/robot.navigate_to/SKILL.md`
 
 ```yaml
 name: robot.navigate_to
@@ -2635,7 +2635,7 @@ observability:
   record_result: true
 ```
 
-### `agentic_runtime/skills/inspect_area.yaml`
+### `agentic_runtime/system_skills/robot.inspect_area/SKILL.md`
 
 ```yaml
 name: robot.inspect_area
@@ -2695,7 +2695,7 @@ observability:
   record_result: true
 ```
 
-### `agentic_runtime/skills/stop_robot.yaml`
+### `agentic_runtime/system_skills/robot.stop/SKILL.md`
 
 ```yaml
 name: robot.stop
