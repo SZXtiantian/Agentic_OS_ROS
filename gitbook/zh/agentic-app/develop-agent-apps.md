@@ -384,6 +384,40 @@ async def call_skill(ctx, steps, name: str, skill_name: str, args: dict) -> dict
 
 后续所有视觉、机械臂、夹爪、抓取、放置动作都通过这个 helper 调 system skill。
 
+当 App 调用：
+
+```python
+await ctx.kernel.skill.call("perception.detect_color_block", {"color": "green"})
+```
+
+Runtime 不会把调用直接交给机器人。它会先走一遍系统执行链路：
+
+1. 从 skill registry 找到对应的 system skill contract。
+2. 用 `input_schema` 校验参数，例如 `color` 必须是 `red`、`green`、`blue`、`yellow`。
+3. 用 App manifest 做 permission check，例如必须有 `perception.detect.color_block`。
+4. 对高风险或资源相关能力做 access/intervention check。
+5. 调 safety guard，例如机械臂动作要确认急停、最大时长、工作空间约束。
+6. 根据 `resource_requirements.locks` 锁资源，例如 `camera`、`arm`、`gripper`。
+7. 根据 `implementation.type` 选择 runner：`ros2_service`、`ros2_action`、`runtime_internal` 或 `python`。
+8. 创建 syscall/audit 记录，执行完成后释放资源锁。
+
+例如视觉检测 skill 的 runner 配置会指向 bridge service，并声明哪些 JSON 字段要解析回 App：
+
+```json
+{
+  "type": "ros2_service",
+  "service": "/agentic/perception/detect_color_block",
+  "service_type": "agentic_msgs/srv/DetectColorBlock",
+  "request_id_field": "request_id",
+  "json_output_fields": {
+    "detection": "detection_json",
+    "evidence": "evidence_json"
+  }
+}
+```
+
+这就是为什么 App 代码只看到普通 dict，但底层仍然走了权限、安全、资源锁、审计和 ROS2 bridge。
+
 ## 第八步：完成视觉识别
 
 视觉识别分三层理解：
@@ -393,6 +427,21 @@ async def call_skill(ctx, steps, name: str, skill_name: str, args: dict) -> dict
 | App 编排层 | 决定要识别什么颜色、何时拍照、如何校验结果 | `main.py` |
 | System skill contract | 定义输入、输出、权限、资源锁、安全约束 | `agentic_runtime_src/system_skills/perception.*` |
 | Bridge/backend | 真正调用相机、检测算法或 ROS2 service | ROS2 bridge workspace |
+
+视觉相关 bridge 在：
+
+```text
+ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/inspection_bridge_node.py
+```
+
+它订阅 robot profile 中配置的 RGB、depth、CameraInfo topic，并向 Runtime 暴露这些 service：
+
+```text
+/agentic/perception/capture_photo
+/agentic/perception/detect_color_block
+/agentic/perception/center_color_block
+/agentic/perception/verify_held_color_block
+```
 
 App 不直接读相机。它调用 system skill：
 
@@ -417,6 +466,45 @@ center = await call_skill(
 ![红色积木视觉对中调试图](../assets/color-block-grasper/01_center_red_block_debug.png)
 
 _视觉对中证据：红圈是 OpenCV 分割出的红色候选块，绿色十字是目标中心点。`CENTERED` 表示候选中心已经进入 profile 配置的容差范围。_
+
+`perception.center_color_block` 对应 bridge service：
+
+```text
+/agentic/perception/center_color_block
+agentic_msgs/srv/CenterColorBlock
+```
+
+这一步不是简单“检测一次”，而是一个慢速视觉对中循环：
+
+1. 检查 servo command topic 是否有 subscriber。
+2. 读取 profile 中的目标中心比例，例如 `center_target_x_ratio`、`center_target_y_ratio`。
+3. 每轮读取一帧 RGB 图像，并用 OpenCV LAB 分割找到目标颜色块。
+4. 计算目标中心和画面目标中心之间的 `dx`、`dy`。
+5. 用 profile 中的 gain、max step 和 pulse limits 计算 base/pitch servo pulse 调整量。
+6. 发布 `servo_controller_msgs/ServosPosition`，调整底座和相机俯仰。
+7. 等待 settle 时间，继续下一轮。
+8. 进入 tolerance 范围后返回 `centered: true`。
+9. 超时或迭代次数用尽则返回 `COLOR_BLOCK_ALIGNMENT_FAILED`。
+
+核心代码可以理解成“感知误差 -> 受限舵机调整”：
+
+```python
+dx = float(observation["center_x"]) / max(1.0, float(width)) - target_x
+dy = float(observation["center_y"]) / max(1.0, float(height)) - target_y
+centered = abs(dx) <= tolerance and abs(dy) <= tolerance
+
+if not centered:
+    base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
+    pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
+    base_pulse = int(np.clip(base_pulse + base_delta, base_limits[0], base_limits[1]))
+    pitch_pulse = int(np.clip(pitch_pulse + pitch_delta, pitch_limits[0], pitch_limits[1]))
+    self._publish_alignment_servos(
+        float(cfg.get("center_servo_duration_s", 0.08)),
+        [(1, base_pulse), (4, pitch_pulse)],
+    )
+```
+
+注意这里仍然不是 Agent App 在做实时控制。App 只请求“把目标色块对中”，每轮视觉、pulse 限幅、发布舵机命令都在 bridge 内部完成，并且外层已经经过 Runtime 的资源锁和安全检查。
 
 然后检测目标积木：
 
@@ -454,6 +542,108 @@ detection = await call_skill(
 ![红色积木检测调试图](../assets/color-block-grasper/02_detect_red_block_debug.png)
 
 _检测证据：bridge 在调试图中画出目标轮廓、中心点和颜色标签，并在 metadata 中写入 `center_px`、`radius_px`、`depth_m`、`camera_position_m`。_
+
+`perception.detect_color_block` 对应 bridge service：
+
+```text
+/agentic/perception/detect_color_block
+agentic_msgs/srv/DetectColorBlock
+```
+
+底层执行流程是：
+
+1. 等待新鲜 RGB 图像、深度图和 CameraInfo。
+2. 把 `sensor_msgs/Image` 转成 OpenCV BGR image。
+3. 把 depth image 转成深度数组，支持 `16UC1`、`mono16`、`32FC1`。
+4. 从 robot profile、调参文件或默认配置读取目标颜色的 LAB 阈值。
+5. 把 BGR 图像 resize、GaussianBlur，然后转 LAB。
+6. 用 `cv2.inRange` 生成颜色 mask。
+7. 通过 erode/dilate 做简单形态学清理。
+8. 找 contours，过滤最小面积和 ROI。
+9. 用 `cv2.minEnclosingCircle` 取候选块中心、半径和面积。
+10. 选择面积最大的候选。
+11. 在候选中心附近读取 depth ROI，估算 `depth_m`。
+12. 用 CameraInfo 内参把像素点和深度转换成 `camera_position_m`。
+13. 写 debug image 和 metadata 到 `/opt/agentic/var/evidence/color_block`。
+14. 返回 `detection_json` 和 `evidence_json`。
+
+颜色分割核心代码如下。当前实现使用 OpenCV 的 LAB 色彩空间，而不是让 LLM 判断图像内容：
+
+```python
+def _segment_color(self, image, color, color_range, *, roi_config=None, roi_prefix="detect"):
+    height, width = image.shape[:2]
+    small = cv2.resize(image, (max(1, width // 2), max(1, height // 2)))
+    blurred = cv2.GaussianBlur(small, (3, 3), 3)
+    lab = cv2.cvtColor(blurred, cv2.COLOR_BGR2LAB)
+    mask = cv2.inRange(
+        lab,
+        np.array(color_range["min"]),
+        np.array(color_range["max"]),
+    )
+    mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
+
+    roi = dict(roi_config or self._profile.get("color_block") or {})
+    x_min = float(roi.get(f"{roi_prefix}_roi_x_min_ratio", 0.0)) * width
+    x_max = float(roi.get(f"{roi_prefix}_roi_x_max_ratio", 1.0)) * width
+    y_min = float(roi.get(f"{roi_prefix}_roi_y_min_ratio", 0.08)) * height
+    y_max = float(roi.get(f"{roi_prefix}_roi_y_max_ratio", 1.0)) * height
+    min_area = float(roi.get(f"{roi_prefix}_min_area_px", roi.get("min_area_px", 50.0)))
+
+    candidates = []
+    for contour in contours:
+        area = float(abs(cv2.contourArea(contour))) * 4.0
+        if area < min_area:
+            continue
+        (center_x, center_y), radius = cv2.minEnclosingCircle(contour)
+        full_x = float(center_x) * 2.0
+        full_y = float(center_y) * 2.0
+        if x_min <= full_x <= x_max and y_min <= full_y <= y_max:
+            candidates.append({
+                "center_x": full_x,
+                "center_y": full_y,
+                "radius": float(radius) * 2.0,
+                "area": area,
+            })
+    return max(candidates, key=lambda item: item["area"]) if candidates else None
+```
+
+有了 2D 中心点后，bridge 会在深度图里取一个 ROI，过滤无效深度，再用 CameraInfo 内参把像素反投影成相机坐标：
+
+```python
+def _estimate_depth(self, depth_image, center_x, center_y, radius):
+    roi_radius = max(5, int(round(radius)))
+    height, width = depth_image.shape[:2]
+    cx, cy = int(round(center_x)), int(round(center_y))
+    x0 = max(0, cx - roi_radius)
+    x1 = min(width, cx + roi_radius + 1)
+    y0 = max(0, cy - roi_radius)
+    y1 = min(height, cy + roi_radius + 1)
+    roi = depth_image[y0:y1, x0:x1]
+
+    if np.issubdtype(roi.dtype, np.floating):
+        valid = roi[np.isfinite(roi) & (roi > 0.0) & (roi < 10.0)]
+        if valid.size == 0:
+            return None
+        depth_m = float(np.mean(valid))
+    else:
+        valid = roi[(roi > 0) & (roi < 10000)]
+        if valid.size == 0:
+            return None
+        depth_m = float(np.mean(valid)) / 1000.0
+    return {"depth_m": depth_m, "valid_count": int(valid.size)}
+
+
+def _depth_pixel_to_camera(pixel, depth_m, intrinsics):
+    fx, fy, cx, cy = intrinsics
+    px, py = pixel
+    return [
+        (float(px) - cx) * depth_m / fx,
+        (float(py) - cy) * depth_m / fy,
+        depth_m,
+    ]
+```
 
 App 必须校验这些字段。如果没有颜色、中心点、置信度或相机坐标，就返回 `COLOR_BLOCK_DETECTION_INVALID`，不要继续抓取。
 
@@ -624,373 +814,13 @@ pick = await call_skill(
 
 App 只传入“要抓什么”和“视觉检测到的位置”，不直接控制电机、不直接调用 MoveIt。
 
-![抓取后证据照片](../assets/color-block-grasper/04_after_pick_evidence.png)
-
-_抓取后证据：红色积木被夹到相机下方区域。完整 App 不能只看这张图或 pick 返回成功，还必须继续调用 `perception.verify_held_color_block` 做独立视觉验证。_
-
-## 第十一步：抓取后验证
-
-抓取成功并不等于任务成功。App 要把机械臂回到安全姿态，同时保持夹爪闭合：
-
-```python
-reset = await call_skill(
-    ctx,
-    steps,
-    "reset_arm_home_holding_gripper",
-    "arm.move_named",
-    {"name": "arm_home", "timeout_s": 8, "_kernel_timeout_s": 20},
-)
-```
-
-然后做独立视觉验证：
-
-```python
-verification = await call_skill(
-    ctx,
-    steps,
-    "post_pick_verify",
-    "perception.verify_held_color_block",
-    {
-        "color": task["color"],
-        "target": task["target"],
-        "detection": detection["data"]["validated_detection"],
-        "pick_result": pick["data"],
-        "evidence_label": f"{task['evidence_label']}_held_verify",
-        "timeout_s": 30,
-    },
-)
-```
-
-验证结果必须明确 `verified_held: true`。如果看不到目标颜色积木在夹爪区域，就返回 `COLOR_BLOCK_PICK_VERIFICATION_FAILED`，不能宣布成功。
-
-更稳妥的实现会在短暂延迟后再次拍照和验证，确认积木没有从夹爪中滑落。
-
-## 第十二步：完成放置
-
-放置使用另一个 system skill：
-
-```python
-place = await call_skill(
-    ctx,
-    steps,
-    "place_color_block",
-    "manipulation.place_color_block",
-    {
-        "color": task["color"],
-        "place_target": task["place_target"],
-        "pick_result": pick["data"],
-        "timeout_s": 60,
-    },
-)
-```
-
-`place_target` 必须来自 LLM plan 并经过 App 校验。App 不应该直接传 Nav2 pose 或 MoveIt pose。
-
-![放置后证据照片](../assets/color-block-grasper/05_after_place_evidence.png)
-
-_放置后证据：bridge 执行受控放置序列并打开夹爪，红色积木回到工作台。App 看到的是 `released: true` 的结构化结果和对应审计记录。_
-
-## 第十三步：理解核心 system skill 的底层实现
-
-前面写的是 App 层代码。开发者还需要理解：`perception.detect_color_block`、`manipulation.pick_color_block`、`manipulation.place_color_block` 虽然是系统能力，但它们不是黑盒。它们由三层组成：
-
-```text
-Agent App
-  -> ctx.kernel.skill.call(...)
-  -> Runtime SkillExecutor
-  -> system skill contract
-  -> ROS2 bridge service/action
-  -> camera / depth / kinematics / servo backend
-```
-
-App 开发者通常不改 bridge 代码，但必须理解它返回的数据、错误和安全边界。需要新增或替换底层机器人能力时，应该改 ROS2 bridge package 或 robot profile，而不是在 App 里直接 import `rclpy`。
-
-## Runtime 如何执行 system skill
-
-当 App 调：
-
-```python
-await ctx.kernel.skill.call("perception.detect_color_block", {"color": "green"})
-```
-
-Runtime 会走 `SkillExecutor`：
-
-1. 从 skill registry 找到 `agentic_runtime_src/system_skills/perception.detect_color_block/SKILL.md`。
-2. 用 `input_schema` 校验参数，例如 `color` 必须是 `red`、`green`、`blue`、`yellow`。
-3. 用 App manifest 做 permission check，例如必须有 `perception.detect.color_block`。
-4. 对高风险或资源相关能力做 access/intervention check。
-5. 调 safety guard，例如机械臂动作要确认急停、时长、工作空间约束。
-6. 根据 `resource_requirements.locks` 锁资源，例如 `camera`、`arm`、`gripper`。
-7. 根据 `implementation.type` 选择 runner：`ros2_service`、`ros2_action`、`runtime_internal` 或 `python`。
-8. 创建 syscall/audit 记录，执行完成后释放资源锁。
-
-`ros2_service` 和 `ros2_action` 的 runner 会读取 `implementation`：
-
-```json
-{
-  "type": "ros2_service",
-  "service": "/agentic/perception/detect_color_block",
-  "service_type": "agentic_msgs/srv/DetectColorBlock",
-  "request_id_field": "request_id",
-  "json_output_fields": {
-    "detection": "detection_json",
-    "evidence": "evidence_json"
-  }
-}
-```
-
-这表示 Runtime 会把 App 的参数变成 ROS2 service 请求，把 bridge 返回的 `detection_json` 和 `evidence_json` 解码成普通 dict，再返回给 App。
-
-## 视觉识别的底层实现
-
-视觉相关 bridge 在：
-
-```text
-ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/inspection_bridge_node.py
-```
-
-这个 node 会订阅 robot profile 中配置的 RGB、depth、CameraInfo topic，并提供这些 Runtime-facing service：
-
-```text
-/agentic/perception/capture_photo
-/agentic/perception/detect_color_block
-/agentic/perception/center_color_block
-/agentic/perception/verify_held_color_block
-```
-
-### detect_color_block 做了什么
-
-`perception.detect_color_block` 对应 ROS2 service：
-
-```text
-/agentic/perception/detect_color_block
-agentic_msgs/srv/DetectColorBlock
-```
-
-请求字段：
-
-```text
-color
-target
-evidence_label
-request_id
-timeout_s
-```
-
-底层执行流程：
-
-1. 等待新鲜 RGB 图像、深度图和 CameraInfo。
-2. 把 `sensor_msgs/Image` 转成 OpenCV BGR image。
-3. 把 depth image 转成深度数组，支持 `16UC1`、`mono16`、`32FC1`。
-4. 从 robot profile、调参文件或默认配置读取目标颜色的 LAB 阈值。
-5. 把 BGR 图像 resize、GaussianBlur，然后转 LAB。
-6. 用 `cv2.inRange` 生成颜色 mask。
-7. 通过 erode/dilate 做简单形态学清理。
-8. 找 contours，过滤最小面积和 ROI。
-9. 用 `cv2.minEnclosingCircle` 取候选块中心、半径和面积。
-10. 选择面积最大的候选。
-11. 在候选中心附近读取 depth ROI，估算 `depth_m`。
-12. 用 CameraInfo 内参把像素点和深度转换成 `camera_position_m`。
-13. 写 debug image 和 metadata 到 `/opt/agentic/var/evidence/color_block`。
-14. 返回 `detection_json` 和 `evidence_json`。
-
-颜色分割核心代码如下。当前实现使用 OpenCV 的 LAB 色彩空间，而不是让 LLM 判断图像内容：
-
-```python
-def _segment_color(self, image, color, color_range, *, roi_config=None, roi_prefix="detect"):
-    height, width = image.shape[:2]
-    small = cv2.resize(image, (max(1, width // 2), max(1, height // 2)))
-    blurred = cv2.GaussianBlur(small, (3, 3), 3)
-    lab = cv2.cvtColor(blurred, cv2.COLOR_BGR2LAB)
-    mask = cv2.inRange(
-        lab,
-        np.array(color_range["min"]),
-        np.array(color_range["max"]),
-    )
-    mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
-    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
-    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
-
-    roi = dict(roi_config or self._profile.get("color_block") or {})
-    x_min = float(roi.get(f"{roi_prefix}_roi_x_min_ratio", 0.0)) * width
-    x_max = float(roi.get(f"{roi_prefix}_roi_x_max_ratio", 1.0)) * width
-    y_min = float(roi.get(f"{roi_prefix}_roi_y_min_ratio", 0.08)) * height
-    y_max = float(roi.get(f"{roi_prefix}_roi_y_max_ratio", 1.0)) * height
-    min_area = float(roi.get(f"{roi_prefix}_min_area_px", roi.get("min_area_px", 50.0)))
-
-    candidates = []
-    for contour in contours:
-        area = float(abs(cv2.contourArea(contour))) * 4.0
-        if area < min_area:
-            continue
-        (center_x, center_y), radius = cv2.minEnclosingCircle(contour)
-        full_x = float(center_x) * 2.0
-        full_y = float(center_y) * 2.0
-        if x_min <= full_x <= x_max and y_min <= full_y <= y_max:
-            candidates.append({
-                "center_x": full_x,
-                "center_y": full_y,
-                "radius": float(radius) * 2.0,
-                "area": area,
-            })
-    return max(candidates, key=lambda item: item["area"]) if candidates else None
-```
-
-有了 2D 中心点后，bridge 会在深度图里取一个 ROI，过滤无效深度，再用 CameraInfo 内参把像素反投影成相机坐标：
-
-```python
-def _estimate_depth(self, depth_image, center_x, center_y, radius):
-    roi_radius = max(5, int(round(radius)))
-    height, width = depth_image.shape[:2]
-    cx, cy = int(round(center_x)), int(round(center_y))
-    x0 = max(0, cx - roi_radius)
-    x1 = min(width, cx + roi_radius + 1)
-    y0 = max(0, cy - roi_radius)
-    y1 = min(height, cy + roi_radius + 1)
-    roi = depth_image[y0:y1, x0:x1]
-
-    if np.issubdtype(roi.dtype, np.floating):
-        valid = roi[np.isfinite(roi) & (roi > 0.0) & (roi < 10.0)]
-        if valid.size == 0:
-            return None
-        depth_m = float(np.mean(valid))
-    else:
-        valid = roi[(roi > 0) & (roi < 10000)]
-        if valid.size == 0:
-            return None
-        depth_m = float(np.mean(valid)) / 1000.0
-    return {"depth_m": depth_m, "valid_count": int(valid.size)}
-
-
-def _depth_pixel_to_camera(pixel, depth_m, intrinsics):
-    fx, fy, cx, cy = intrinsics
-    px, py = pixel
-    return [
-        (float(px) - cx) * depth_m / fx,
-        (float(py) - cy) * depth_m / fy,
-        depth_m,
-    ]
-```
-
-返回给 App 的核心字段类似：
-
-```json
-{
-  "detection_id": "det_xxx",
-  "color": "green",
-  "target": "workspace",
-  "confidence": 0.92,
-  "frame_id": "rgb_camera_link",
-  "center_px": [318.0, 221.0],
-  "radius_px": 34.0,
-  "area_px": 2382.0,
-  "depth_m": 0.33761,
-  "camera_position_m": [0.32, 0.04, 0.02],
-  "evidence_image_path": "/opt/agentic/var/evidence/color_block/...",
-  "evidence_metadata_path": "/opt/agentic/var/evidence/color_block/..."
-}
-```
-
-App 继续抓取前必须校验 `color`、`center_px`、`confidence`、`depth_m` 和 `camera_position_m`。如果 bridge 只返回“检测到了”但没有空间坐标，App 不能继续抓取。
-
-### center_color_block 做了什么
-
-`perception.center_color_block` 对应：
-
-```text
-/agentic/perception/center_color_block
-agentic_msgs/srv/CenterColorBlock
-```
-
-它不是简单“检测一次”。它会做慢速视觉对中：
-
-1. 检查 servo command topic 是否有 subscriber。
-2. 读取 profile 中的目标中心比例，例如 `center_target_x_ratio`、`center_target_y_ratio`。
-3. 每轮读取一帧 RGB 图像，并用同样的 LAB 分割找到目标颜色块。
-4. 计算目标中心和画面目标中心之间的 `dx`、`dy`。
-5. 用 profile 中的 gain、max step 和 pulse limits 计算 base/pitch servo pulse 调整量。
-6. 发布 `servo_controller_msgs/ServosPosition`，调整底座和相机俯仰。
-7. 等待 settle 时间，继续下一轮。
-8. 进入 tolerance 范围后返回 `centered: true`。
-9. 超时或迭代次数用尽则返回 `COLOR_BLOCK_ALIGNMENT_FAILED`。
-
-这一步的意义是把目标积木移动到后续抓取规划更稳定的位置。它仍然是 system skill，因为它会动相机/机械臂相关 servo，所以需要资源锁和安全检查。
-
-对中的核心是一个慢速闭环：每轮拍图、分割颜色、计算画面误差，然后只发布受限的 base/pitch pulse 调整量。
-
-```python
-dx = float(observation["center_x"]) / max(1.0, float(width)) - target_x
-dy = float(observation["center_y"]) / max(1.0, float(height)) - target_y
-centered = abs(dx) <= tolerance and abs(dy) <= tolerance
-
-if not centered:
-    base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
-    pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
-    base_pulse = int(np.clip(base_pulse + base_delta, base_limits[0], base_limits[1]))
-    pitch_pulse = int(np.clip(pitch_pulse + pitch_delta, pitch_limits[0], pitch_limits[1]))
-    self._publish_alignment_servos(
-        float(cfg.get("center_servo_duration_s", 0.08)),
-        [(1, base_pulse), (4, pitch_pulse)],
-    )
-```
-
-### verify_held_color_block 做了什么
-
-`perception.verify_held_color_block` 对应：
-
-```text
-/agentic/perception/verify_held_color_block
-agentic_msgs/srv/VerifyHeldColorBlock
-```
-
-它接收抓取前 detection 和 pick_result，不相信 pick backend 自己说“抓到了”。底层会：
-
-1. 等待新的 RGB 图像。
-2. 在 profile 配置的 gripper-held ROI 中做目标颜色 LAB 分割。
-3. 读取 depth，并估算候选块深度。
-4. 检查候选是否和抓取前桌面 detection 重叠。
-5. 检查候选半径相对抓取前是否变大，证明更接近夹爪相机。
-6. 检查 depth delta 是否超过阈值，证明积木被抬起。
-7. 检查候选是否位于夹爪口区域。
-8. 写 held verification debug image 和 metadata。
-9. 只有所有条件满足时返回 `verified_held: true`。
-
-所以 App 里必须把抓取后验证作为硬条件。`manipulation.pick_color_block` 返回成功，只表示动作执行完成；最终是否真的夹住，要看 `perception.verify_held_color_block`。
-
-验证“夹住”的判断不是单个条件，而是一组证据同时成立：候选出现在夹爪 ROI、没有和抓取前桌面目标重叠、半径变大、深度变近、位置落在夹爪口区域。
-
-```python
-observation = self._segment_color(image, color, color_range, roi_config=cfg, roi_prefix="held_verify")
-candidate = self._observation_payload(observation) if observation else {}
-overlaps_pre_pick = self._candidate_overlaps_pre_pick(candidate, detection, cfg) if candidate else False
-radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
-depth_delta_m = pre_pick_depth_m - candidate_depth_m
-position_confirms_gripper_roi = self._candidate_confirms_gripper_roi(
-    candidate,
-    image.shape[:2],
-    min_center_y_ratio,
-    min_bottom_y_ratio,
-)
-
-verified = (
-    bool(observation)
-    and confidence >= min_confidence
-    and not overlaps_pre_pick
-    and radius_ratio >= min_radius_ratio
-    and depth_delta_m >= min_depth_delta
-    and position_confirms_gripper_roi
-)
-```
-
-## 抓取的底层实现
-
-抓取相关 bridge 在：
+抓取和放置相关 bridge 在：
 
 ```text
 ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/manipulation_bridge_node.py
 ```
 
-这个 node 提供：
+这个 node 向 Runtime 暴露：
 
 ```text
 /agentic/arm/move_named
@@ -1000,14 +830,14 @@ ros2_bridge_src/agentic_capability_bridge/agentic_capability_bridge/manipulation
 /agentic/manipulation/place_color_block
 ```
 
-`manipulation.pick_color_block` 是 ROS2 action：
+`manipulation.pick_color_block` 对应 bridge action：
 
 ```text
 /agentic/manipulation/pick_color_block
 agentic_msgs/action/PickColorBlock
 ```
 
-Goal 字段：
+Goal 主要字段是：
 
 ```text
 color
@@ -1018,7 +848,7 @@ request_id
 timeout_s
 ```
 
-底层执行流程：
+底层执行流程是：
 
 1. 校验 `color` 只能是允许颜色。
 2. 解析 `detection_json`。
@@ -1123,16 +953,118 @@ self._publish_servos(post_pick_lift_duration_s, [
 
 这就是为什么 App 后面必须调用视觉验证。
 
-## 放置的底层实现
+![抓取后证据照片](../assets/color-block-grasper/04_after_pick_evidence.png)
 
-`manipulation.place_color_block` 是 ROS2 action：
+_抓取后证据：红色积木被夹到相机下方区域。完整 App 不能只看这张图或 pick 返回成功，还必须继续调用 `perception.verify_held_color_block` 做独立视觉验证。_
+
+## 第十一步：抓取后验证
+
+抓取成功并不等于任务成功。App 要把机械臂回到安全姿态，同时保持夹爪闭合：
+
+```python
+reset = await call_skill(
+    ctx,
+    steps,
+    "reset_arm_home_holding_gripper",
+    "arm.move_named",
+    {"name": "arm_home", "timeout_s": 8, "_kernel_timeout_s": 20},
+)
+```
+
+然后做独立视觉验证：
+
+```python
+verification = await call_skill(
+    ctx,
+    steps,
+    "post_pick_verify",
+    "perception.verify_held_color_block",
+    {
+        "color": task["color"],
+        "target": task["target"],
+        "detection": detection["data"]["validated_detection"],
+        "pick_result": pick["data"],
+        "evidence_label": f"{task['evidence_label']}_held_verify",
+        "timeout_s": 30,
+    },
+)
+```
+
+`perception.verify_held_color_block` 对应 bridge service：
+
+```text
+/agentic/perception/verify_held_color_block
+agentic_msgs/srv/VerifyHeldColorBlock
+```
+
+它接收抓取前 detection 和 pick_result，不相信 pick backend 自己说“抓到了”。底层会：
+
+1. 等待新的 RGB 图像。
+2. 在 profile 配置的 gripper-held ROI 中做目标颜色 LAB 分割。
+3. 读取 depth，并估算候选块深度。
+4. 检查候选是否和抓取前桌面 detection 重叠。
+5. 检查候选半径相对抓取前是否变大，证明更接近夹爪相机。
+6. 检查 depth delta 是否超过阈值，证明积木被抬起。
+7. 检查候选是否位于夹爪口区域。
+8. 写 held verification debug image 和 metadata。
+9. 只有所有条件满足时返回 `verified_held: true`。
+
+验证“夹住”的判断不是单个条件，而是一组证据同时成立：候选出现在夹爪 ROI、没有和抓取前桌面目标重叠、半径变大、深度变近、位置落在夹爪口区域。
+
+```python
+observation = self._segment_color(image, color, color_range, roi_config=cfg, roi_prefix="held_verify")
+candidate = self._observation_payload(observation) if observation else {}
+overlaps_pre_pick = self._candidate_overlaps_pre_pick(candidate, detection, cfg) if candidate else False
+radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
+depth_delta_m = pre_pick_depth_m - candidate_depth_m
+position_confirms_gripper_roi = self._candidate_confirms_gripper_roi(
+    candidate,
+    image.shape[:2],
+    min_center_y_ratio,
+    min_bottom_y_ratio,
+)
+
+verified = (
+    bool(observation)
+    and confidence >= min_confidence
+    and not overlaps_pre_pick
+    and radius_ratio >= min_radius_ratio
+    and depth_delta_m >= min_depth_delta
+    and position_confirms_gripper_roi
+)
+```
+
+验证结果必须明确 `verified_held: true`。如果看不到目标颜色积木在夹爪区域，就返回 `COLOR_BLOCK_PICK_VERIFICATION_FAILED`，不能宣布成功。
+
+更稳妥的实现会在短暂延迟后再次拍照和验证，确认积木没有从夹爪中滑落。
+
+## 第十二步：完成放置
+
+放置使用另一个 system skill：
+
+```python
+place = await call_skill(
+    ctx,
+    steps,
+    "place_color_block",
+    "manipulation.place_color_block",
+    {
+        "color": task["color"],
+        "place_target": task["place_target"],
+        "pick_result": pick["data"],
+        "timeout_s": 60,
+    },
+)
+```
+
+`manipulation.place_color_block` 对应 bridge action：
 
 ```text
 /agentic/manipulation/place_color_block
 agentic_msgs/action/PlaceColorBlock
 ```
 
-Goal 字段：
+Goal 主要字段是：
 
 ```text
 color
@@ -1142,7 +1074,7 @@ request_id
 timeout_s
 ```
 
-底层执行流程：
+底层执行流程是：
 
 1. 解析 `pick_result_json`。
 2. 如果 `place_target` 是 `hold_position`、`held`、`lifted`、`keep_holding`，bridge 不打开夹爪，只返回仍保持 holding。
@@ -1153,9 +1085,7 @@ timeout_s
 7. 每个阶段通过 action feedback 返回 `place_step_*`。
 8. 成功时返回 `released: true`。
 
-这说明 `place_target` 在当前实现里不是 App 直接传底层 pose，而是由 bridge/profile 映射为受控放置序列。要新增托盘、货架、回收区等放置目标，应扩展 robot profile 或 bridge 中的 allowlisted place sequence，而不是让 App 传任意机械臂坐标。
-
-默认放置逻辑也是受控序列：移动到放置姿态、保持夹爪闭合、打开夹爪释放、回安全姿态。
+默认放置逻辑也是受控序列：
 
 ```python
 sequence = list(cfg.get("place_sequence") or [])
@@ -1174,7 +1104,15 @@ for index, item in enumerate(sequence):
     self._sleep_or_cancel(goal_handle, float(item.get("duration_s", 1.0)) + 0.1)
 ```
 
-## 什么时候改 App，什么时候改 bridge
+`place_target` 必须来自 LLM plan 并经过 App 校验。App 不应该直接传 Nav2 pose 或 MoveIt pose。
+
+这说明 `place_target` 在当前实现里不是 App 直接传底层 pose，而是由 bridge/profile 映射为受控放置序列。要新增托盘、货架、回收区等放置目标，应扩展 robot profile 或 bridge 中的 allowlisted place sequence，而不是让 App 传任意机械臂坐标。
+
+![放置后证据照片](../assets/color-block-grasper/05_after_place_evidence.png)
+
+_放置后证据：bridge 执行受控放置序列并打开夹爪，红色积木回到工作台。App 看到的是 `released: true` 的结构化结果和对应审计记录。_
+
+## 第十三步：判断什么时候改 App，什么时候改 bridge
 
 | 需求 | 应该改哪里 |
 | --- | --- |
