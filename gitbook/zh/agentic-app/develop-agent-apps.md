@@ -356,6 +356,12 @@ confirmation = await ctx.kernel.skill.call(
 
 只有回答 `CONFIRM` 才继续。未确认时返回 `COLOR_BLOCK_CONFIRMATION_REQUIRED`。
 
+真实运行开始前，App 通常会先拍一张 precheck 画面，用来证明相机、工作区和目标物体状态都可追溯。下面这张图里可以看到绿色、红色、蓝色三个积木都在工作台上，后续任务选择红色积木作为目标。
+
+![运行前相机画面](../assets/color-block-grasper/00_precheck_camera_view.png)
+
+_运行前证据：相机已经能看到工作区，红色积木位于中间区域，后续视觉对中和检测都基于这一路 RGB/depth 相机。_
+
 ## 第七步：统一封装 system skill 调用
 
 为了让每个步骤都保留 audit 信息，建议统一写一个 helper：
@@ -408,6 +414,10 @@ center = await call_skill(
 
 `perception.center_color_block` 的目标是让目标颜色积木进入可抓取的视觉区域。它可能通过相机、机械臂预设姿态或视觉 backend 完成居中，但这些细节都在 Runtime/bridge 里，App 只看结构化结果。
 
+![红色积木视觉对中调试图](../assets/color-block-grasper/01_center_red_block_debug.png)
+
+_视觉对中证据：红圈是 OpenCV 分割出的红色候选块，绿色十字是目标中心点。`CENTERED` 表示候选中心已经进入 profile 配置的容差范围。_
+
 然后检测目标积木：
 
 ```python
@@ -441,6 +451,10 @@ detection = await call_skill(
 }
 ```
 
+![红色积木检测调试图](../assets/color-block-grasper/02_detect_red_block_debug.png)
+
+_检测证据：bridge 在调试图中画出目标轮廓、中心点和颜色标签，并在 metadata 中写入 `center_px`、`radius_px`、`depth_m`、`camera_position_m`。_
+
 App 必须校验这些字段。如果没有颜色、中心点、置信度或相机坐标，就返回 `COLOR_BLOCK_DETECTION_INVALID`，不要继续抓取。
 
 拍照证据也通过 system skill：
@@ -458,6 +472,10 @@ evidence = await call_skill(
     },
 )
 ```
+
+![抓取前证据照片](../assets/color-block-grasper/03_before_pick_evidence.png)
+
+_抓取前证据：红色积木已经完成对中和检测，抓取动作会使用检测阶段返回的空间坐标，而不是让 App 直接控制机械臂坐标。_
 
 这样开发者可以在 storage 里追踪抓取前的视觉证据。
 
@@ -606,6 +624,10 @@ pick = await call_skill(
 
 App 只传入“要抓什么”和“视觉检测到的位置”，不直接控制电机、不直接调用 MoveIt。
 
+![抓取后证据照片](../assets/color-block-grasper/04_after_pick_evidence.png)
+
+_抓取后证据：红色积木被夹到相机下方区域。完整 App 不能只看这张图或 pick 返回成功，还必须继续调用 `perception.verify_held_color_block` 做独立视觉验证。_
+
 ## 第十一步：抓取后验证
 
 抓取成功并不等于任务成功。App 要把机械臂回到安全姿态，同时保持夹爪闭合：
@@ -663,6 +685,10 @@ place = await call_skill(
 ```
 
 `place_target` 必须来自 LLM plan 并经过 App 校验。App 不应该直接传 Nav2 pose 或 MoveIt pose。
+
+![放置后证据照片](../assets/color-block-grasper/05_after_place_evidence.png)
+
+_放置后证据：bridge 执行受控放置序列并打开夹爪，红色积木回到工作台。App 看到的是 `released: true` 的结构化结果和对应审计记录。_
 
 ## 第十三步：理解核心 system skill 的底层实现
 
@@ -768,6 +794,84 @@ timeout_s
 13. 写 debug image 和 metadata 到 `/opt/agentic/var/evidence/color_block`。
 14. 返回 `detection_json` 和 `evidence_json`。
 
+颜色分割核心代码如下。当前实现使用 OpenCV 的 LAB 色彩空间，而不是让 LLM 判断图像内容：
+
+```python
+def _segment_color(self, image, color, color_range, *, roi_config=None, roi_prefix="detect"):
+    height, width = image.shape[:2]
+    small = cv2.resize(image, (max(1, width // 2), max(1, height // 2)))
+    blurred = cv2.GaussianBlur(small, (3, 3), 3)
+    lab = cv2.cvtColor(blurred, cv2.COLOR_BGR2LAB)
+    mask = cv2.inRange(
+        lab,
+        np.array(color_range["min"]),
+        np.array(color_range["max"]),
+    )
+    mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[-2]
+
+    roi = dict(roi_config or self._profile.get("color_block") or {})
+    x_min = float(roi.get(f"{roi_prefix}_roi_x_min_ratio", 0.0)) * width
+    x_max = float(roi.get(f"{roi_prefix}_roi_x_max_ratio", 1.0)) * width
+    y_min = float(roi.get(f"{roi_prefix}_roi_y_min_ratio", 0.08)) * height
+    y_max = float(roi.get(f"{roi_prefix}_roi_y_max_ratio", 1.0)) * height
+    min_area = float(roi.get(f"{roi_prefix}_min_area_px", roi.get("min_area_px", 50.0)))
+
+    candidates = []
+    for contour in contours:
+        area = float(abs(cv2.contourArea(contour))) * 4.0
+        if area < min_area:
+            continue
+        (center_x, center_y), radius = cv2.minEnclosingCircle(contour)
+        full_x = float(center_x) * 2.0
+        full_y = float(center_y) * 2.0
+        if x_min <= full_x <= x_max and y_min <= full_y <= y_max:
+            candidates.append({
+                "center_x": full_x,
+                "center_y": full_y,
+                "radius": float(radius) * 2.0,
+                "area": area,
+            })
+    return max(candidates, key=lambda item: item["area"]) if candidates else None
+```
+
+有了 2D 中心点后，bridge 会在深度图里取一个 ROI，过滤无效深度，再用 CameraInfo 内参把像素反投影成相机坐标：
+
+```python
+def _estimate_depth(self, depth_image, center_x, center_y, radius):
+    roi_radius = max(5, int(round(radius)))
+    height, width = depth_image.shape[:2]
+    cx, cy = int(round(center_x)), int(round(center_y))
+    x0 = max(0, cx - roi_radius)
+    x1 = min(width, cx + roi_radius + 1)
+    y0 = max(0, cy - roi_radius)
+    y1 = min(height, cy + roi_radius + 1)
+    roi = depth_image[y0:y1, x0:x1]
+
+    if np.issubdtype(roi.dtype, np.floating):
+        valid = roi[np.isfinite(roi) & (roi > 0.0) & (roi < 10.0)]
+        if valid.size == 0:
+            return None
+        depth_m = float(np.mean(valid))
+    else:
+        valid = roi[(roi > 0) & (roi < 10000)]
+        if valid.size == 0:
+            return None
+        depth_m = float(np.mean(valid)) / 1000.0
+    return {"depth_m": depth_m, "valid_count": int(valid.size)}
+
+
+def _depth_pixel_to_camera(pixel, depth_m, intrinsics):
+    fx, fy, cx, cy = intrinsics
+    px, py = pixel
+    return [
+        (float(px) - cx) * depth_m / fx,
+        (float(py) - cy) * depth_m / fy,
+        depth_m,
+    ]
+```
+
 返回给 App 的核心字段类似：
 
 ```json
@@ -812,6 +916,24 @@ agentic_msgs/srv/CenterColorBlock
 
 这一步的意义是把目标积木移动到后续抓取规划更稳定的位置。它仍然是 system skill，因为它会动相机/机械臂相关 servo，所以需要资源锁和安全检查。
 
+对中的核心是一个慢速闭环：每轮拍图、分割颜色、计算画面误差，然后只发布受限的 base/pitch pulse 调整量。
+
+```python
+dx = float(observation["center_x"]) / max(1.0, float(width)) - target_x
+dy = float(observation["center_y"]) / max(1.0, float(height)) - target_y
+centered = abs(dx) <= tolerance and abs(dy) <= tolerance
+
+if not centered:
+    base_delta = int(np.clip(dx * base_gain, -max_step, max_step))
+    pitch_delta = int(np.clip(-dy * pitch_gain, -max_step, max_step))
+    base_pulse = int(np.clip(base_pulse + base_delta, base_limits[0], base_limits[1]))
+    pitch_pulse = int(np.clip(pitch_pulse + pitch_delta, pitch_limits[0], pitch_limits[1]))
+    self._publish_alignment_servos(
+        float(cfg.get("center_servo_duration_s", 0.08)),
+        [(1, base_pulse), (4, pitch_pulse)],
+    )
+```
+
 ### verify_held_color_block 做了什么
 
 `perception.verify_held_color_block` 对应：
@@ -834,6 +956,31 @@ agentic_msgs/srv/VerifyHeldColorBlock
 9. 只有所有条件满足时返回 `verified_held: true`。
 
 所以 App 里必须把抓取后验证作为硬条件。`manipulation.pick_color_block` 返回成功，只表示动作执行完成；最终是否真的夹住，要看 `perception.verify_held_color_block`。
+
+验证“夹住”的判断不是单个条件，而是一组证据同时成立：候选出现在夹爪 ROI、没有和抓取前桌面目标重叠、半径变大、深度变近、位置落在夹爪口区域。
+
+```python
+observation = self._segment_color(image, color, color_range, roi_config=cfg, roi_prefix="held_verify")
+candidate = self._observation_payload(observation) if observation else {}
+overlaps_pre_pick = self._candidate_overlaps_pre_pick(candidate, detection, cfg) if candidate else False
+radius_ratio = self._candidate_radius_ratio_vs_pre_pick(candidate, detection) if candidate else 0.0
+depth_delta_m = pre_pick_depth_m - candidate_depth_m
+position_confirms_gripper_roi = self._candidate_confirms_gripper_roi(
+    candidate,
+    image.shape[:2],
+    min_center_y_ratio,
+    min_bottom_y_ratio,
+)
+
+verified = (
+    bool(observation)
+    and confidence >= min_confidence
+    and not overlaps_pre_pick
+    and radius_ratio >= min_radius_ratio
+    and depth_delta_m >= min_depth_delta
+    and position_confirms_gripper_roi
+)
+```
 
 ## 抓取的底层实现
 
@@ -889,6 +1036,80 @@ timeout_s
 14. 每个阶段通过 action feedback 返回状态和 progress。
 15. 返回 `result_json`，包含 pick pose、pulse、duration、motion_completed 等信息。
 
+抓取规划的核心是把视觉检测得到的 `camera_position_m` 转成机械臂坐标，再求 pregrasp、pick、lift 三个点的 IK：
+
+```python
+def _camera_to_arm_position(self, camera_position_m, endpoint_matrix):
+    cfg = self._color_block_profile()
+    hand2cam = self._hand2cam_matrix(
+        float(cfg.get("hand2cam_tx_m", -0.101)),
+        float(cfg.get("hand2cam_ty_m", 0.0)),
+        float(cfg.get("hand2cam_tz_m", 0.037)),
+    )
+    camera_translation = np.eye(4, dtype=float)
+    camera_translation[:3, 3] = np.asarray(camera_position_m[:3], dtype=float)
+    arm_pose = endpoint_matrix @ hand2cam @ camera_translation
+    return [float(value) for value in arm_pose[:3, 3]]
+
+
+def _plan_color_block_pick(self, camera_position_m, *, timeout_s):
+    deadline = time.monotonic() + max(1, timeout_s)
+    cfg = self._color_block_profile()
+    endpoint_matrix = self._current_endpoint_matrix(deadline)
+    arm_position = self._camera_to_arm_position(camera_position_m, endpoint_matrix)
+    arm_position[0] += float(cfg.get("pick_x_offset_m", 0.0))
+    arm_position[1] += float(cfg.get("pick_y_offset_m", 0.0))
+    arm_position[2] += float(cfg.get("pick_z_offset_m", 0.0))
+
+    bounds = dict(self._arm_profile().get("workspace_bounds_m") or {})
+    self._check_workspace_bounds(arm_position, bounds)
+    pitch = (
+        float(cfg.get("pick_pitch_near", 80.0))
+        if arm_position[2] < float(cfg.get("near_z_threshold_m", 0.20))
+        else float(cfg.get("pick_pitch_far", 30.0))
+    )
+
+    pregrasp_position = list(arm_position)
+    pregrasp_position[2] += float(cfg.get("pregrasp_height_m", 0.06))
+    lift_position = list(arm_position)
+    lift_position[2] += float(cfg.get("lift_height_m", 0.10))
+
+    return {
+        "pick_position_m": arm_position,
+        "pregrasp_pulse": self._solve_ik(pregrasp_position, pitch, deadline),
+        "pick_pulse": self._solve_ik(arm_position, pitch, deadline),
+        "lift_pulse": self._solve_ik(lift_position, pitch, deadline),
+    }
+```
+
+动作执行阶段只发布受控舵机目标，并在每个阶段等待 settle，避免让 Agent App 参与实时闭环控制：
+
+```python
+self._publish_pick_feedback(goal_handle, "opening_gripper", 0.3, {})
+self._publish_servos(0.6, [(10, gripper_open)])
+
+self._publish_pick_feedback(goal_handle, "moving_pregrasp", 0.45, {"pregrasp_pulse": pregrasp})
+self._publish_servos(1.3, [
+    (1, pregrasp[0]), (2, pregrasp[1]), (3, pregrasp[2]),
+    (4, pregrasp[3]), (5, pregrasp[4]), (10, gripper_open),
+])
+
+self._publish_pick_feedback(goal_handle, "moving_pick", 0.6, {"pick_pulse": pick})
+self._publish_servos(pick_move_duration_s, [
+    (1, pick[0]), (2, pick[1]), (3, pick[2]),
+    (4, pick[3]), (5, pick[4]), (10, gripper_open),
+])
+
+self._publish_pick_feedback(goal_handle, "closing_gripper", 0.75, {})
+self._publish_servos(gripper_close_duration_s, [(10, gripper_close)])
+
+self._publish_pick_feedback(goal_handle, "lifting", 0.9, {"lift_pulse": lift})
+self._publish_servos(post_pick_lift_duration_s, [
+    (1, lift[0]), (2, lift[1]), (3, lift[2]),
+    (4, lift[3]), (5, lift[4]), (10, gripper_close),
+])
+```
+
 关键点：pick backend 不直接宣称最终抓取成功。它返回：
 
 ```json
@@ -933,6 +1154,25 @@ timeout_s
 8. 成功时返回 `released: true`。
 
 这说明 `place_target` 在当前实现里不是 App 直接传底层 pose，而是由 bridge/profile 映射为受控放置序列。要新增托盘、货架、回收区等放置目标，应扩展 robot profile 或 bridge 中的 allowlisted place sequence，而不是让 App 传任意机械臂坐标。
+
+默认放置逻辑也是受控序列：移动到放置姿态、保持夹爪闭合、打开夹爪释放、回安全姿态。
+
+```python
+sequence = list(cfg.get("place_sequence") or [])
+if not sequence:
+    sequence = [
+        {"duration_s": 1.5, "positions": [[1, 500], [2, 535], [3, 170], [4, 220], [5, 500], [10, gripper_close]]},
+        {"duration_s": 1.5, "positions": [[1, 500], [2, 160], [3, 400], [4, 350], [5, 500], [10, gripper_close]]},
+        {"duration_s": 1.0, "positions": [[10, gripper_open]]},
+        {"duration_s": 1.0, "positions": [[1, 500], [2, 667], [3, 21], [4, 188], [5, 500], [10, gripper_open]]},
+    ]
+
+for index, item in enumerate(sequence):
+    self._publish_place_feedback(goal_handle, f"place_step_{index + 1}", progress, item)
+    positions = [(int(pair[0]), int(pair[1])) for pair in list(item.get("positions") or [])]
+    self._publish_servos(float(item.get("duration_s", 1.0)), positions)
+    self._sleep_or_cancel(goal_handle, float(item.get("duration_s", 1.0)) + 0.1)
+```
 
 ## 什么时候改 App，什么时候改 bridge
 
